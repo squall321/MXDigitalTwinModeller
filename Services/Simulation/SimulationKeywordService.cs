@@ -138,15 +138,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Simulation
             sb.AppendLine("$  OUTPUT CONTROL");
             sb.AppendLine("$==========================================================================");
 
-            if (p.OutputEigout)
-            {
-                sb.AppendLine("$");
-                sb.AppendLine("$--- Binary eigenvalue output (d3eigv) ---");
-                sb.AppendLine("$");
-                sb.AppendLine("*DATABASE_BINARY_D3EIGV");
-                sb.AppendLine("$#      dt      lcdt      beam     npltc    psetid");
-                sb.AppendLine(F10(0.0) + I10(0) + I10(0) + I10(0) + I10(0));
-            }
+            // NOTE: d3eigv 파일은 *CONTROL_IMPLICIT_EIGENVALUE 설정 시 자동 생성됨.
+            //       별도 *DATABASE_ 키워드 불필요.
 
             if (p.OutputD3plot)
             {
