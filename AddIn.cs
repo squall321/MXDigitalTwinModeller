@@ -61,6 +61,12 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller
             // 접합부 시편
             new CreateJointSpecimenCommand(),
 
+            // 파라메트릭 모델러 그룹
+            new CommandCapsule("MXDigitalTwinModeller.ParametricGroup", "Parametric"),
+
+            // 적층 모델 생성
+            new CreateLaminateCommand(),
+
             // 메쉬 설정 그룹
             new CommandCapsule("MXDigitalTwinModeller.MeshGroup", "Mesh"),
 
@@ -86,13 +92,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller
             new LoadCommand(),
 
             // 시뮬레이션 설정
-            new SimulationSetupCommand(),
-
-            // 적층 모델 그룹
-            new CommandCapsule("MXDigitalTwinModeller.LaminateGroup", "Laminate"),
-
-            // 적층 모델 생성
-            new CreateLaminateCommand()
+            new SimulationSetupCommand()
         };
 
         #region IExtensibility Members
@@ -212,6 +212,11 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller
                             size=""large""
                             command=""MXDigitalTwinModeller.CreateJointSpecimen""/>
                 </group>
+                <group id=""MXDigitalTwinModeller.ParametricGroup"" command=""MXDigitalTwinModeller.ParametricGroup"">
+                    <button id=""MXDigitalTwinModeller.CreateLaminate""
+                            size=""large""
+                            command=""MXDigitalTwinModeller.CreateLaminate""/>
+                </group>
                 <group id=""MXDigitalTwinModeller.MeshGroup"" command=""MXDigitalTwinModeller.MeshGroup"">
                     <button id=""MXDigitalTwinModeller.Material""
                             size=""large""
@@ -237,11 +242,6 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller
                     <button id=""MXDigitalTwinModeller.SimulationSetup""
                             size=""large""
                             command=""MXDigitalTwinModeller.SimulationSetup""/>
-                </group>
-                <group id=""MXDigitalTwinModeller.LaminateGroup"" command=""MXDigitalTwinModeller.LaminateGroup"">
-                    <button id=""MXDigitalTwinModeller.CreateLaminate""
-                            size=""large""
-                            command=""MXDigitalTwinModeller.CreateLaminate""/>
                 </group>
             </tab>
         </tabs>
