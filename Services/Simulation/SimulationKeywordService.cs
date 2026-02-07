@@ -141,11 +141,11 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Simulation
             if (p.OutputEigout)
             {
                 sb.AppendLine("$");
-                sb.AppendLine("$--- Eigenvalue text output ---");
+                sb.AppendLine("$--- Binary eigenvalue output (d3eigv) ---");
                 sb.AppendLine("$");
-                sb.AppendLine("*DATABASE_EIGOUT");
-                sb.AppendLine("$#      dt    binary      lcur     ioopt");
-                sb.AppendLine(F10(0.0) + I10(0) + I10(0) + I10(1));
+                sb.AppendLine("*DATABASE_BINARY_D3EIGV");
+                sb.AppendLine("$#      dt      lcdt      beam     npltc    psetid");
+                sb.AppendLine(F10(0.0) + I10(0) + I10(0) + I10(0) + I10(0));
             }
 
             if (p.OutputD3plot)

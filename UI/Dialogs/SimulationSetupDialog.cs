@@ -313,7 +313,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
             chkEigout = new CheckBox
             {
-                Text = "EIGOUT (\uace0\uc720\uac12 \ud14d\uc2a4\ud2b8)",
+                Text = "D3EIGV (\uace0\uc720\uac12 \ubc14\uc774\ub108\ub9ac)",
                 Location = new Point(col1, y),
                 AutoSize = true,
                 Font = font,

@@ -22,7 +22,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.Simulation
         public int ImplicitFormulation { get; set; }    // IMFORM (2=eigenvalue, 12=static+eigen)
 
         // ── Output ──
-        public bool OutputEigout { get; set; }          // DATABASE_EIGOUT
+        public bool OutputEigout { get; set; }          // DATABASE_BINARY_D3EIGV
         public bool OutputD3plot { get; set; }          // DATABASE_BINARY_D3PLOT
         public bool OutputNodeout { get; set; }         // DATABASE_NODOUT
         public bool OutputElout { get; set; }           // DATABASE_ELOUT
