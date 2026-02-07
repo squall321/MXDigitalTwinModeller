@@ -1,0 +1,25 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "SpaceClaim V252 Debug",
+            "type": "clr",
+            "request": "launch",
+            "preLaunchTask": "Build (Default - V252)",
+            "program": "C:\\Program Files\\ANSYS Inc\\v252\\SpaceClaim\\SpaceClaim.exe",
+            "cwd": "C:\\Program Files\\ANSYS Inc\\v252\\SpaceClaim",
+            "console": "internalConsole",
+            "stopAtEntry": false
+        },
+        {
+            "name": "SpaceClaim V251 Debug",
+            "type": "clr",
+            "request": "launch",
+            "preLaunchTask": "Build V251 Only",
+            "program": "C:\\Program Files\\ANSYS Inc\\v251\\SpaceClaim\\SpaceClaim.exe",
+            "cwd": "C:\\Program Files\\ANSYS Inc\\v251\\SpaceClaim",
+            "console": "internalConsole",
+            "stopAtEntry": false
+        }
+    ]
+}

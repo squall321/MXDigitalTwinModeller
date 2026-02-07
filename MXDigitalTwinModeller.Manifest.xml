@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<AddIns>
+  <AddIn name="MX Digital Twin Modeller"
+         description="ASTM 규격 인장시험 시편 및 모델링 자동화 도구"
+         assembly="MXDigitalTwinModeller.dll"
+         typename="SpaceClaim.Api.V252.MXDigitalTwinModeller.MXAddIn"
+         host="SameAppDomain"/>
+</AddIns>

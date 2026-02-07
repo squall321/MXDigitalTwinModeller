@@ -1,0 +1,260 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003" ToolsVersion="4.0">
+  <PropertyGroup>
+    <Configuration Condition=" '$(Configuration)' == '' ">Debug</Configuration>
+    <Platform Condition=" '$(Platform)' == '' ">AnyCPU</Platform>
+    <ProjectGuid>{B8F3E2A1-9C4D-4E5F-8A7B-1D2C3E4F5A6B}</ProjectGuid>
+    <OutputType>Library</OutputType>
+    <AppDesignerFolder>Properties</AppDesignerFolder>
+    <RootNamespace>MXDigitalTwinModeller</RootNamespace>
+    <AssemblyName>MXDigitalTwinModeller</AssemblyName>
+    <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
+    <TargetFrameworkProfile />
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
+    <DebugSymbols>true</DebugSymbols>
+    <DebugType>full</DebugType>
+    <Optimize>false</Optimize>
+    <OutputPath>C:\ProgramData\SpaceClaim\AddIns\MXDigitalTwinModeller\V252\</OutputPath>
+    <DefineConstants>DEBUG;TRACE;V252</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Release|AnyCPU' ">
+    <DebugType>pdbonly</DebugType>
+    <Optimize>true</Optimize>
+    <OutputPath>C:\ProgramData\SpaceClaim\AddIns\MXDigitalTwinModeller\V252\</OutputPath>
+    <DefineConstants>TRACE;V252</DefineConstants>
+    <ErrorReport>prompt</ErrorReport>
+    <WarningLevel>4</WarningLevel>
+    <PlatformTarget>x64</PlatformTarget>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="SpaceClaim.Api.V252">
+      <HintPath>D:\Program Files\ANSYS Inc\ANSYS Student\v252\scdm\SpaceClaim.Api.V252\SpaceClaim.Api.V252.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SpaceClaim.Api.V252.Scripting">
+      <HintPath>D:\Program Files\ANSYS Inc\ANSYS Student\v252\scdm\SpaceClaim.Api.V252.Scripting.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="GraphicsWindow">
+      <HintPath>D:\Program Files\ANSYS Inc\ANSYS Student\v252\scdm\GraphicsWindow.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="SpaceClaim.Foundation">
+      <HintPath>D:\Program Files\ANSYS Inc\ANSYS Student\v252\scdm\SpaceClaim.Foundation.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="Commands">
+      <HintPath>D:\Program Files\ANSYS Inc\ANSYS Student\v252\scdm\Commands.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <Reference Include="System" />
+    <Reference Include="System.Core" />
+    <Reference Include="System.Data" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.Xml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="AddIn.cs" />
+    <Compile Include="Properties\AssemblyInfo.cs" />
+    <Compile Include="Core\Commands\BaseCommandCapsule.cs" />
+    <Compile Include="Core\Geometry\ProfileBuilder.cs" />
+    <Compile Include="Core\Geometry\BodyBuilder.cs" />
+    <Compile Include="Core\Geometry\FaceNamingHelper.cs" />
+    <Compile Include="Core\Geometry\GeometryUtils.cs" />
+    <Compile Include="Core\UI\ValidationHelper.cs" />
+    <Compile Include="Core\UI\IconHelper.cs" />
+    <Compile Include="Core\UI\ProgressOverlay.cs" />
+    <Compile Include="Models\TensileTest\ASTMSpecimenType.cs" />
+    <Compile Include="Models\TensileTest\TensileSpecimenParameters.cs" />
+    <Compile Include="Services\TensileTest\ASTMSpecimenFactory.cs" />
+    <Compile Include="Services\TensileTest\SpecimenModelingService.cs" />
+    <Compile Include="UI\Dialogs\TensileSpecimenDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\Dialogs\TensileSpecimenDialog.Designer.cs">
+      <DependentUpon>TensileSpecimenDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Commands\TensileTest\CreateASTMTensileSpecimenCommand.cs" />
+    <Compile Include="Models\DMA\DMASpecimenType.cs" />
+    <Compile Include="Models\DMA\DMATestType.cs" />
+    <Compile Include="Models\DMA\DMASpecimenShape.cs" />
+    <Compile Include="Models\DMA\DMATensileParameters.cs" />
+    <Compile Include="Models\DMA\DMA3PointBendingParameters.cs" />
+    <Compile Include="Models\DMA\DMA4PointBendingParameters.cs" />
+    <Compile Include="Services\DMA\DMASpecimenFactory.cs" />
+    <Compile Include="Services\DMA\DMATensileService.cs" />
+    <Compile Include="Services\DMA\DMA3PointBendingService.cs" />
+    <Compile Include="Services\DMA\DMA4PointBendingService.cs" />
+    <Compile Include="UI\Dialogs\DMATensileSpecimenDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\Dialogs\DMATensileSpecimenDialog.Designer.cs">
+      <DependentUpon>DMATensileSpecimenDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Dialogs\DMA3PointBendingDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\Dialogs\DMA3PointBendingDialog.Designer.cs">
+      <DependentUpon>DMA3PointBendingDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Dialogs\DMA4PointBendingDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\Dialogs\DMA4PointBendingDialog.Designer.cs">
+      <DependentUpon>DMA4PointBendingDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Dialogs\BendingSpecimenDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\Dialogs\BendingSpecimenDialog.Designer.cs">
+      <DependentUpon>BendingSpecimenDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Commands\DMA\CreateDMATensileSpecimenCommand.cs" />
+    <Compile Include="Commands\DMA\CreateDMA3PointBendingCommand.cs" />
+    <Compile Include="Commands\DMA\CreateDMA4PointBendingCommand.cs" />
+    <Compile Include="Models\BendingFixture\AxisAlignedBoundingBox.cs" />
+    <Compile Include="Models\BendingFixture\BendingFixtureParameters.cs" />
+    <Compile Include="Services\BendingFixture\BendingFixtureService.cs" />
+    <Compile Include="Commands\BendingFixture\ApplyBendingFixtureCommand.cs" />
+    <Compile Include="Models\Laminate\LaminateLayerDefinition.cs" />
+    <Compile Include="Models\Laminate\RectangularLaminateParameters.cs" />
+    <Compile Include="Models\Laminate\SurfaceLaminateParameters.cs" />
+    <Compile Include="Services\Laminate\RectangularLaminateService.cs" />
+    <Compile Include="Services\Laminate\SurfaceLaminateService.cs" />
+    <Compile Include="Models\Compression\CompressionSpecimenType.cs" />
+    <Compile Include="Models\Compression\CompressionSpecimenParameters.cs" />
+    <Compile Include="Services\Compression\CompressionSpecimenService.cs" />
+    <Compile Include="Commands\Compression\CreateCompressionSpecimenCommand.cs" />
+    <Compile Include="UI\Dialogs\CompressionSpecimenDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\Dialogs\CompressionSpecimenDialog.Designer.cs">
+      <DependentUpon>CompressionSpecimenDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Models\CAI\CAISpecimenType.cs" />
+    <Compile Include="Models\CAI\CAISpecimenParameters.cs" />
+    <Compile Include="Services\CAI\CAISpecimenService.cs" />
+    <Compile Include="Commands\CAI\CreateCAISpecimenCommand.cs" />
+    <Compile Include="UI\Dialogs\CAISpecimenDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\Dialogs\CAISpecimenDialog.Designer.cs">
+      <DependentUpon>CAISpecimenDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Models\Fatigue\FatigueSpecimenType.cs" />
+    <Compile Include="Models\Fatigue\FatigueSpecimenParameters.cs" />
+    <Compile Include="Services\Fatigue\FatigueSpecimenFactory.cs" />
+    <Compile Include="Services\Fatigue\FatigueSpecimenService.cs" />
+    <Compile Include="Commands\Fatigue\CreateFatigueSpecimenCommand.cs" />
+    <Compile Include="UI\Dialogs\FatigueSpecimenDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\Dialogs\FatigueSpecimenDialog.Designer.cs">
+      <DependentUpon>FatigueSpecimenDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Models\Joint\JointSpecimenType.cs" />
+    <Compile Include="Models\Joint\JointSpecimenParameters.cs" />
+    <Compile Include="Services\Joint\JointSpecimenFactory.cs" />
+    <Compile Include="Services\Joint\JointSpecimenService.cs" />
+    <Compile Include="Commands\Joint\CreateJointSpecimenCommand.cs" />
+    <Compile Include="UI\Dialogs\JointSpecimenDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\Dialogs\JointSpecimenDialog.Designer.cs">
+      <DependentUpon>JointSpecimenDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Services\Material\MaterialService.cs" />
+    <Compile Include="Commands\Material\MaterialCommand.cs" />
+    <Compile Include="UI\Dialogs\MaterialDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Services\Mesh\MeshSettingsService.cs" />
+    <Compile Include="Commands\Mesh\ApplyMeshSettingsCommand.cs" />
+    <Compile Include="Commands\Mesh\ExportMeshCommand.cs" />
+    <Compile Include="UI\Dialogs\MeshSettingsDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\Dialogs\MeshSettingsDialog.Designer.cs">
+      <DependentUpon>MeshSettingsDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Models\Contact\ContactPairInfo.cs" />
+    <Compile Include="Services\Contact\ContactDetectionService.cs" />
+    <Compile Include="Commands\Contact\DetectContactCommand.cs" />
+    <Compile Include="UI\Dialogs\ContactDetectionDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Models\Simplify\SimplifyMode.cs" />
+    <Compile Include="Models\Simplify\SimplifyResult.cs" />
+    <Compile Include="Models\Simplify\SimplifyRule.cs" />
+    <Compile Include="Services\Simplify\SimplifyService.cs" />
+    <Compile Include="Commands\Simplify\SimplifyCommand.cs" />
+    <Compile Include="UI\Dialogs\SimplifyDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Services\Export\KFilePostProcessor.cs" />
+    <Compile Include="Commands\Export\ExportStepCommand.cs" />
+    <Compile Include="Models\Load\LoadDefinition.cs" />
+    <Compile Include="Services\Load\LoadService.cs" />
+    <Compile Include="UI\Dialogs\LoadDefinitionDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Commands\Load\LoadCommand.cs" />
+    <Compile Include="Models\Simulation\SimulationType.cs" />
+    <Compile Include="Models\Simulation\SimulationParameters.cs" />
+    <Compile Include="Services\Simulation\SimulationKeywordService.cs" />
+    <Compile Include="UI\Dialogs\SimulationSetupDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Commands\Simulation\SimulationSetupCommand.cs" />
+    <Compile Include="Commands\Laminate\CreateLaminateCommand.cs" />
+    <Compile Include="UI\Dialogs\ApplyBendingFixtureDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\Dialogs\ApplyBendingFixtureDialog.Designer.cs">
+      <DependentUpon>ApplyBendingFixtureDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="UI\Dialogs\LaminateDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\Dialogs\LaminateDialog.Designer.cs">
+      <DependentUpon>LaminateDialog.cs</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <None Include="MXDigitalTwinModeller.Manifest.xml">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Include="Resources\Icons\Tensile_32.png" />
+    <EmbeddedResource Include="Resources\Icons\Bending_32.png" />
+    <EmbeddedResource Include="Resources\Icons\BendingFixture_32.png" />
+    <EmbeddedResource Include="Resources\Icons\Laminate_32.png" />
+    <EmbeddedResource Include="Resources\Icons\Compression_32.png" />
+    <EmbeddedResource Include="Resources\Icons\CAI_32.png" />
+    <EmbeddedResource Include="Resources\Icons\Fatigue_32.png" />
+    <EmbeddedResource Include="Resources\Icons\Joint_32.png" />
+    <EmbeddedResource Include="Resources\Icons\Mesh_32.png" />
+    <EmbeddedResource Include="Resources\Icons\Export_32.png" />
+    <EmbeddedResource Include="Resources\Icons\Contact_32.png" />
+    <EmbeddedResource Include="Resources\Icons\Load_32.png" />
+    <EmbeddedResource Include="Resources\Icons\Simulation_32.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Service Include="{B4F97281-0DBD-4835-9ED8-7DFB966E87FF}" />
+  </ItemGroup>
+
+  <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+</Project>

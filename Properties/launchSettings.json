@@ -1,0 +1,14 @@
+{
+  "profiles": {
+    "SpaceClaim V251 Debug": {
+      "commandName": "Executable",
+      "executablePath": "C:\\Program Files\\ANSYS Inc\\v251\\SpaceClaim\\SpaceClaim.exe",
+      "workingDirectory": "C:\\Program Files\\ANSYS Inc\\v251\\SpaceClaim"
+    },
+    "SpaceClaim V252 Debug": {
+      "commandName": "Executable",
+      "executablePath": "C:\\Program Files\\ANSYS Inc\\v252\\SpaceClaim\\SpaceClaim.exe",
+      "workingDirectory": "C:\\Program Files\\ANSYS Inc\\v252\\SpaceClaim"
+    }
+  }
+}
