@@ -18,7 +18,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Export
         public const string CommandName = "MXDigitalTwinModeller.ExportStep";
 
         public ExportStepCommand()
-            : base(CommandName, "STEP Export", IconHelper.ExportIcon,
+            : base(CommandName, "STEP Export", IconHelper.ExportStepIcon,
                    "현재 모델을 STEP (.stp) 파일로 내보냅니다")
         {
         }

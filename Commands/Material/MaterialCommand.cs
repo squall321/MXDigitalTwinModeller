@@ -17,7 +17,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Material
         public const string CommandName = "MXDigitalTwinModeller.Material";
 
         public MaterialCommand()
-            : base(CommandName, "Material", IconHelper.MeshIcon,
+            : base(CommandName, "Material", IconHelper.MaterialIcon,
                    "바디에 재료 물성을 적용합니다 (mm-tonne-s)")
         {
         }

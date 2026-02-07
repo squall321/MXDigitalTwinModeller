@@ -72,6 +72,16 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Core.UI
         public static System.Drawing.Image LoadDefIcon => LoadIcon("Resources.Icons.Load_32.png");
 
         /// <summary>
+        /// STEP 내보내기 아이콘 (32x32)
+        /// </summary>
+        public static System.Drawing.Image ExportStepIcon => LoadIcon("Resources.Icons.ExportStep_32.png");
+
+        /// <summary>
+        /// 재료 물성 아이콘 (32x32)
+        /// </summary>
+        public static System.Drawing.Image MaterialIcon => LoadIcon("Resources.Icons.Material_32.png");
+
+        /// <summary>
         /// 시뮬레이션 설정 아이콘 (32x32)
         /// </summary>
         public static System.Drawing.Image SimulationIcon => LoadIcon("Resources.Icons.Simulation_32.png");

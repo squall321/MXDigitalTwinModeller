@@ -250,6 +250,8 @@
     <EmbeddedResource Include="Resources\Icons\Contact_32.png" />
     <EmbeddedResource Include="Resources\Icons\Load_32.png" />
     <EmbeddedResource Include="Resources\Icons\Simulation_32.png" />
+    <EmbeddedResource Include="Resources\Icons\ExportStep_32.png" />
+    <EmbeddedResource Include="Resources\Icons\Material_32.png" />
   </ItemGroup>
 
   <ItemGroup>
