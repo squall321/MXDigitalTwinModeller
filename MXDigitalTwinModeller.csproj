@@ -128,8 +128,10 @@
     <Compile Include="Models\Laminate\LaminateLayerDefinition.cs" />
     <Compile Include="Models\Laminate\RectangularLaminateParameters.cs" />
     <Compile Include="Models\Laminate\SurfaceLaminateParameters.cs" />
+    <Compile Include="Models\Laminate\SolidLaminateParameters.cs" />
     <Compile Include="Services\Laminate\RectangularLaminateService.cs" />
     <Compile Include="Services\Laminate\SurfaceLaminateService.cs" />
+    <Compile Include="Services\Laminate\SolidLaminateService.cs" />
     <Compile Include="Models\Compression\CompressionSpecimenType.cs" />
     <Compile Include="Models\Compression\CompressionSpecimenParameters.cs" />
     <Compile Include="Services\Compression\CompressionSpecimenService.cs" />
@@ -259,4 +261,11 @@
   </ItemGroup>
 
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
+
+  <!-- Build MSI installer after main build -->
+  <Target Name="BuildInstaller" AfterTargets="Build">
+    <Exec Command="wix build &quot;$(ProjectDir)Installer\MXDigitalTwinModeller.wxs&quot; -d BuildOutputDir=&quot;$(OutputPath.TrimEnd('\\'))&quot; -o &quot;$(ProjectDir)Installer\MXDigitalTwinModeller.msi&quot; -arch x64 --nologo"
+          IgnoreExitCode="false" />
+    <Message Text="MSI installer built: $(ProjectDir)Installer\MXDigitalTwinModeller.msi" Importance="high" />
+  </Target>
 </Project>

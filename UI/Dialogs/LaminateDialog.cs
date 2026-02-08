@@ -21,17 +21,22 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 {
     /// <summary>
     /// 적층 모델 생성 다이얼로그
-    /// 직사각형 모드 + 면 기반 모드 지원
+    /// 직사각형 모드 + 면 기반 모드 + 솔리드 모드 지원
     /// </summary>
     public partial class LaminateDialog : Form
     {
         private readonly RectangularLaminateService rectService;
         private readonly SurfaceLaminateService surfaceService;
+        private readonly SolidLaminateService solidService;
         private Part activePart;
         private List<DesignBody> previewBodies;
 
         // 면 기반 모드 - 선택된 면
         private DesignFace selectedFace;
+
+        // 솔리드 모드 - 선택된 바디 및 분석 결과
+        private DesignBody selectedBody;
+        private SolidAnalysisResult solidAnalysis;
 
         // DataGridView 데이터 소스
         private BindingList<LaminateLayerDefinition> layerBindingList;
@@ -46,11 +51,20 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             get { return rdoRectangular.Checked; }
         }
 
+        /// <summary>
+        /// 현재 솔리드 모드인지 여부
+        /// </summary>
+        private bool IsSolidMode
+        {
+            get { return rdoSolid.Checked; }
+        }
+
         public LaminateDialog(Part part)
         {
             InitializeComponent();
             rectService = new RectangularLaminateService();
             surfaceService = new SurfaceLaminateService();
+            solidService = new SolidLaminateService();
             activePart = part;
             previewBodies = new List<DesignBody>();
 
@@ -68,14 +82,23 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
         private void rdoMode_CheckedChanged(object sender, EventArgs e)
         {
             bool isRect = IsRectangularMode;
+            bool isSolid = IsSolidMode;
+            bool isSurface = rdoSurface.Checked;
 
             grpDimensions.Visible = isRect;
-            grpSurface.Visible = !isRect;
+            grpSurface.Visible = isSurface;
+            grpSolid.Visible = isSolid;
 
             // Share Topology 옵션은 직사각형 모드에서만 표시
             chkShareTopology.Visible = isRect;
 
-            // 면 모드 전환 시 미리보기 정리
+            // 원본 삭제 옵션은 솔리드 모드에서만 표시
+            chkDeleteOriginal.Visible = isSolid;
+
+            // 두께 맞춤 버튼은 솔리드 모드에서만 표시
+            btnMatchThickness.Visible = isSolid;
+
+            // 모드 전환 시 미리보기 정리
             CleanupPreview();
         }
 
@@ -134,8 +157,102 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             catch (Exception ex)
             {
                 ValidationHelper.ShowError(
-                    $"면 선택 중 오류가 발생했습니다:\n\n{ex.Message}", "오류");
+                    string.Format("면 선택 중 오류가 발생했습니다:\n\n{0}", ex.Message), "오류");
             }
+        }
+
+        // =============================================
+        //  바디 선택 (솔리드 모드)
+        // =============================================
+
+        private void btnSelectBody_Click(object sender, EventArgs e)
+        {
+            try
+            {
+                var window = Window.ActiveWindow;
+                if (window == null)
+                {
+                    ValidationHelper.ShowError("활성 윈도우가 없습니다.", "오류");
+                    return;
+                }
+
+                // 현재 선택된 객체에서 DesignBody 찾기
+                DesignBody body = null;
+                foreach (var obj in window.ActiveContext.Selection)
+                {
+                    body = obj as DesignBody;
+                    if (body != null) break;
+
+                    // DesignFace가 선택된 경우 부모 바디 사용
+                    var face = obj as DesignFace;
+                    if (face != null)
+                    {
+                        body = face.Parent as DesignBody;
+                        if (body != null) break;
+                    }
+                }
+
+                if (body == null)
+                {
+                    ValidationHelper.ShowError(
+                        "바디가 선택되지 않았습니다.\n\n" +
+                        "SpaceClaim에서 솔리드 바디를 먼저 선택한 후\n" +
+                        "\"바디 선택 (Pick)\" 버튼을 다시 눌러주세요.",
+                        "바디 선택");
+                    return;
+                }
+
+                // 솔리드 분석
+                var analysis = solidService.AnalyzeSolid(body);
+
+                if (!analysis.IsValid)
+                {
+                    ValidationHelper.ShowError(
+                        string.Format("솔리드 분석 실패:\n\n{0}", analysis.ErrorMessage),
+                        "솔리드 분석 오류");
+                    return;
+                }
+
+                selectedBody = body;
+                solidAnalysis = analysis;
+
+                // UI 업데이트
+                lblBodyInfo.Text = "선택됨";
+                lblBodyInfo.ForeColor = System.Drawing.Color.Black;
+                lblDetectedThickness.Text = string.Format("감지된 두께: {0:F4} mm", analysis.ThicknessMm);
+                Vector n = analysis.StackingNormal;
+                lblDetectedNormal.Text = string.Format("적층 방향: ({0:F2}, {1:F2}, {2:F2})",
+                    n.X, n.Y, n.Z);
+            }
+            catch (Exception ex)
+            {
+                ValidationHelper.ShowError(
+                    string.Format("바디 선택 중 오류가 발생했습니다:\n\n{0}", ex.Message), "오류");
+            }
+        }
+
+        // =============================================
+        //  두께 맞춤 (솔리드 모드)
+        // =============================================
+
+        private void btnMatchThickness_Click(object sender, EventArgs e)
+        {
+            if (solidAnalysis == null || !solidAnalysis.IsValid)
+            {
+                ValidationHelper.ShowError("먼저 바디를 선택해주세요.", "오류");
+                return;
+            }
+
+            if (layerBindingList.Count == 0) return;
+
+            double perLayerMm = solidAnalysis.ThicknessMm / layerBindingList.Count;
+            foreach (var layer in layerBindingList)
+            {
+                layer.ThicknessMm = perLayerMm;
+            }
+
+            RefreshGrid();
+            UpdateTotalThickness();
         }
 
         // =============================================
@@ -324,6 +441,23 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             return p;
         }
 
+        private SolidLaminateParameters ReadSolidParams()
+        {
+            SyncGridToBindingList();
+
+            var p = new SolidLaminateParameters();
+            p.CreateInterfaceNamedSelections = chkInterfaceNS.Checked;
+            p.DeleteOriginalBody = chkDeleteOriginal.Checked;
+
+            p.Layers = new List<LaminateLayerDefinition>();
+            foreach (var layer in layerBindingList)
+            {
+                p.Layers.Add(new LaminateLayerDefinition(layer.Name, layer.ThicknessMm));
+            }
+
+            return p;
+        }
+
         private bool ValidateInputs()
         {
             string errorMessage;
@@ -335,6 +469,43 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                 {
                     ValidationHelper.ShowError(errorMessage, "입력 오류");
                     return false;
+                }
+            }
+            else if (IsSolidMode)
+            {
+                // 바디 선택 확인
+                if (selectedBody == null || solidAnalysis == null || !solidAnalysis.IsValid)
+                {
+                    ValidationHelper.ShowError(
+                        "바디가 선택되지 않았거나 분석에 실패했습니다.\n" +
+                        "SpaceClaim에서 솔리드 바디를 선택한 후 \"바디 선택 (Pick)\" 버튼을 눌러주세요.",
+                        "입력 오류");
+                    return false;
+                }
+
+                var p = ReadSolidParams();
+                if (!p.Validate(out errorMessage))
+                {
+                    ValidationHelper.ShowError(errorMessage, "입력 오류");
+                    return false;
+                }
+
+                // 총 레이어 두께와 감지된 두께 비교
+                double totalMm = p.GetTotalThicknessMm();
+                double diff = Math.Abs(totalMm - solidAnalysis.ThicknessMm);
+                if (diff > 0.001)
+                {
+                    var result = MessageBox.Show(
+                        string.Format(
+                            "레이어 총 두께({0:F4} mm)가 감지된 솔리드 두께({1:F4} mm)와 다릅니다.\n\n" +
+                            "계속 진행하시겠습니까?",
+                            totalMm, solidAnalysis.ThicknessMm),
+                        "두께 불일치",
+                        MessageBoxButtons.YesNo,
+                        MessageBoxIcon.Warning);
+
+                    if (result != DialogResult.Yes)
+                        return false;
                 }
             }
             else
@@ -374,9 +545,17 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
                 // WriteBlock 밖에서 UI 파라미터 읽기
                 bool isRect = IsRectangularMode;
+                bool isSolid = IsSolidMode;
                 RectangularLaminateParameters rectParams = isRect ? ReadRectangularParams() : null;
-                SurfaceLaminateParameters surfParams = isRect ? null : ReadSurfaceParams();
+                SurfaceLaminateParameters surfParams = (!isRect && !isSolid) ? ReadSurfaceParams() : null;
+                SolidLaminateParameters solidParams = isSolid ? ReadSolidParams() : null;
                 DesignFace face = selectedFace;
+                DesignBody body = selectedBody;
+                SolidAnalysisResult analysis = solidAnalysis;
+
+                // 미리보기에서는 원본 삭제하지 않음
+                if (solidParams != null)
+                    solidParams.DeleteOriginalBody = false;
 
                 WriteBlock.ExecuteTask("Laminate Preview", () =>
                 {
@@ -385,6 +564,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                     if (isRect)
                     {
                         bodies = rectService.CreateRectangularLaminate(activePart, rectParams);
+                    }
+                    else if (isSolid)
+                    {
+                        bodies = solidService.CreateSolidLaminate(activePart, body, analysis, solidParams);
                     }
                     else
                     {
@@ -397,7 +580,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             catch (Exception ex)
             {
                 ValidationHelper.ShowError(
-                    $"미리보기 생성 중 오류가 발생했습니다:\n\n{ex.Message}",
+                    string.Format("미리보기 생성 중 오류가 발생했습니다:\n\n{0}", ex.Message),
                     "미리보기 오류");
             }
         }
@@ -410,22 +593,37 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             {
                 if (previewBodies.Count > 0)
                 {
-                    // 미리보기가 있으면 확정
+                    // 미리보기가 있으면 확정 (솔리드 모드의 경우 원본 삭제 처리)
+                    if (IsSolidMode && chkDeleteOriginal.Checked && selectedBody != null)
+                    {
+                        WriteBlock.ExecuteTask("Delete Original Body", () =>
+                        {
+                            selectedBody.Delete();
+                        });
+                    }
                     previewBodies.Clear();
                 }
                 else
                 {
                     // WriteBlock 밖에서 UI 파라미터 읽기
                     bool isRect = IsRectangularMode;
+                    bool isSolid = IsSolidMode;
                     RectangularLaminateParameters rectParams = isRect ? ReadRectangularParams() : null;
-                    SurfaceLaminateParameters surfParams = isRect ? null : ReadSurfaceParams();
+                    SurfaceLaminateParameters surfParams = (!isRect && !isSolid) ? ReadSurfaceParams() : null;
+                    SolidLaminateParameters solidParams = isSolid ? ReadSolidParams() : null;
                     DesignFace face = selectedFace;
+                    DesignBody body = selectedBody;
+                    SolidAnalysisResult analysis = solidAnalysis;
 
                     WriteBlock.ExecuteTask("Create Laminate", () =>
                     {
                         if (isRect)
                         {
                             rectService.CreateRectangularLaminate(activePart, rectParams);
+                        }
+                        else if (isSolid)
+                        {
+                            solidService.CreateSolidLaminate(activePart, body, analysis, solidParams);
                         }
                         else
                         {
@@ -440,7 +638,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             catch (Exception ex)
             {
                 ValidationHelper.ShowError(
-                    $"적층 모델 생성 중 오류가 발생했습니다:\n\n{ex.Message}",
+                    string.Format("적층 모델 생성 중 오류가 발생했습니다:\n\n{0}", ex.Message),
                     "생성 오류");
             }
         }
@@ -473,7 +671,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                 }
                 catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine($"Laminate preview cleanup error: {ex.Message}");
+                    System.Diagnostics.Debug.WriteLine(
+                        string.Format("Laminate preview cleanup error: {0}", ex.Message));
                 }
             }
         }

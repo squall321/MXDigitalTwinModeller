@@ -77,7 +77,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Laminate
         /// <summary>
         /// 면에서 경계 커브 추출 (외부 루프)
         /// </summary>
-        private List<ITrimmedCurve> ExtractBoundaryCurves(DesignFace face)
+        internal List<ITrimmedCurve> ExtractBoundaryCurves(DesignFace face)
         {
             var curves = new List<ITrimmedCurve>();
 
@@ -93,7 +93,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Laminate
         /// <summary>
         /// 오프셋된 레이어 바디 생성
         /// </summary>
-        private DesignBody CreateOffsetLayerBody(Part part,
+        internal DesignBody CreateOffsetLayerBody(Part part,
             List<ITrimmedCurve> originalCurves, Plane originalPlane,
             Vector stackVector, bool isReversed,
             double offsetM, double thicknessM, string name)
@@ -139,7 +139,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Laminate
         /// - Ellipse: 중심 이동 + 동일 파라미터 타원호 재생성
         /// - 기타: 시작점/끝점 직선 근사
         /// </summary>
-        private List<ITrimmedCurve> TranslateCurves(List<ITrimmedCurve> curves, Vector translation)
+        internal List<ITrimmedCurve> TranslateCurves(List<ITrimmedCurve> curves, Vector translation)
         {
             var result = new List<ITrimmedCurve>();
 
@@ -230,7 +230,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Laminate
         /// <summary>
         /// 특정 위치에서 법선 방향의 평면 Face 찾기
         /// </summary>
-        private List<DesignFace> FindFacesAtPosition(DesignBody body,
+        internal List<DesignFace> FindFacesAtPosition(DesignBody body,
             Direction normalDir, Point targetPoint)
         {
             const double tolerance = 1e-6;

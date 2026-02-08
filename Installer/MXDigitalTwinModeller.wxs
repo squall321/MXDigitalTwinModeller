@@ -1,0 +1,46 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+    <Package
+        Name="MX Digital Twin Modeller"
+        Manufacturer="MX Composites"
+        Version="1.0.0"
+        UpgradeCode="A7E3B5C1-4D2F-4A8E-9B1C-6F3D8E2A1B5C"
+        Scope="perMachine"
+        InstallerVersion="500"
+        Compressed="yes">
+
+        <MajorUpgrade
+            DowngradeErrorMessage="A newer version of MX Digital Twin Modeller is already installed." />
+
+        <MediaTemplate EmbedCab="yes" />
+
+        <!-- Install directory structure -->
+        <StandardDirectory Id="CommonAppDataFolder">
+            <Directory Id="SpaceClaimDir" Name="SpaceClaim">
+                <Directory Id="AddInsDir" Name="AddIns">
+                    <Directory Id="MXDir" Name="MXDigitalTwinModeller">
+                        <Directory Id="INSTALLFOLDER" Name="V252" />
+                    </Directory>
+                </Directory>
+            </Directory>
+        </StandardDirectory>
+
+        <!-- Components -->
+        <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+            <Component Id="MainDll" Guid="*">
+                <File Id="MXDigitalTwinModeller.dll"
+                      Source="$(BuildOutputDir)\MXDigitalTwinModeller.dll"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="ManifestXml" Guid="*">
+                <File Id="MXDigitalTwinModeller.Manifest.xml"
+                      Source="$(BuildOutputDir)\MXDigitalTwinModeller.Manifest.xml"
+                      KeyPath="yes" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- Feature -->
+        <Feature Id="MainFeature" Title="MX Digital Twin Modeller" Level="1">
+            <ComponentGroupRef Id="ProductComponents" />
+        </Feature>
+    </Package>
+</Wix>

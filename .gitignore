@@ -103,3 +103,7 @@ Directory.Build.props
 lib/
 V251/
 V252/
+
+# Installer build artifacts
+Installer/*.msi
+Installer/*.wixpdb
