@@ -195,7 +195,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             this.numGrowthRate.Minimum = 1.0m;
             this.numGrowthRate.Maximum = 5.0m;
             this.numGrowthRate.Increment = 0.1m;
-            this.numGrowthRate.Value = 1.2m;
+            this.numGrowthRate.Value = 1.8m;
 
             this.lblSizeFunction.AutoSize = true;
             this.lblSizeFunction.Location = new System.Drawing.Point(640, 24);

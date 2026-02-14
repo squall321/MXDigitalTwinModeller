@@ -69,7 +69,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             cmbMidsideNodes.SelectedIndex = 0;
 
             cmbSizeFunction.Items.AddRange(SizeFuncItems);
-            cmbSizeFunction.SelectedIndex = 0;
+            cmbSizeFunction.SelectedIndex = 3; // Fixed
         }
 
         private void LoadBodies()
@@ -99,8 +99,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                     elemMm.ToString("F2"),
                     "Tet",
                     "Dropped",
-                    "1.20",
-                    "Curv+Prox"
+                    "1.80",
+                    "Fixed"
                 );
                 dgvBodies.Rows[rowIdx].Tag = body;
             }
@@ -327,60 +327,104 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                     }
                 }
 
-                // Step 4: 바디별 메쉬 생성 (변경된 바디만)
+                // Step 4: 동일 설정 바디 그룹 배치 메싱 (변경된 바디만)
                 lastStep = "CreateMesh";
-                log.Add(string.Format("Step 4: 바디별 메쉬 생성 ({0}개)", changedBodies.Count));
                 var emptySelection = Selection.Empty();
 
+                // 동일 메싱 옵션 바디를 그룹으로 묶기
+                var meshGroups = new Dictionary<string, List<DesignBody>>();
                 foreach (DesignBody body in changedBodies)
                 {
-                    string bodyName = body.Name ?? "Unnamed";
-                    bool isComp = body.Parent != null && !ReferenceEquals(body.Parent, _part);
-                    string src = isComp ? "[C]" : "[R]";
                     DataGridViewRow bRow = bodyRowMap[body];
+                    string meshKey = string.Format("{0}|{1}|{2}|{3}|{4}",
+                        bRow.Cells["colElemSize"].Value,
+                        bRow.Cells["colShape"].Value,
+                        bRow.Cells["colMidside"].Value,
+                        bRow.Cells["colGrowth"].Value,
+                        bRow.Cells["colSizeFunc"].Value);
 
-                    double elemMm = ParseCell(bRow.Cells["colElemSize"].Value);
+                    List<DesignBody> list;
+                    if (!meshGroups.TryGetValue(meshKey, out list))
+                    {
+                        list = new List<DesignBody>();
+                        meshGroups[meshKey] = list;
+                    }
+                    list.Add(body);
+                }
+
+                log.Add(string.Format("Step 4: 배치 메싱 ({0}개 바디 → {1}개 그룹)", changedBodies.Count, meshGroups.Count));
+
+                foreach (var kvp in meshGroups)
+                {
+                    var bodies = kvp.Value;
+                    DataGridViewRow refRow = bodyRowMap[bodies[0]];
+
+                    double elemMm = ParseCell(refRow.Cells["colElemSize"].Value);
                     double elemM = elemMm / 1000.0;
+                    ElementShapeType shape = ParseShape(refRow.Cells["colShape"].Value);
+                    MidsideNodesType midside = ParseMidside(refRow.Cells["colMidside"].Value);
+                    double growthRate = ParseGrowthRate(refRow.Cells["colGrowth"].Value);
+                    SizeFunctionType sizeFunc = ParseSizeFunc(refRow.Cells["colSizeFunc"].Value);
 
-                    ElementShapeType shape = ParseShape(bRow.Cells["colShape"].Value);
-                    MidsideNodesType midside = ParseMidside(bRow.Cells["colMidside"].Value);
-                    double growthRate = ParseGrowthRate(bRow.Cells["colGrowth"].Value);
-                    SizeFunctionType sizeFunc = ParseSizeFunc(bRow.Cells["colSizeFunc"].Value);
+                    var options = new CreateMeshOptions();
+                    options.ElementSize = elemM;
+                    options.SolidElementShape = shape;
+                    options.MidsideNodes = midside;
+                    options.SizeFunctionType = sizeFunc;
+                    options.GrowthRate = growthRate;
+                    if (shape == ElementShapeType.Tetrahedral)
+                        options.MeshMethod = MeshMethod.Prime;
 
+                    string names = string.Join(", ", bodies.Select(b => b.Name ?? "Unnamed"));
+                    log.Add(string.Format("  그룹 [{0}개] Elem={1:F2}mm {2} {3}: {4}",
+                        bodies.Count, elemMm, shape, sizeFunc, names));
+
+                    // 배치 메싱 시도
+                    bool batchOk = false;
                     try
                     {
-                        var bodySelection = BodySelection.Create(body);
-
-                        var options = new CreateMeshOptions();
-                        options.ElementSize = elemM;
-                        options.SolidElementShape = shape;
-                        options.MidsideNodes = midside;
-                        options.SizeFunctionType = sizeFunc;
-                        options.GrowthRate = growthRate;
-
-                        if (shape == ElementShapeType.Tetrahedral)
-                            options.MeshMethod = MeshMethod.Prime;
-
-                        CreateMeshResult meshResult = CreateMesh.Execute(bodySelection, emptySelection, options, null);
-
-                        if (meshResult.Success)
-                        {
-                            successCount++;
-                            // 성공 시 설정 저장
-                            _appliedSettings[body] = GetSettingsKey(bRow);
-                            log.Add(string.Format("  [OK] {0} {1}: Elem={2:F2}mm Shape={3} Midside={4} Growth={5:F2} SizeFunc={6}",
-                                src, bodyName, elemMm, shape, midside, growthRate, sizeFunc));
-                        }
-                        else
-                        {
-                            failCount++;
-                            log.Add(string.Format("  [FAIL] {0} {1}: Success=false", src, bodyName));
-                        }
+                        var batchSel = BodySelection.Create(bodies.ToArray());
+                        CreateMeshResult meshResult = CreateMesh.Execute(batchSel, emptySelection, options, null);
+                        batchOk = meshResult.Success;
                     }
-                    catch (Exception bodyEx)
+                    catch { }
+
+                    if (batchOk)
                     {
-                        failCount++;
-                        log.Add(string.Format("  [ERR] {0} {1}: {2}", src, bodyName, bodyEx.Message));
+                        successCount += bodies.Count;
+                        foreach (var body in bodies)
+                            _appliedSettings[body] = GetSettingsKey(bodyRowMap[body]);
+                        log.Add(string.Format("    [OK] {0}개 배치 메싱 성공", bodies.Count));
+                    }
+                    else
+                    {
+                        // 배치 실패 시 개별 폴백
+                        log.Add("    [WARN] 배치 실패 → 개별 메싱 폴백");
+                        foreach (var body in bodies)
+                        {
+                            string bName = body.Name ?? "Unnamed";
+                            try
+                            {
+                                var singleSel = BodySelection.Create(body);
+                                CreateMeshResult sResult = CreateMesh.Execute(singleSel, emptySelection, options, null);
+                                if (sResult.Success)
+                                {
+                                    successCount++;
+                                    _appliedSettings[body] = GetSettingsKey(bodyRowMap[body]);
+                                    log.Add(string.Format("      [OK] {0}", bName));
+                                }
+                                else
+                                {
+                                    failCount++;
+                                    log.Add(string.Format("      [FAIL] {0}", bName));
+                                }
+                            }
+                            catch (Exception bodyEx)
+                            {
+                                failCount++;
+                                log.Add(string.Format("      [ERR] {0}: {1}", bName, bodyEx.Message));
+                            }
+                        }
                     }
                 }
 
@@ -500,19 +544,19 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
         private static double ParseGrowthRate(object value)
         {
-            if (value == null) return 1.2;
+            if (value == null) return 1.8;
             double result;
             if (double.TryParse(value.ToString(), NumberStyles.Any,
                 CultureInfo.InvariantCulture, out result))
                 return Math.Max(1.0, Math.Min(5.0, result));
-            return 1.2;
+            return 1.8;
         }
 
         private static SizeFunctionType ParseSizeFunc(object value)
         {
             string s = value != null ? value.ToString() : "";
             int idx = Array.IndexOf(SizeFuncItems, s);
-            return idx >= 0 ? SizeFuncValues[idx] : SizeFunctionType.CurvatureAndProximity;
+            return idx >= 0 ? SizeFuncValues[idx] : SizeFunctionType.Fixed;
         }
 
         /// <summary>

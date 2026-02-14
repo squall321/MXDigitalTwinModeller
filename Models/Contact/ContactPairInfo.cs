@@ -8,7 +8,11 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.Contact
         /// <summary>면 대 면 접촉 (coplanar overlap)</summary>
         Face,
         /// <summary>에지 접촉 (공유 에지, tied 미적용)</summary>
-        Edge
+        Edge,
+        /// <summary>원통면 접촉 (coaxial cylinder, pin-in-hole)</summary>
+        Cylinder,
+        /// <summary>평면-원통 접선 접촉 (tangent line contact)</summary>
+        PlaneCylinder
     }
 
     /// <summary>
@@ -16,6 +20,11 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.Contact
     /// </summary>
     public class ContactPairInfo
     {
+        public ContactPairInfo()
+        {
+            IsSelected = true;
+        }
+
         /// <summary>+ 방향 법선을 가진 면</summary>
         public DesignFace FaceA { get; set; }
 
@@ -39,6 +48,15 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.Contact
 
         /// <summary>접촉 타입</summary>
         public ContactType Type { get; set; }
+
+        /// <summary>UI 체크박스 선택 여부 (기본 true)</summary>
+        public bool IsSelected { get; set; }
+
+        /// <summary>이미 NS가 존재하는 페어인지 여부</summary>
+        public bool IsExisting { get; set; }
+
+        /// <summary>수동으로 추가된 페어인지 여부</summary>
+        public bool IsManual { get; set; }
 
         /// <summary>A면 Named Selection 이름</summary>
         public string NameA

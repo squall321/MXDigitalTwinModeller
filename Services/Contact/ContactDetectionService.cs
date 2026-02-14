@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Core.Geometry;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.Contact;
+using SpaceClaim.Api.V252.Scripting.Commands;
 
 #if V251
 using SpaceClaim.Api.V251.Geometry;
@@ -21,8 +22,12 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
     public static class ContactDetectionService
     {
         private const double NormalTolerance = 0.985;  // anti-parallel dot threshold (≈±10°)
-        private const double PlaneTolerance = 5e-5;   // 평면 거리 허용 오차 (m) = 0.05mm
+        private const double DefaultPlaneTolerance = 1e-3; // 기본 평면 거리 허용 오차 (m) = 1.0mm
+        private const double GeomMatchTol = 5e-5;     // 원통 축/반지름 매칭 오차 (m) = 0.05mm (고정)
         private const double VertexSnapTol = 1e-5;    // 꼭짓점 병합 허용 오차 (m) = 0.01mm
+
+        // 현재 실행에서 사용할 허용 거리 (UI에서 설정, 면 간 거리에만 적용)
+        private static double _planeTolerance = DefaultPlaneTolerance;
 
         // ─── 내부 데이터 구조 ───
 
@@ -33,7 +38,30 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
             public Vector Normal;       // 실제 법선 (reversed 반영)
             public Point PlaneOrigin;
             public double Area;
-            public List<Point> Vertices; // 에지 꼭짓점 (순서 유지, 3D)
+            public List<Point> Vertices; // 외곽 경계 꼭짓점 (순서 유지, 3D)
+            public List<List<Point>> InnerLoops; // 구멍(홀) 경계 (없으면 빈 리스트)
+        }
+
+        private class CylinderFaceInfo
+        {
+            public DesignFace Face;
+            public DesignBody Body;
+            public Vector Axis;          // 축 방향 단위벡터 (Frame.DirZ)
+            public Point AxisOrigin;     // 축 위의 한 점 (Frame.Origin)
+            public double Radius;        // 원통 반지름 (m)
+            public bool IsInner;         // true=구멍(concave), false=핀(convex)
+            public double AxialMin;      // 축 방향 최소 범위 (AxisOrigin 기준 투영)
+            public double AxialMax;      // 축 방향 최대 범위
+            public double Area;
+        }
+
+        private class CylinderCandidatePair
+        {
+            public CylinderFaceInfo A;
+            public CylinderFaceInfo B;
+            public double RadiusDiff;    // |r1 - r2|
+            public double AxisDistance;   // 축 간 수직거리
+            public double OverlapLength; // 축 방향 겹침 길이
         }
 
         /// <summary>2D 점</summary>
@@ -51,14 +79,54 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
         public static List<string> DiagnosticLog { get; private set; }
 
         /// <summary>
-        /// 접촉면 페어를 감지하고 Named Selection을 생성
+        /// [하위 호환] 접촉면 페어를 감지하고 Named Selection을 생성.
+        /// 새 코드에서는 DetectContacts → AssignPrefixes → CreateNamedSelections 사용 권장.
         /// </summary>
-        public static List<ContactPairInfo> DetectAndCreateSelections(Part part, string keyword)
+        public static List<ContactPairInfo> DetectAndCreateSelections(Part part, string keyword, double toleranceMm = 1.0)
+        {
+            var pairs = DetectContacts(part, keyword, "", toleranceMm);
+            if (!string.IsNullOrEmpty(keyword))
+                AssignPrefixes(pairs, keyword);
+            CreateNamedSelections(part, pairs);
+            return pairs;
+        }
+
+        /// <summary>
+        /// 접촉면 페어만 감지 (NS 미생성).
+        /// 3가지 모드: 전체(키워드 없음), 단일(keywordA만), 쌍(keywordA+B).
+        /// </summary>
+        public static List<ContactPairInfo> DetectContacts(Part part, string keywordA, string keywordB, double toleranceMm = 1.0)
         {
             DiagnosticLog = new List<string>();
 
+            // 허용 거리 설정 (mm → m 변환)
+            _planeTolerance = toleranceMm > 0 ? toleranceMm * 1e-3 : DefaultPlaneTolerance;
+            DiagnosticLog.Add(string.Format("허용 거리: {0:F2}mm ({1:E3}m)", toleranceMm, _planeTolerance));
+
             var bodies = GetAllDesignBodies(part);
             DiagnosticLog.Add(string.Format("바디 수: {0}", bodies.Count));
+
+            // 키워드 기반 바디 그룹 빌드
+            HashSet<DesignBody> groupA = null;
+            HashSet<DesignBody> groupB = null;
+            if (!string.IsNullOrEmpty(keywordA))
+            {
+                groupA = BuildBodyGroup(bodies, keywordA);
+                DiagnosticLog.Add(string.Format("그룹A ('{0}'): {1}개 바디", keywordA, groupA.Count));
+            }
+            if (!string.IsNullOrEmpty(keywordB))
+            {
+                groupB = BuildBodyGroup(bodies, keywordB);
+                DiagnosticLog.Add(string.Format("그룹B ('{0}'): {1}개 바디", keywordB, groupB.Count));
+            }
+
+            // 모드 로그
+            if (groupA == null && groupB == null)
+                DiagnosticLog.Add("모드: 전체 (모든 바디 간 접촉 감지)");
+            else if (groupA != null && groupB == null)
+                DiagnosticLog.Add(string.Format("모드: 단일 ('{0}' 바디 ↔ 나머지)", keywordA));
+            else if (groupA != null && groupB != null)
+                DiagnosticLog.Add(string.Format("모드: 쌍 ('{0}' ↔ '{1}')", keywordA, keywordB));
 
             var faceInfos = CollectAllPlanarFaces(bodies);
             DiagnosticLog.Add(string.Format("평면 face 수: {0}", faceInfos.Count));
@@ -75,19 +143,66 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
             foreach (var kvp in bodyFaceCounts)
                 DiagnosticLog.Add(string.Format("  {0}: {1}개 평면", kvp.Key, kvp.Value));
 
-            var pairs = FindContactPairs(faceInfos, keyword);
+            var pairs = FindContactPairs(faceInfos, groupA, groupB);
             DiagnosticLog.Add(string.Format("감지된 면접촉 페어: {0}", pairs.Count));
 
             // 에지 접촉 감지 (서로 다른 바디의 면이 에지를 공유하는 경우)
-            var edgePairs = FindEdgeContactPairs(bodies, pairs, keyword);
+            var edgePairs = FindEdgeContactPairs(bodies, pairs, groupA, groupB);
             DiagnosticLog.Add(string.Format("감지된 에지접촉 페어: {0}", edgePairs.Count));
+
+            // 원통면 접촉 감지 (동축 원통면 매칭)
+            var cylInfos = CollectAllCylinderFaces(bodies);
+            DiagnosticLog.Add(string.Format("원통 face 수: {0}", cylInfos.Count));
+
+            var cylPairs = FindCylinderContactPairs(cylInfos, groupA, groupB);
+            DiagnosticLog.Add(string.Format("감지된 원통접촉 페어: {0}", cylPairs.Count));
+
+            // 평면↔원통 접선 접촉 감지
+            var pcPairs = FindPlaneCylinderContactPairs(faceInfos, cylInfos, groupA, groupB);
+            DiagnosticLog.Add(string.Format("감지된 평면-원통접촉 페어: {0}", pcPairs.Count));
 
             var allPairs = new List<ContactPairInfo>();
             allPairs.AddRange(pairs);
             allPairs.AddRange(edgePairs);
+            allPairs.AddRange(cylPairs);
+            allPairs.AddRange(pcPairs);
 
-            CreateNamedSelections(part, allPairs);
             return allPairs;
+        }
+
+        /// <summary>
+        /// 접두사 일괄 변경. 키워드에 매칭되는 바디가 포함된 페어의 접두사를 키워드 기반으로 변경.
+        /// </summary>
+        public static void AssignPrefixes(List<ContactPairInfo> pairs, string keyword)
+        {
+            if (pairs == null || string.IsNullOrEmpty(keyword))
+                return;
+
+            foreach (var pair in pairs)
+            {
+                string bna = pair.BodyA != null ? (pair.BodyA.Name ?? "") : "";
+                string bnb = pair.BodyB != null ? (pair.BodyB.Name ?? "") : "";
+                bool matches = bna.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0 ||
+                               bnb.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0;
+
+                if (!matches) continue;
+
+                switch (pair.Type)
+                {
+                    case ContactType.Face:
+                        pair.Prefix = keyword;
+                        break;
+                    case ContactType.Edge:
+                        pair.Prefix = keyword + "_Edge";
+                        break;
+                    case ContactType.Cylinder:
+                        pair.Prefix = keyword + "_Cyl";
+                        break;
+                    case ContactType.PlaneCylinder:
+                        pair.Prefix = keyword + "_PC";
+                        break;
+                }
+            }
         }
 
         // ─── Face 수집 ───
@@ -136,14 +251,20 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
                     try { area = face.Shape.Area; }
                     catch { areaFail++; continue; }
 
-                    var vertices = CollectFaceVertices(face);
-                    if (vertices.Count < 3)
+                    var allLoops = CollectFaceAllLoops(face);
+                    if (allLoops.Count == 0 || allLoops[0].Count < 3)
                     {
                         vertexFail++;
-                        DiagnosticLog.Add(string.Format("  [꼭짓점부족] {0}: face 꼭짓점 {1}개 (에지수={2})",
-                            bodyName, vertices.Count, face.Edges.Count));
+                        DiagnosticLog.Add(string.Format("  [꼭짓점부족] {0}: face 루프 없음 (에지수={1})",
+                            bodyName, face.Edges.Count));
                         continue;
                     }
+
+                    // 첫 번째 = 외곽, 나머지 = 구멍
+                    var outerLoop = allLoops[0];
+                    var innerLoops = new List<List<Point>>();
+                    for (int li = 1; li < allLoops.Count; li++)
+                        innerLoops.Add(allLoops[li]);
 
                     result.Add(new PlanarFaceInfo
                     {
@@ -152,7 +273,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
                         Normal = normalVec,
                         PlaneOrigin = plane.Frame.Origin,
                         Area = area,
-                        Vertices = vertices
+                        Vertices = outerLoop,
+                        InnerLoops = innerLoops
                     });
                 }
 
@@ -173,6 +295,126 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
                         fi.PlaneOrigin.X, fi.PlaneOrigin.Y, fi.PlaneOrigin.Z,
                         fi.Area, fi.Vertices.Count));
                     logged++;
+                }
+            }
+
+            return result;
+        }
+
+        // ─── Cylinder Face 수집 ───
+
+        private static List<CylinderFaceInfo> CollectAllCylinderFaces(List<DesignBody> bodies)
+        {
+            var result = new List<CylinderFaceInfo>();
+
+            foreach (var body in bodies)
+            {
+                string bodyName = body.Name ?? "Unnamed";
+                int cylFaces = 0;
+                int areaFail = 0;
+                int vertexFail = 0;
+
+                foreach (var face in body.Faces)
+                {
+                    var geom = face.Shape.Geometry;
+                    if (geom == null) continue;
+
+                    var cyl = geom as Cylinder;
+                    if (cyl == null) continue;
+
+                    cylFaces++;
+
+                    // 축 방향
+                    Vector axisDir = cyl.Frame.DirZ.UnitVector;
+                    Point axisOrigin = cyl.Frame.Origin;
+
+                    // 반지름 추출
+                    double radius;
+                    try
+                    {
+                        radius = cyl.Radius;
+                    }
+                    catch
+                    {
+                        // 폴백: 에지 꼭짓점에서 축까지 거리 계산
+                        try
+                        {
+                            Point surfPt = face.Edges.First().Shape.StartPoint;
+                            Vector toPoint = surfPt - axisOrigin;
+                            double axialComp = VecDot(toPoint, axisDir);
+                            Vector radialVec = Vector.Create(
+                                toPoint.X - axialComp * axisDir.X,
+                                toPoint.Y - axialComp * axisDir.Y,
+                                toPoint.Z - axialComp * axisDir.Z);
+                            radius = Math.Sqrt(VecDot(radialVec, radialVec));
+                        }
+                        catch
+                        {
+                            DiagnosticLog.Add(string.Format("  [반지름실패] {0}: 원통 반지름 추출 불가", bodyName));
+                            continue;
+                        }
+                    }
+
+                    // Inner/Outer 판별
+                    bool isInner = face.Shape.IsReversed;
+
+                    // 면적
+                    double area;
+                    try { area = face.Shape.Area; }
+                    catch { areaFail++; continue; }
+
+                    // 에지 꼭짓점 수집 (축 방향 범위 계산용)
+                    var vertices = CollectFaceVertices(face);
+                    if (vertices.Count < 2)
+                    {
+                        vertexFail++;
+                        continue;
+                    }
+
+                    // 축 방향 범위: 꼭짓점을 축에 투영
+                    double axialMin = double.MaxValue;
+                    double axialMax = double.MinValue;
+                    foreach (var v in vertices)
+                    {
+                        Vector diff = v - axisOrigin;
+                        double proj = VecDot(diff, axisDir);
+                        if (proj < axialMin) axialMin = proj;
+                        if (proj > axialMax) axialMax = proj;
+                    }
+
+                    result.Add(new CylinderFaceInfo
+                    {
+                        Face = face,
+                        Body = body,
+                        Axis = axisDir,
+                        AxisOrigin = axisOrigin,
+                        Radius = radius,
+                        IsInner = isInner,
+                        AxialMin = axialMin,
+                        AxialMax = axialMax,
+                        Area = area
+                    });
+                }
+
+                if (cylFaces > 0)
+                {
+                    DiagnosticLog.Add(string.Format("[바디] {0}: 원통face={1}, 면적실패={2}, 꼭짓점실패={3}",
+                        bodyName, cylFaces, areaFail, vertexFail));
+
+                    int logged = 0;
+                    foreach (var ci in result)
+                    {
+                        if (ci.Body != body) continue;
+                        if (logged >= 10) break;
+                        DiagnosticLog.Add(string.Format(
+                            "  원통face: axis=({0:F4},{1:F4},{2:F4}) r={3:F6}m {4} axial=[{5:F6},{6:F6}] area={7:E3}m²",
+                            ci.Axis.X, ci.Axis.Y, ci.Axis.Z,
+                            ci.Radius,
+                            ci.IsInner ? "INNER" : "OUTER",
+                            ci.AxialMin, ci.AxialMax,
+                            ci.Area));
+                        logged++;
+                    }
                 }
             }
 
@@ -296,6 +538,94 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
             }
 
             return largest;
+        }
+
+        /// <summary>
+        /// face의 모든 루프를 반환 (외곽 + 구멍).
+        /// 첫 번째 = 가장 큰 루프(외곽), 나머지 = 구멍(inner loops).
+        /// </summary>
+        private static List<List<Point>> CollectFaceAllLoops(DesignFace face)
+        {
+            // 에지 수집
+            var edgeInfos = new List<EdgeInfo>();
+            foreach (var edge in face.Edges)
+            {
+                try
+                {
+                    var ei = SampleEdge(edge);
+                    if (ei != null)
+                        edgeInfos.Add(ei);
+                }
+                catch { }
+            }
+
+            if (edgeInfos.Count < 2)
+                return new List<List<Point>>();
+
+            // 에지 체이닝으로 루프들 추출
+            var used = new bool[edgeInfos.Count];
+            var allLoops = new List<List<Point>>();
+
+            while (true)
+            {
+                int startIdx = -1;
+                for (int k = 0; k < used.Length; k++)
+                {
+                    if (!used[k]) { startIdx = k; break; }
+                }
+                if (startIdx < 0)
+                    break;
+
+                var loop = new List<Point>();
+                used[startIdx] = true;
+
+                var firstEdge = edgeInfos[startIdx];
+                Point firstPoint = firstEdge.Start;
+                Point current = firstEdge.End;
+                AddSampledPoints(loop, firstEdge, false);
+
+                bool found = true;
+                int safety = edgeInfos.Count + 2;
+                while (found && !IsNear(current, firstPoint) && safety-- > 0)
+                {
+                    found = false;
+                    for (int k = 0; k < edgeInfos.Count; k++)
+                    {
+                        if (used[k]) continue;
+                        var ei = edgeInfos[k];
+                        if (IsNear(current, ei.Start))
+                        {
+                            used[k] = true;
+                            AddSampledPoints(loop, ei, false);
+                            current = ei.End;
+                            found = true;
+                            break;
+                        }
+                        else if (IsNear(current, ei.End))
+                        {
+                            used[k] = true;
+                            AddSampledPoints(loop, ei, true);
+                            current = ei.Start;
+                            found = true;
+                            break;
+                        }
+                    }
+                }
+
+                while (loop.Count > 1 && IsNear(loop[0], loop[loop.Count - 1]))
+                    loop.RemoveAt(loop.Count - 1);
+
+                if (loop.Count >= 3)
+                    allLoops.Add(loop);
+            }
+
+            if (allLoops.Count == 0)
+                return new List<List<Point>>();
+
+            // 면적 기준 내림차순 정렬 (첫 번째 = 외곽, 나머지 = 구멍)
+            allLoops.Sort((a, b) => ComputeLoop2DArea(b).CompareTo(ComputeLoop2DArea(a)));
+
+            return allLoops;
         }
 
         /// <summary>
@@ -432,7 +762,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
             public bool IsEdgeOnly;  // 동일 평면 에지만 공유 (면적 겹침 없음)
         }
 
-        private static List<ContactPairInfo> FindContactPairs(List<PlanarFaceInfo> faceInfos, string keyword)
+        private static List<ContactPairInfo> FindContactPairs(
+            List<PlanarFaceInfo> faceInfos,
+            HashSet<DesignBody> groupA, HashSet<DesignBody> groupB)
         {
             int checkedPairs = 0;
             int passedNormal = 0;
@@ -453,6 +785,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
                     var b = faceInfos[j];
 
                     if (a.Body == b.Body)
+                        continue;
+
+                    // 키워드 그룹 필터
+                    if (!IsEligiblePair(a.Body, b.Body, groupA, groupB))
                         continue;
 
                     checkedPairs++;
@@ -476,18 +812,18 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
                     // 동일 평면 체크
                     Vector diff = b.PlaneOrigin - a.PlaneOrigin;
                     double planeDist = Math.Abs(VecDot(diff, Normalize(a.Normal)));
-                    if (planeDist > PlaneTolerance)
+                    if (planeDist > _planeTolerance)
                     {
-                        if (planeDist < PlaneTolerance * 10)
+                        if (planeDist < _planeTolerance * 10)
                         {
                             DiagnosticLog.Add(string.Format("  Near-miss 평면거리: {0} ↔ {1}, dist={2:E3}m (tol={3:E3})",
-                                a.Body.Name ?? "?", b.Body.Name ?? "?", planeDist, PlaneTolerance));
+                                a.Body.Name ?? "?", b.Body.Name ?? "?", planeDist, _planeTolerance));
                         }
                         else if (detailLogCount < MaxDetailLog)
                         {
                             detailLogCount++;
                             DiagnosticLog.Add(string.Format("  [평면실패] {0} ↔ {1}: dist={2:E3}m (tol={3:E3})",
-                                a.Body.Name ?? "?", b.Body.Name ?? "?", planeDist, PlaneTolerance));
+                                a.Body.Name ?? "?", b.Body.Name ?? "?", planeDist, _planeTolerance));
                         }
                         continue;
                     }
@@ -619,35 +955,13 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
 
                 if (c.IsEdgeOnly)
                 {
-                    // 동일 평면에서 에지만 공유 → EdgeContact
                     prefix = "EdgeContact";
                     contactType = ContactType.Edge;
-                    if (!string.IsNullOrEmpty(keyword))
-                    {
-                        string bna = faceA.Body.Name ?? "";
-                        string bnb = faceB.Body.Name ?? "";
-                        if (bna.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            bnb.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            prefix = keyword + "_Edge";
-                        }
-                    }
                 }
                 else
                 {
-                    // 면적 겹침 → NodeSet (면접촉)
                     prefix = "NodeSet";
                     contactType = ContactType.Face;
-                    if (!string.IsNullOrEmpty(keyword))
-                    {
-                        string bna = faceA.Body.Name ?? "";
-                        string bnb = faceB.Body.Name ?? "";
-                        if (bna.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            bnb.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            prefix = keyword;
-                        }
-                    }
                 }
 
                 pairs.Add(new ContactPairInfo
@@ -677,7 +991,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
         private static List<ContactPairInfo> FindEdgeContactPairs(
             List<DesignBody> bodies,
             List<ContactPairInfo> faceContactPairs,
-            string keyword)
+            HashSet<DesignBody> groupA, HashSet<DesignBody> groupB)
         {
             // 이미 면접촉으로 매칭된 face 쌍을 기록 (중복 방지)
             var facePairedSet = new HashSet<string>();
@@ -734,6 +1048,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
                     // 같은 바디는 스킵
                     if (a.Body == b.Body) continue;
 
+                    // 키워드 그룹 필터
+                    if (!IsEligiblePair(a.Body, b.Body, groupA, groupB))
+                        continue;
+
                     // 같은 face 쌍이 이미 면접촉으로 잡혔으면 스킵
                     int hfa = a.Face.GetHashCode();
                     int hfb = b.Face.GetHashCode();
@@ -752,26 +1070,13 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
                     edgeCoincident++;
                     edgePairedSet.Add(faceKey);
 
-                    // 접두사 결정
-                    string prefix = "EdgeContact";
-                    if (!string.IsNullOrEmpty(keyword))
-                    {
-                        string bodyNameA = a.Body.Name ?? "";
-                        string bodyNameB = b.Body.Name ?? "";
-                        if (bodyNameA.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0 ||
-                            bodyNameB.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
-                        {
-                            prefix = keyword + "_Edge";
-                        }
-                    }
-
                     result.Add(new ContactPairInfo
                     {
                         FaceA = a.Face,
                         FaceB = b.Face,
                         BodyA = a.Body,
                         BodyB = b.Body,
-                        Prefix = prefix,
+                        Prefix = "EdgeContact",
                         PairIndex = edgePairIndex,
                         Area = 0,
                         Type = ContactType.Edge
@@ -790,6 +1095,381 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
             public Point End;
             public DesignFace Face;
             public DesignBody Body;
+        }
+
+        // ─── 원통면 접촉 쌍 탐색 ───
+
+        /// <summary>
+        /// 동축 원통면(coaxial cylinder) 접촉 쌍 탐색.
+        /// 핀-인-홀 등 동일 축/반지름의 원통면 접촉을 감지.
+        /// </summary>
+        private static List<ContactPairInfo> FindCylinderContactPairs(
+            List<CylinderFaceInfo> cylInfos,
+            HashSet<DesignBody> groupA, HashSet<DesignBody> groupB)
+        {
+            int checkedPairs = 0;
+            int passedParallel = 0;
+            int passedColinear = 0;
+            int passedRadius = 0;
+            int passedAxialOverlap = 0;
+
+            var candidates = new List<CylinderCandidatePair>();
+            int detailLogCount = 0;
+            const int MaxDetailLog = 20;
+
+            for (int i = 0; i < cylInfos.Count; i++)
+            {
+                for (int j = i + 1; j < cylInfos.Count; j++)
+                {
+                    var a = cylInfos[i];
+                    var b = cylInfos[j];
+
+                    if (a.Body == b.Body)
+                        continue;
+
+                    // 키워드 그룹 필터
+                    if (!IsEligiblePair(a.Body, b.Body, groupA, groupB))
+                        continue;
+
+                    checkedPairs++;
+
+                    // Phase 1: 축 평행 검사
+                    double axisDot = Math.Abs(VecDot(a.Axis, b.Axis));
+                    if (axisDot < 0.99)
+                    {
+                        if (detailLogCount < MaxDetailLog)
+                        {
+                            detailLogCount++;
+                            DiagnosticLog.Add(string.Format(
+                                "  [축평행실패] {0} ↔ {1}: |dot|={2:F4} (need>0.99)",
+                                a.Body.Name ?? "?", b.Body.Name ?? "?", axisDot));
+                        }
+                        continue;
+                    }
+                    passedParallel++;
+
+                    // Phase 2: 축 동선(colinear) 검사 — 축 간 수직 거리
+                    Vector originDiff = b.AxisOrigin - a.AxisOrigin;
+                    double axialProj = VecDot(originDiff, a.Axis);
+                    Vector perpComponent = Vector.Create(
+                        originDiff.X - axialProj * a.Axis.X,
+                        originDiff.Y - axialProj * a.Axis.Y,
+                        originDiff.Z - axialProj * a.Axis.Z);
+                    double axisDistance = Math.Sqrt(VecDot(perpComponent, perpComponent));
+
+                    if (axisDistance > GeomMatchTol) // 0.05mm (고정)
+                    {
+                        if (detailLogCount < MaxDetailLog)
+                        {
+                            detailLogCount++;
+                            DiagnosticLog.Add(string.Format(
+                                "  [축동선실패] {0} ↔ {1}: axisDist={2:E3}m (tol={3:E3})",
+                                a.Body.Name ?? "?", b.Body.Name ?? "?",
+                                axisDistance, GeomMatchTol));
+                        }
+                        continue;
+                    }
+                    passedColinear++;
+
+                    // Phase 3: 반지름 동일 검사
+                    double radiusDiff = Math.Abs(a.Radius - b.Radius);
+                    if (radiusDiff > GeomMatchTol)
+                    {
+                        if (detailLogCount < MaxDetailLog)
+                        {
+                            detailLogCount++;
+                            DiagnosticLog.Add(string.Format(
+                                "  [반지름실패] {0} ↔ {1}: |r1-r2|={2:E3}m, r1={3:F6}, r2={4:F6}",
+                                a.Body.Name ?? "?", b.Body.Name ?? "?",
+                                radiusDiff, a.Radius, b.Radius));
+                        }
+                        continue;
+                    }
+                    passedRadius++;
+
+                    // Phase 4: 축 방향 겹침 검사
+                    // b의 축 방향 범위를 a의 축 기준으로 변환
+                    double bMin, bMax;
+                    double dotSign = VecDot(a.Axis, b.Axis);
+                    double offset = VecDot(b.AxisOrigin - a.AxisOrigin, a.Axis);
+                    if (dotSign > 0)
+                    {
+                        bMin = b.AxialMin + offset;
+                        bMax = b.AxialMax + offset;
+                    }
+                    else
+                    {
+                        // Anti-parallel: 범위 뒤집기
+                        bMin = -b.AxialMax + offset;
+                        bMax = -b.AxialMin + offset;
+                    }
+
+                    double overlapStart = Math.Max(a.AxialMin, bMin);
+                    double overlapEnd = Math.Min(a.AxialMax, bMax);
+                    double overlapLength = overlapEnd - overlapStart;
+
+                    if (overlapLength < VertexSnapTol) // 0.01mm 최소 겹침
+                    {
+                        if (detailLogCount < MaxDetailLog)
+                        {
+                            detailLogCount++;
+                            DiagnosticLog.Add(string.Format(
+                                "  [축겹침실패] {0} ↔ {1}: overlap={2:E3}m, a=[{3:F6},{4:F6}] b=[{5:F6},{6:F6}]",
+                                a.Body.Name ?? "?", b.Body.Name ?? "?",
+                                overlapLength, a.AxialMin, a.AxialMax, bMin, bMax));
+                        }
+                        continue;
+                    }
+                    passedAxialOverlap++;
+
+                    // Phase 5: 보완면 로그 (Inner+Outer가 이상적이나 둘 다 허용)
+                    if (a.IsInner == b.IsInner)
+                    {
+                        DiagnosticLog.Add(string.Format(
+                            "  [동일방향] {0}({1}) ↔ {2}({3}): 둘 다 {4}",
+                            a.Body.Name ?? "?", a.IsInner ? "INNER" : "OUTER",
+                            b.Body.Name ?? "?", b.IsInner ? "INNER" : "OUTER",
+                            a.IsInner ? "INNER" : "OUTER"));
+                    }
+
+                    candidates.Add(new CylinderCandidatePair
+                    {
+                        A = a,
+                        B = b,
+                        RadiusDiff = radiusDiff,
+                        AxisDistance = axisDistance,
+                        OverlapLength = overlapLength
+                    });
+                }
+            }
+
+            DiagnosticLog.Add(string.Format(
+                "원통 필터 통계: 비교={0}, 축평행={1}, 축동선={2}, 반지름={3}, 축겹침={4}",
+                checkedPairs, passedParallel, passedColinear, passedRadius, passedAxialOverlap));
+
+            // 최종 페어 생성
+            var pairs = new List<ContactPairInfo>();
+            var pairedSet = new HashSet<string>();
+            int pairIndex = 1;
+
+            foreach (var c in candidates)
+            {
+                // 중복 체크
+                string key = c.A.Face.GetHashCode() < c.B.Face.GetHashCode()
+                    ? c.A.Face.GetHashCode() + "_" + c.B.Face.GetHashCode()
+                    : c.B.Face.GetHashCode() + "_" + c.A.Face.GetHashCode();
+                if (pairedSet.Contains(key))
+                    continue;
+                pairedSet.Add(key);
+
+                // A/B 할당: Inner(구멍)=A, Outer(핀)=B
+                CylinderFaceInfo faceA, faceB;
+                if (c.A.IsInner != c.B.IsInner)
+                {
+                    faceA = c.A.IsInner ? c.A : c.B;
+                    faceB = c.A.IsInner ? c.B : c.A;
+                }
+                else
+                {
+                    double sumN = c.A.Axis.X + c.A.Axis.Y + c.A.Axis.Z;
+                    faceA = sumN > 0 ? c.A : c.B;
+                    faceB = sumN > 0 ? c.B : c.A;
+                }
+
+                // 접촉 면적: 2π × r × overlapLength
+                string prefix = "CylContact";
+                double contactArea = 2.0 * Math.PI * c.A.Radius * c.OverlapLength;
+
+                pairs.Add(new ContactPairInfo
+                {
+                    FaceA = faceA.Face,
+                    FaceB = faceB.Face,
+                    BodyA = faceA.Body,
+                    BodyB = faceB.Body,
+                    Prefix = prefix,
+                    PairIndex = pairIndex,
+                    Area = contactArea,
+                    Type = ContactType.Cylinder
+                });
+                pairIndex++;
+            }
+
+            return pairs;
+        }
+
+        // ─── 평면↔원통 접선 접촉 탐색 ───
+
+        /// <summary>
+        /// 평면과 원통이 접선으로 맞닿는 접촉을 감지.
+        /// 조건: 원통 축이 평면에 평행하고, 축~평면 거리 = 반지름.
+        /// </summary>
+        private static List<ContactPairInfo> FindPlaneCylinderContactPairs(
+            List<PlanarFaceInfo> planarInfos, List<CylinderFaceInfo> cylInfos,
+            HashSet<DesignBody> groupA, HashSet<DesignBody> groupB)
+        {
+            int checkedPairs = 0;
+            int passedAxisParallel = 0;
+            int passedDistance = 0;
+            int passedSpatial = 0;
+
+            var pairs = new List<ContactPairInfo>();
+            var pairedSet = new HashSet<string>();
+            int pairIndex = 1;
+            int detailLogCount = 0;
+            const int MaxDetailLog = 20;
+
+            foreach (var pf in planarInfos)
+            {
+                foreach (var cf in cylInfos)
+                {
+                    if (pf.Body == cf.Body)
+                        continue;
+
+                    // 키워드 그룹 필터
+                    if (!IsEligiblePair(pf.Body, cf.Body, groupA, groupB))
+                        continue;
+
+                    checkedPairs++;
+
+                    // Phase 1: 원통 축이 평면에 평행한지 (축⊥법선 → dot≈0)
+                    double axisNormalDot = Math.Abs(VecDot(cf.Axis, pf.Normal));
+                    if (axisNormalDot > 0.174) // sin(10°) — 10도 이내
+                    {
+                        if (detailLogCount < MaxDetailLog)
+                        {
+                            detailLogCount++;
+                            DiagnosticLog.Add(string.Format(
+                                "  [PC축실패] {0} ↔ {1}: |dot(axis,normal)|={2:F4} (need<0.174)",
+                                pf.Body.Name ?? "?", cf.Body.Name ?? "?", axisNormalDot));
+                        }
+                        continue;
+                    }
+                    passedAxisParallel++;
+
+                    // Phase 2: 축~평면 거리 ≈ 반지름
+                    Vector axisToPlane = cf.AxisOrigin - pf.PlaneOrigin;
+                    double signedDist = VecDot(axisToPlane, pf.Normal);
+                    double distFromPlane = Math.Abs(signedDist);
+                    double distDiff = Math.Abs(distFromPlane - cf.Radius);
+
+                    if (distDiff > _planeTolerance)
+                    {
+                        if (distDiff < _planeTolerance * 10 && detailLogCount < MaxDetailLog)
+                        {
+                            detailLogCount++;
+                            DiagnosticLog.Add(string.Format(
+                                "  [PC거리근접] {0} ↔ {1}: |dist-r|={2:E3}m (dist={3:E3}, r={4:E3})",
+                                pf.Body.Name ?? "?", cf.Body.Name ?? "?",
+                                distDiff, distFromPlane, cf.Radius));
+                        }
+                        continue;
+                    }
+                    passedDistance++;
+
+                    // Phase 3: 공간적 겹침 — 접촉선이 평면 면적 내에 있는지
+                    // 접촉선: 원통 축을 평면에 투영한 선분
+                    // 축 방향 범위를 3D 점으로 변환 후 평면에 투영
+                    Vector normal = Normalize(pf.Normal);
+                    Vector uAxis, vAxis;
+                    BuildPlaneAxes(normal, out uAxis, out vAxis);
+                    Point origin = pf.PlaneOrigin;
+
+                    // 접촉선의 양 끝점 계산 (원통 축 방향 범위의 양 끝)
+                    Point cylStart = Point.Create(
+                        cf.AxisOrigin.X + cf.AxialMin * cf.Axis.X,
+                        cf.AxisOrigin.Y + cf.AxialMin * cf.Axis.Y,
+                        cf.AxisOrigin.Z + cf.AxialMin * cf.Axis.Z);
+                    Point cylEnd = Point.Create(
+                        cf.AxisOrigin.X + cf.AxialMax * cf.Axis.X,
+                        cf.AxisOrigin.Y + cf.AxialMax * cf.Axis.Y,
+                        cf.AxisOrigin.Z + cf.AxialMax * cf.Axis.Z);
+
+                    // 평면에 투영
+                    Vector ds = cylStart - origin;
+                    Vec2 lineStart = new Vec2(VecDot(ds, uAxis), VecDot(ds, vAxis));
+                    Vector de = cylEnd - origin;
+                    Vec2 lineEnd = new Vec2(VecDot(de, uAxis), VecDot(de, vAxis));
+
+                    // 접촉선이 평면 폴리곤과 겹치는지 (선분이 폴리곤 내부를 통과하거나 끝점이 내부)
+                    var polyP = ProjectToPlane(pf.Vertices, origin, uAxis, vAxis);
+                    var holesP = ProjectHoles(pf, origin, uAxis, vAxis);
+                    if (polyP.Count < 3)
+                        continue;
+
+                    bool spatialOverlap = false;
+
+                    // 선분의 끝점이 면 내부에 있는지
+                    if (PointInFaceWithHoles(lineStart, polyP, holesP) ||
+                        PointInFaceWithHoles(lineEnd, polyP, holesP))
+                    {
+                        spatialOverlap = true;
+                    }
+
+                    // 선분의 중점
+                    if (!spatialOverlap)
+                    {
+                        Vec2 midPt = new Vec2(
+                            (lineStart.U + lineEnd.U) * 0.5,
+                            (lineStart.V + lineEnd.V) * 0.5);
+                        if (PointInFaceWithHoles(midPt, polyP, holesP))
+                            spatialOverlap = true;
+                    }
+
+                    // 선분이 폴리곤 에지와 교차하는지
+                    if (!spatialOverlap)
+                    {
+                        for (int ie = 0; ie < polyP.Count; ie++)
+                        {
+                            int ie2 = (ie + 1) % polyP.Count;
+                            if (SegmentsIntersect(lineStart, lineEnd, polyP[ie], polyP[ie2]))
+                            {
+                                spatialOverlap = true;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (!spatialOverlap)
+                    {
+                        if (detailLogCount < MaxDetailLog)
+                        {
+                            detailLogCount++;
+                            DiagnosticLog.Add(string.Format(
+                                "  [PC공간실패] {0} ↔ {1}: 접촉선이 평면 외부",
+                                pf.Body.Name ?? "?", cf.Body.Name ?? "?"));
+                        }
+                        continue;
+                    }
+                    passedSpatial++;
+
+                    // 중복 체크
+                    string key = pf.Face.GetHashCode() < cf.Face.GetHashCode()
+                        ? pf.Face.GetHashCode() + "_" + cf.Face.GetHashCode()
+                        : cf.Face.GetHashCode() + "_" + pf.Face.GetHashCode();
+                    if (pairedSet.Contains(key))
+                        continue;
+                    pairedSet.Add(key);
+
+                    pairs.Add(new ContactPairInfo
+                    {
+                        FaceA = pf.Face,
+                        FaceB = cf.Face,
+                        BodyA = pf.Body,
+                        BodyB = cf.Body,
+                        Prefix = "PCContact",
+                        PairIndex = pairIndex,
+                        Area = 0, // 접선 접촉이므로 면적 0 (선 접촉)
+                        Type = ContactType.PlaneCylinder
+                    });
+                    pairIndex++;
+                }
+            }
+
+            DiagnosticLog.Add(string.Format(
+                "평면-원통 필터 통계: 비교={0}, 축평행={1}, 거리일치={2}, 공간겹침={3}",
+                checkedPairs, passedAxisParallel, passedDistance, passedSpatial));
+
+            return pairs;
         }
 
         /// <summary>
@@ -843,6 +1523,46 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
         /// 두 동일 평면 face의 2D 투영 후 오버랩 여부 판단.
         /// 포함, 부분 겹침, 동일 크기 모두 감지.
         /// </summary>
+        /// <summary>
+        /// 구멍을 고려하여 점이 면 내부에 있는지 판정.
+        /// 외곽 경계 내부이고, 어떤 구멍 내부에도 없어야 true.
+        /// </summary>
+        private static bool PointInFaceWithHoles(Vec2 pt,
+            List<Vec2> outerPoly, List<List<Vec2>> holePols)
+        {
+            if (!PointInPolygon(pt, outerPoly))
+                return false;
+
+            // 구멍 내부이면 면 밖
+            if (holePols != null)
+            {
+                foreach (var hole in holePols)
+                {
+                    if (PointInPolygon(pt, hole))
+                        return false;
+                }
+            }
+            return true;
+        }
+
+        /// <summary>
+        /// InnerLoops를 2D로 투영
+        /// </summary>
+        private static List<List<Vec2>> ProjectHoles(PlanarFaceInfo fi, Point origin, Vector uAxis, Vector vAxis)
+        {
+            var result = new List<List<Vec2>>();
+            if (fi.InnerLoops != null)
+            {
+                foreach (var loop in fi.InnerLoops)
+                {
+                    var proj = ProjectToPlane(loop, origin, uAxis, vAxis);
+                    if (proj.Count >= 3)
+                        result.Add(proj);
+                }
+            }
+            return result;
+        }
+
         private static bool PolygonsOverlap(PlanarFaceInfo a, PlanarFaceInfo b)
         {
             // 공유 평면의 로컬 좌표계 구축
@@ -853,9 +1573,11 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
             // 기준점: a의 PlaneOrigin
             Point origin = a.PlaneOrigin;
 
-            // 3D → 2D 투영
+            // 3D → 2D 투영 (외곽 + 구멍)
             var polyA = ProjectToPlane(a.Vertices, origin, uAxis, vAxis);
             var polyB = ProjectToPlane(b.Vertices, origin, uAxis, vAxis);
+            var holesA = ProjectHoles(a, origin, uAxis, vAxis);
+            var holesB = ProjectHoles(b, origin, uAxis, vAxis);
 
             if (polyA.Count < 3 || polyB.Count < 3)
                 return false;
@@ -870,21 +1592,21 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
                 aMaxV < bMinV - VertexSnapTol || bMaxV < aMinV - VertexSnapTol)
                 return false;
 
-            // 2단계: A의 꼭짓점이 B 내부에 있는지
+            // 2단계: A의 꼭짓점이 B 내부에 있는지 (구멍 제외)
             foreach (var pt in polyA)
             {
-                if (PointInPolygon(pt, polyB))
+                if (PointInFaceWithHoles(pt, polyB, holesB))
                     return true;
             }
 
-            // 3단계: B의 꼭짓점이 A 내부에 있는지
+            // 3단계: B의 꼭짓점이 A 내부에 있는지 (구멍 제외)
             foreach (var pt in polyB)
             {
-                if (PointInPolygon(pt, polyA))
+                if (PointInFaceWithHoles(pt, polyA, holesA))
                     return true;
             }
 
-            // 4단계: 에지 교차 검사 (별이나 L 형태 등에서 꼭짓점이 내부에 없어도 교차 가능)
+            // 4단계: 에지 교차 검사
             for (int ia = 0; ia < polyA.Count; ia++)
             {
                 int ia2 = (ia + 1) % polyA.Count;
@@ -1012,6 +1734,26 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
         /// 두 동일 평면 폴리곤이 면적을 공유하는지 (경계만 닿는 경우 false).
         /// 인접한 면이 에지만 공유하는 경우를 면접촉에서 제외하기 위함.
         /// </summary>
+        /// <summary>
+        /// 점이 면 내부에 엄격히 위치하는지 (구멍 제외, 경계 제외).
+        /// </summary>
+        private static bool PointStrictlyInsideFaceWithHoles(
+            Vec2 pt, List<Vec2> outerPoly, List<List<Vec2>> holePols, double tol)
+        {
+            if (!PointStrictlyInsidePolygon(pt, outerPoly, tol))
+                return false;
+
+            if (holePols != null)
+            {
+                foreach (var hole in holePols)
+                {
+                    if (PointInPolygon(pt, hole))
+                        return false;
+                }
+            }
+            return true;
+        }
+
         private static bool HasInteriorOverlap(PlanarFaceInfo a, PlanarFaceInfo b)
         {
             // 공유 평면의 로컬 좌표계 구축
@@ -1022,6 +1764,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
 
             var polyA = ProjectToPlane(a.Vertices, origin, uAxis, vAxis);
             var polyB = ProjectToPlane(b.Vertices, origin, uAxis, vAxis);
+            var holesA = ProjectHoles(a, origin, uAxis, vAxis);
+            var holesB = ProjectHoles(b, origin, uAxis, vAxis);
 
             if (polyA.Count < 3 || polyB.Count < 3)
                 return false;
@@ -1029,27 +1773,23 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
             // 경계 거리 임계값: 이 거리 이내이면 "경계 위"로 간주
             const double boundaryTol = 1e-6; // 0.001mm
 
-            // 1단계: 중심점(centroid) 검사
-            // 동일한 면이 겹치는 경우, 꼭짓점은 경계 위에 놓이지만
-            // 중심점은 상대 폴리곤의 깊은 내부에 위치
+            // 1단계: 중심점(centroid) 검사 (구멍 고려)
             Vec2 centroidA = PolygonCentroid(polyA);
-            if (PointStrictlyInsidePolygon(centroidA, polyB, boundaryTol))
+            if (PointStrictlyInsideFaceWithHoles(centroidA, polyB, holesB, boundaryTol))
                 return true;
 
             Vec2 centroidB = PolygonCentroid(polyB);
-            if (PointStrictlyInsidePolygon(centroidB, polyA, boundaryTol))
+            if (PointStrictlyInsideFaceWithHoles(centroidB, polyA, holesA, boundaryTol))
                 return true;
 
-            // 2단계: 에지 중점 검사
-            // 부분 겹침에서 양쪽 중심점이 모두 상대 바깥에 있어도
-            // 겹치는 영역의 에지 중점은 상대 내부에 위치할 수 있음
+            // 2단계: 에지 중점 검사 (구멍 고려)
             for (int i = 0; i < polyA.Count; i++)
             {
                 int j = (i + 1) % polyA.Count;
                 Vec2 mid = new Vec2(
                     (polyA[i].U + polyA[j].U) * 0.5,
                     (polyA[i].V + polyA[j].V) * 0.5);
-                if (PointStrictlyInsidePolygon(mid, polyB, boundaryTol))
+                if (PointStrictlyInsideFaceWithHoles(mid, polyB, holesB, boundaryTol))
                     return true;
             }
             for (int i = 0; i < polyB.Count; i++)
@@ -1058,25 +1798,25 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
                 Vec2 mid = new Vec2(
                     (polyB[i].U + polyB[j].U) * 0.5,
                     (polyB[i].V + polyB[j].V) * 0.5);
-                if (PointStrictlyInsidePolygon(mid, polyA, boundaryTol))
+                if (PointStrictlyInsideFaceWithHoles(mid, polyA, holesA, boundaryTol))
                     return true;
             }
 
-            // 3단계: A의 꼭짓점이 B의 내부에 엄격히 위치하는지 (경계 제외)
+            // 3단계: A의 꼭짓점이 B의 내부에 엄격히 위치하는지 (구멍+경계 제외)
             foreach (var pt in polyA)
             {
-                if (PointStrictlyInsidePolygon(pt, polyB, boundaryTol))
+                if (PointStrictlyInsideFaceWithHoles(pt, polyB, holesB, boundaryTol))
                     return true;
             }
 
             // 4단계: B의 꼭짓점이 A의 내부에 엄격히 위치하는지
             foreach (var pt in polyB)
             {
-                if (PointStrictlyInsidePolygon(pt, polyA, boundaryTol))
+                if (PointStrictlyInsideFaceWithHoles(pt, polyA, holesA, boundaryTol))
                     return true;
             }
 
-            // 5단계: 에지 교차가 "진짜 교차"인지 (공유 에지/꼭짓점 접촉이 아닌)
+            // 5단계: 에지 교차가 "진짜 교차"인지
             for (int ia = 0; ia < polyA.Count; ia++)
             {
                 int ia2 = (ia + 1) % polyA.Count;
@@ -1314,17 +2054,18 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
                 dotTilted11 > -NormalTolerance);
 
             // ── 5. 평면 거리 체크 ──
-            Vector diff1 = Point.Create(0, 0, 0.00003) - Point.Create(0, 0, 0); // 0.03mm
+            // 테스트는 기본 허용 거리(1.0mm) 기준으로 검증
+            Vector diff1 = Point.Create(0, 0, 0.0005) - Point.Create(0, 0, 0); // 0.5mm
             double dist1 = Math.Abs(VecDot(diff1, Normalize(nUp)));
             Check(log, ref pass, ref fail,
-                string.Format("평면거리: 0.03mm={0:E3}m → 통과(tol=0.05mm)", dist1),
-                dist1 <= PlaneTolerance);
+                string.Format("평면거리: 0.5mm={0:E3}m → 통과(tol={1:F1}mm)", dist1, _planeTolerance * 1000),
+                dist1 <= _planeTolerance);
 
-            Vector diff2 = Point.Create(0, 0, 0.0001) - Point.Create(0, 0, 0); // 0.1mm
+            Vector diff2 = Point.Create(0, 0, 0.002) - Point.Create(0, 0, 0); // 2.0mm
             double dist2 = Math.Abs(VecDot(diff2, Normalize(nUp)));
             Check(log, ref pass, ref fail,
-                string.Format("평면거리: 0.1mm={0:E3}m → 거부(tol=0.05mm)", dist2),
-                dist2 > PlaneTolerance);
+                string.Format("평면거리: 2.0mm={0:E3}m → 거부(tol={1:F1}mm)", dist2, _planeTolerance * 1000),
+                dist2 > _planeTolerance);
 
             // ── 6. BuildPlaneAxes 직교성 검증 ──
             Vector[] testNormals = {
@@ -1475,6 +2216,84 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
             Check(log, ref pass, ref fail, "엄격내부: (1e-7,0.5) 경계 매우 근접 → false",
                 PointStrictlyInsidePolygon(new Vec2(1e-7, 0.5), square, 1e-6) == false);
 
+            // ── 9. 원통 축 평행 검사 ──
+            Vector axZ = Vector.Create(0, 0, 1);
+            Vector axX = Vector.Create(1, 0, 0);
+            Vector axZ5 = Normalize(Vector.Create(0, Math.Sin(5 * Math.PI / 180), Math.Cos(5 * Math.PI / 180)));
+            Vector axZ10 = Normalize(Vector.Create(0, Math.Sin(10 * Math.PI / 180), Math.Cos(10 * Math.PI / 180)));
+
+            Check(log, ref pass, ref fail, "원통축: 동일축 |dot|=1 → 통과",
+                Math.Abs(VecDot(axZ, axZ)) > 0.99);
+            Check(log, ref pass, ref fail, "원통축: 수직축 |dot|=0 → 거부",
+                Math.Abs(VecDot(axZ, axX)) <= 0.99);
+            Check(log, ref pass, ref fail,
+                string.Format("원통축: 5도 틸트 |dot|={0:F4} → 통과", Math.Abs(VecDot(axZ, axZ5))),
+                Math.Abs(VecDot(axZ, axZ5)) > 0.99);
+            Check(log, ref pass, ref fail,
+                string.Format("원통축: 10도 틸트 |dot|={0:F4} → 거부", Math.Abs(VecDot(axZ, axZ10))),
+                Math.Abs(VecDot(axZ, axZ10)) <= 0.99);
+
+            // ── 10. 원통 축 동선 검사 (GeomMatchTol=0.05mm 고정) ──
+            // 같은 직선: (0,0,0)+Z 와 (0,0,5mm)+Z → perpDist=0
+            Vector od1 = Point.Create(0, 0, 0.005) - Point.Create(0, 0, 0);
+            double proj1 = VecDot(od1, axZ);
+            Vector perp1 = Vector.Create(od1.X - proj1 * axZ.X, od1.Y - proj1 * axZ.Y, od1.Z - proj1 * axZ.Z);
+            double perpDist1 = Math.Sqrt(VecDot(perp1, perp1));
+            Check(log, ref pass, ref fail,
+                string.Format("축동선: 같은 직선 perpDist={0:E3} → 통과", perpDist1),
+                perpDist1 < GeomMatchTol);
+
+            // 1mm 오프셋: perpDist=0.001m → 거부 (0.05mm tol)
+            Vector od2 = Point.Create(0.001, 0, 0) - Point.Create(0, 0, 0);
+            double proj2 = VecDot(od2, axZ);
+            Vector perp2 = Vector.Create(od2.X - proj2 * axZ.X, od2.Y - proj2 * axZ.Y, od2.Z - proj2 * axZ.Z);
+            double perpDist2 = Math.Sqrt(VecDot(perp2, perp2));
+            Check(log, ref pass, ref fail,
+                string.Format("축동선: 1mm 오프셋 perpDist={0:E3} → 거부", perpDist2),
+                perpDist2 > GeomMatchTol);
+
+            // 0.04mm 오프셋: perpDist=4e-5 → 통과 (tol=5e-5)
+            Vector od3 = Point.Create(0.00004, 0, 0.003) - Point.Create(0, 0, 0);
+            double proj3 = VecDot(od3, axZ);
+            Vector perp3 = Vector.Create(od3.X - proj3 * axZ.X, od3.Y - proj3 * axZ.Y, od3.Z - proj3 * axZ.Z);
+            double perpDist3 = Math.Sqrt(VecDot(perp3, perp3));
+            Check(log, ref pass, ref fail,
+                string.Format("축동선: 0.04mm 오프셋 perpDist={0:E3} → 통과", perpDist3),
+                perpDist3 < GeomMatchTol);
+
+            // ── 11. 원통 반지름 동일 검사 (GeomMatchTol=0.05mm 고정) ──
+            Check(log, ref pass, ref fail, "반지름: 동일 5mm → 통과",
+                Math.Abs(0.005 - 0.005) < GeomMatchTol);
+            Check(log, ref pass, ref fail, "반지름: 0.04mm 차이 → 통과",
+                Math.Abs(0.005 - 0.00504) < GeomMatchTol);
+            Check(log, ref pass, ref fail, "반지름: 0.1mm 차이 → 거부",
+                Math.Abs(0.005 - 0.0051) > GeomMatchTol);
+
+            // ── 12. 원통 축방향 겹침 검사 ──
+            // 완전 겹침: [0, 0.01] vs [0, 0.01]
+            double ov1 = Math.Min(0.01, 0.01) - Math.Max(0.0, 0.0);
+            Check(log, ref pass, ref fail,
+                string.Format("축겹침: 완전겹침 overlap={0:E3} → 통과", ov1),
+                ov1 > VertexSnapTol);
+
+            // 비겹침: [0, 0.01] vs [0.011, 0.02]
+            double ov2 = Math.Min(0.01, 0.02) - Math.Max(0.0, 0.011);
+            Check(log, ref pass, ref fail,
+                string.Format("축겹침: 비겹침 overlap={0:E3} → 거부", ov2),
+                ov2 < VertexSnapTol);
+
+            // 부분 겹침: [0, 0.01] vs [0.005, 0.015]
+            double ov3 = Math.Min(0.01, 0.015) - Math.Max(0.0, 0.005);
+            Check(log, ref pass, ref fail,
+                string.Format("축겹침: 부분겹침 overlap={0:E3} → 통과", ov3),
+                ov3 > VertexSnapTol);
+
+            // 접점만: [0, 0.01] vs [0.01, 0.02] → overlap=0 → 거부
+            double ov4 = Math.Min(0.01, 0.02) - Math.Max(0.0, 0.01);
+            Check(log, ref pass, ref fail,
+                string.Format("축겹침: 접점만 overlap={0:E3} → 거부", ov4),
+                ov4 < VertexSnapTol);
+
             log.Insert(0, string.Format("=== 셀프 테스트 결과: {0} PASS, {1} FAIL ===\r\n", pass, fail));
             return log;
         }
@@ -1506,23 +2325,29 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
             }
         }
 
-        // ─── Named Selection 생성 ───
+        // ─── Named Selection 생성/관리 ───
 
-        private static void CreateNamedSelections(Part part, List<ContactPairInfo> pairs)
+        /// <summary>
+        /// IsSelected=true 이고 IsExisting=false 인 페어만 NS 생성.
+        /// 생성 후 IsExisting=true 마킹.
+        /// </summary>
+        public static void CreateNamedSelections(Part part, List<ContactPairInfo> pairs)
         {
+            var toCreate = pairs.FindAll(p => p.IsSelected && !p.IsExisting);
+            if (toCreate.Count == 0) return;
+
             // 개별 페어 Named Selection 생성
-            foreach (var pair in pairs)
+            foreach (var pair in toCreate)
             {
                 FaceNamingHelper.NameFace(part, pair.FaceA, pair.NameA);
                 FaceNamingHelper.NameFace(part, pair.FaceB, pair.NameB);
             }
 
-            // 면접촉(Face) 전체를 A/B로 묶은 그룹 Named Selection 생성
-            // 접두사별로 그룹화: 같은 접두사의 모든 A면, 모든 B면
+            // 면접촉(Face)/원통(Cylinder) 전체를 A/B로 묶은 그룹 NS 생성
             var prefixGroups = new Dictionary<string, List<ContactPairInfo>>();
-            foreach (var pair in pairs)
+            foreach (var pair in toCreate)
             {
-                if (pair.Type != Models.Contact.ContactType.Face)
+                if (pair.Type != ContactType.Face && pair.Type != ContactType.Cylinder)
                     continue;
 
                 List<ContactPairInfo> group;
@@ -1548,10 +2373,122 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Contact
                     allBFaces.Add(pair.FaceB);
                 }
 
-                // 접두사_1 = 모든 A면 (+ 법선), 접두사_2 = 모든 B면 (- 법선)
                 FaceNamingHelper.NameFaces(part, allAFaces, prefix + "_1");
                 FaceNamingHelper.NameFaces(part, allBFaces, prefix + "_2");
             }
+
+            // 생성된 페어를 기존으로 마킹
+            foreach (var pair in toCreate)
+                pair.IsExisting = true;
+        }
+
+        /// <summary>
+        /// 파트에 존재하는 접촉 관련 NS 이름 목록 반환.
+        /// </summary>
+        public static List<string> GetContactNSNames(Part part)
+        {
+            var result = new List<string>();
+            try
+            {
+                foreach (var g in part.Groups)
+                {
+                    string name = g.Name;
+                    if (string.IsNullOrEmpty(name)) continue;
+                    // 접촉 NS 패턴: {Prefix}_{100xxx}, {Prefix}_{200xxx}, {Prefix}_1, {Prefix}_2
+                    if (name.Contains("_1") || name.Contains("_2"))
+                        result.Add(name);
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    string.Format("GetContactNSNames failed: {0}", ex.Message));
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// NS 이름 목록으로 삭제.
+        /// </summary>
+        public static void DeleteNamedSelections(Part part, List<string> names)
+        {
+            if (names == null || names.Count == 0) return;
+            try
+            {
+                NamedSelection.Delete(names.ToArray());
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine(
+                    string.Format("DeleteNamedSelections failed: {0}", ex.Message));
+            }
+        }
+
+        /// <summary>
+        /// 페어의 NS가 이미 존재하는지 마킹. 기존 페어는 IsExisting=true, IsSelected=false.
+        /// </summary>
+        public static void MarkExistingPairs(Part part, List<ContactPairInfo> pairs)
+        {
+            var existingNames = new HashSet<string>();
+            try
+            {
+                foreach (var g in part.Groups)
+                {
+                    if (g.Name != null)
+                        existingNames.Add(g.Name);
+                }
+            }
+            catch { }
+
+            foreach (var pair in pairs)
+            {
+                pair.IsExisting = existingNames.Contains(pair.NameA) && existingNames.Contains(pair.NameB);
+                if (pair.IsExisting)
+                    pair.IsSelected = false;
+            }
+        }
+
+        // ─── 키워드 바디 그룹 빌드 ───
+
+        /// <summary>
+        /// 키워드에 매칭되는 바디 그룹 빌드.
+        /// </summary>
+        private static HashSet<DesignBody> BuildBodyGroup(List<DesignBody> bodies, string keyword)
+        {
+            var group = new HashSet<DesignBody>();
+            foreach (var body in bodies)
+            {
+                string name = body.Name ?? "";
+                if (name.IndexOf(keyword, StringComparison.OrdinalIgnoreCase) >= 0)
+                    group.Add(body);
+            }
+            return group;
+        }
+
+        /// <summary>
+        /// 바디 쌍이 키워드 그룹 기준으로 유효한지 판정.
+        /// </summary>
+        private static bool IsEligiblePair(DesignBody bodyA, DesignBody bodyB,
+            HashSet<DesignBody> groupA, HashSet<DesignBody> groupB)
+        {
+            // 전체 모드 (키워드 없음)
+            if (groupA == null && groupB == null)
+                return true;
+
+            // 쌍 모드 (키워드 A+B)
+            if (groupA != null && groupB != null)
+            {
+                return (groupA.Contains(bodyA) && groupB.Contains(bodyB)) ||
+                       (groupB.Contains(bodyA) && groupA.Contains(bodyB));
+            }
+
+            // 단일 모드 (키워드 A만)
+            if (groupA != null)
+            {
+                return groupA.Contains(bodyA) || groupA.Contains(bodyB);
+            }
+
+            return true;
         }
 
         // ─── 바디 수집 ───
