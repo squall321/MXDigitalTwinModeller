@@ -14,6 +14,8 @@ using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Material;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Export;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Load;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Simulation;
+using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Pipeline;
+using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.ConformalMesh;
 
 #if V251
 using SpaceClaim.Api.V251.Extensibility;
@@ -92,7 +94,13 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller
             new LoadCommand(),
 
             // 시뮬레이션 설정
-            new SimulationSetupCommand()
+            new SimulationSetupCommand(),
+
+            // 일괄 실행 파이프라인
+            new BatchPipelineCommand(),
+
+            // Conformal Mesh
+            new ConformalMeshCommand()
         };
 
         #region IExtensibility Members
@@ -242,6 +250,12 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller
                     <button id=""MXDigitalTwinModeller.SimulationSetup""
                             size=""large""
                             command=""MXDigitalTwinModeller.SimulationSetup""/>
+                    <button id=""MXDigitalTwinModeller.BatchPipeline""
+                            size=""large""
+                            command=""MXDigitalTwinModeller.BatchPipeline""/>
+                    <button id=""MXDigitalTwinModeller.ConformalMesh""
+                            size=""large""
+                            command=""MXDigitalTwinModeller.ConformalMesh""/>
                 </group>
             </tab>
         </tabs>

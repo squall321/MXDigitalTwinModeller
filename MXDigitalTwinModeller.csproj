@@ -217,6 +217,10 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Commands\Simulation\SimulationSetupCommand.cs" />
+    <Compile Include="Commands\Pipeline\BatchPipelineCommand.cs" />
+    <Compile Include="UI\Dialogs\BatchPipelineDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
     <Compile Include="Commands\Laminate\CreateLaminateCommand.cs" />
     <Compile Include="UI\Dialogs\ApplyBendingFixtureDialog.cs">
       <SubType>Form</SubType>
@@ -229,6 +233,14 @@
     </Compile>
     <Compile Include="UI\Dialogs\LaminateDialog.Designer.cs">
       <DependentUpon>LaminateDialog.cs</DependentUpon>
+    </Compile>
+    <Compile Include="Models\ConformalMesh\ConformalMeshParameters.cs" />
+    <Compile Include="Models\ConformalMesh\InterfacePairInfo.cs" />
+    <Compile Include="Services\ConformalMesh\SpatialIndex.cs" />
+    <Compile Include="Services\ConformalMesh\ConformalMeshService.cs" />
+    <Compile Include="Commands\ConformalMesh\ConformalMeshCommand.cs" />
+    <Compile Include="UI\Dialogs\ConformalMeshDialog.cs">
+      <SubType>Form</SubType>
     </Compile>
   </ItemGroup>
 
@@ -254,6 +266,8 @@
     <EmbeddedResource Include="Resources\Icons\Simulation_32.png" />
     <EmbeddedResource Include="Resources\Icons\ExportStep_32.png" />
     <EmbeddedResource Include="Resources\Icons\Material_32.png" />
+    <EmbeddedResource Include="Resources\Icons\Pipeline_32.png" />
+    <EmbeddedResource Include="Resources\Icons\ConformalMesh_32.png" />
   </ItemGroup>
 
   <ItemGroup>

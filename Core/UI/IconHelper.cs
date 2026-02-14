@@ -29,6 +29,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Core.UI
         private static System.Drawing.Image _exportStepIcon;
         private static System.Drawing.Image _materialIcon;
         private static System.Drawing.Image _simulationIcon;
+        private static System.Drawing.Image _pipelineIcon;
+        private static System.Drawing.Image _conformalMeshIcon;
 
         public static System.Drawing.Image TensileIcon =>
             _tensileIcon ?? (_tensileIcon = LoadIcon("Resources.Icons.Tensile_32.png"));
@@ -74,6 +76,12 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Core.UI
 
         public static System.Drawing.Image SimulationIcon =>
             _simulationIcon ?? (_simulationIcon = LoadIcon("Resources.Icons.Simulation_32.png"));
+
+        public static System.Drawing.Image PipelineIcon =>
+            _pipelineIcon ?? (_pipelineIcon = LoadIcon("Resources.Icons.Pipeline_32.png"));
+
+        public static System.Drawing.Image ConformalMeshIcon =>
+            _conformalMeshIcon ?? (_conformalMeshIcon = LoadIcon("Resources.Icons.ConformalMesh_32.png"));
 
         /// <summary>
         /// 임베디드 리소스에서 이미지 로드
