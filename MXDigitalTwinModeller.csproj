@@ -276,6 +276,52 @@
 
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 
+  <!-- Deploy Mechanical ACT Extension after build -->
+  <Target Name="DeployMechanicalExtension" AfterTargets="Build">
+    <PropertyGroup>
+      <MechanicalExtDir>$(APPDATA)\ANSYS\v252\ACT\extensions\MXSimulator</MechanicalExtDir>
+      <SharedDllProject>$(ProjectDir)Shared\MXDigitalTwinModeller.Core\MXDigitalTwinModeller.Core.csproj</SharedDllProject>
+      <SharedDllSource>$(ProjectDir)bin\$(Configuration)\MXDigitalTwinModeller.Core.dll</SharedDllSource>
+    </PropertyGroup>
+
+    <!-- Build Shared DLL first -->
+    <Message Text="Building Shared DLL: $(SharedDllProject)" Importance="high" />
+    <MSBuild Projects="$(SharedDllProject)"
+             Properties="Configuration=$(Configuration);Platform=AnyCPU"
+             Condition="Exists('$(SharedDllProject)')" />
+
+    <!-- Create target directory -->
+    <MakeDir Directories="$(MechanicalExtDir)" Condition="!Exists('$(MechanicalExtDir)')" />
+    <MakeDir Directories="$(MechanicalExtDir)\bin" Condition="!Exists('$(MechanicalExtDir)\bin')" />
+    <MakeDir Directories="$(MechanicalExtDir)\images" Condition="!Exists('$(MechanicalExtDir)\images')" />
+
+    <!-- Copy extension files -->
+    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\extension.xml"
+          DestinationFolder="$(MechanicalExtDir)"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\main.py"
+          DestinationFolder="$(MechanicalExtDir)"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\README.md"
+          DestinationFolder="$(MechanicalExtDir)"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\IMPLEMENTATION_PLAN.md"
+          DestinationFolder="$(MechanicalExtDir)"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\images\cap_vibration.png"
+          DestinationFolder="$(MechanicalExtDir)\images"
+          SkipUnchangedFiles="true" />
+
+    <!-- Copy Shared DLL to Mechanical extension bin folder -->
+    <Copy SourceFiles="$(SharedDllSource)"
+          DestinationFolder="$(MechanicalExtDir)\bin"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(SharedDllSource)')" />
+
+    <Message Text="Mechanical ACT Extension deployed to: $(MechanicalExtDir)" Importance="high" />
+    <Message Text="Shared DLL deployed: $(SharedDllSource) -&gt; $(MechanicalExtDir)\bin\" Importance="high" Condition="Exists('$(SharedDllSource)')" />
+  </Target>
+
   <!-- Build MSI installer after main build -->
   <Target Name="BuildInstaller" AfterTargets="Build">
     <Exec Command="wix build &quot;$(ProjectDir)Installer\MXDigitalTwinModeller.wxs&quot; -d BuildOutputDir=&quot;$(OutputPath.TrimEnd('\\'))&quot; -o &quot;$(ProjectDir)Installer\MXDigitalTwinModeller.msi&quot; -arch x64 --nologo"
