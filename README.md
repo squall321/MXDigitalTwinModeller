@@ -1,16 +1,27 @@
 # MX Digital Twin Modeller
 
-ASTM 규격 인장시험 시편 자동 모델링 SpaceClaim AddIn
+복합재료 시편 모델링 및 시뮬레이션을 위한 ANSYS 확장 패키지
 
-**멀티버전 지원**: SpaceClaim V251 및 V252 모두 지원
+- **SpaceClaim Add-In**: 시편 모델링, 메쉬, 접촉 검출, Conformal Mesh
+- **Mechanical ACT Extension**: 하중 정의 및 시뮬레이션 설정
+
+**멀티버전 지원**: SpaceClaim V251/V252, Mechanical V252
 
 ## 기능
 
-- ASTM E8 Standard / SubSize 시편 생성 (금속)
-- ASTM D638 Type I / Type II 시편 생성 (플라스틱)
-- 직관적인 대화창을 통한 파라미터 입력
-- 규격별 기본값 자동 로드
-- SpaceClaim V251 및 V252 멀티버전 지원
+### SpaceClaim Add-In
+
+- **시편 모델링**: 인장(26종), 굽힘, 압축, CAI, 피로, 접합, 적층 시편
+- **메쉬**: 방향별 사이징, 배치 메쉬, 곡률/근접 크기 함수
+- **접촉 검출**: 평면/원통/에지 접촉, Named Selection 자동 생성
+- **Conformal Mesh**: STEP 임포트 → 계면 검출 → Share Topology → 메쉬 → .k 내보내기
+- **일괄 파이프라인**: Simplify → Material → Contact → Mesh → Export
+- **IronPython 스크립트**: 16개 개별 기능 + pipeline.py (PyAnsys 통합)
+
+### Mechanical ACT Extension
+
+- **MXSimulator 탭**: 하중 정의 및 시뮬레이션 설정
+- **Cap Vibration**: 캡 진동 하중 자동 설정 (WPF 대화상자)
 
 ## 설치 방법
 
@@ -71,29 +82,65 @@ Visual Studio 2022에서 솔루션을 열고 빌드 구성을 선택합니다.
 
 ## 프로젝트 구조
 
-```
+```text
 MXDigitalTwinModeller/
-├─ Core/                    # 공통 모듈
-│  ├─ Geometry/            # 기하학 유틸리티
-│  ├─ Commands/            # 커맨드 기본 클래스
-│  └─ UI/                  # UI 헬퍼
-├─ Commands/               # 커맨드 구현
-│  └─ TensileTest/
-├─ UI/Dialogs/            # 대화창
-├─ Models/                 # 데이터 모델
-│  └─ TensileTest/
-├─ Services/              # 비즈니스 로직
-│  └─ TensileTest/
-└─ Resources/             # 리소스
+├── SpaceClaim/                     # SpaceClaim Add-In (C# .NET)
+│   ├── Core/                       # 공통 모듈
+│   │   ├── Geometry/              # 기하학 유틸리티
+│   │   ├── Commands/              # 커맨드 기본 클래스
+│   │   └── UI/                    # UI 헬퍼
+│   ├── Commands/                  # 커맨드 구현
+│   │   ├── TensileTest/
+│   │   ├── ConformalMesh/
+│   │   └── Pipeline/
+│   ├── Services/                  # 비즈니스 로직
+│   │   ├── Contact/               # 접촉 검출
+│   │   ├── Mesh/                  # 메쉬 설정
+│   │   ├── ConformalMesh/         # Conformal Mesh (SpatialIndex 포함)
+│   │   └── Export/                # KFilePostProcessor
+│   ├── Models/                    # 데이터 모델
+│   ├── UI/Dialogs/               # WinForms 대화창
+│   └── Scripts/                   # IronPython 스크립트 (01-16, pipeline.py)
+│
+├── Mechanical/                    # ANSYS Mechanical ACT Extension
+│   └── MXSimulator/
+│       ├── extension.xml          # ACT 확장 정의
+│       ├── main.py                # IronPython 로직 (WPF UI)
+│       ├── images/                # 리본 아이콘
+│       └── README.md
+│
+├── Installer/                     # WiX 인스톨러
+│   ├── MXDigitalTwinModeller.wxs
+│   └── MXDigitalTwinModeller.msi
+│
+└── Docs/                          # 문서
+    └── LSDyna/                    # LS-DYNA 키워드 참조
 ```
 
 ## 사용 방법
 
+### SpaceClaim
+
 1. SpaceClaim 실행
 2. "MX Modeller" 탭 클릭
-3. "Tensile Test" 그룹에서 "ASTM 인장시편" 버튼 클릭
-4. 대화창에서 규격 선택 및 치수 입력
-5. "생성" 버튼 클릭
+3. 원하는 기능 선택:
+   - **Parametric**: 시편 모델링 (인장, 굽힘, 압축 등)
+   - **Mesh**: 메쉬 설정, 접촉 검출, Conformal Mesh
+   - **Pipeline**: 일괄 실행
+
+### Mechanical
+
+1. ANSYS Mechanical 실행
+2. `MXSimulator` 탭 클릭
+3. `Load` 패널 → `Cap Vibration` 버튼
+4. 진동 파라미터 입력 후 Apply
+
+### Python 스크립트 (PyAnsys)
+
+```python
+# SpaceClaim Script Editor에서 실행
+exec(open(r'd:\MXDigitalTwinModeller\Scripts\16_conformal_mesh.py').read())
+```
 
 ## 지원 규격
 
