@@ -1,7 +1,7 @@
 # encoding: utf-8
 """
 MX Digital Twin Simulator - ANSYS Mechanical ACT Extension
-Cap Vibration 하중 정의 및 시뮬레이션 설정
+Cap Vibration Time Force Setup - Phase 1: STEP Import + Face Analysis
 """
 
 import sys
@@ -21,11 +21,14 @@ clr.AddReference("PresentationCore")
 clr.AddReference("WindowsBase")
 clr.AddReference("System.Xaml")
 
+# File Dialog
+clr.AddReference("System.Windows.Forms")
+from System.Windows.Forms import OpenFileDialog, DialogResult
+
 from System.Windows import Window, Application
 from System.Windows.Controls import (
     StackPanel, Button, Label, TextBox,
-    GroupBox, Grid, RowDefinition, ColumnDefinition,
-    Orientation
+    GroupBox, Orientation, ScrollViewer, ScrollBarVisibility
 )
 from System.Windows import (
     HorizontalAlignment, VerticalAlignment,
@@ -37,26 +40,76 @@ from System.Windows.Media import Brushes
 import Ansys
 from Ansys.ACT.Interfaces.Mechanical import IMechanicalExtAPI
 from Ansys.ACT.Automation.Mechanical import Model
-from Ansys.ACT.Mechanical.Fields import LoadDefineBy
-from Ansys import Quantity
+
+try:
+    from Ansys.Mechanical.DataModel.Enums import (
+        DataModelObjectCategory, GeometryDefineByType
+    )
+except ImportError:
+    # IronPython 런타임에서 경로가 다를 수 있음
+    pass
+
+# Note: ExtAPI는 ANSYS Mechanical 런타임에서 글로벌 변수로 자동 제공됨
+# ExtAPI.DataModel, ExtAPI.SelectionManager 등 사용 가능
 
 
 # ================================================================
-# Cap Vibration Dialog
+# Helper Functions - Face Normal Analysis
+# ================================================================
+
+def classify_normal_direction(normal):
+    """
+    법선 벡터를 주요 축 방향으로 분류
+
+    Parameters
+    ----------
+    normal : Vector or tuple (X, Y, Z)
+        법선 벡터
+
+    Returns
+    -------
+    str : '+X', '-X', '+Y', '-Y', '+Z', '-Z'
+    """
+    try:
+        # Vector 객체인 경우
+        nx, ny, nz = abs(normal.X), abs(normal.Y), abs(normal.Z)
+        orig_x, orig_y, orig_z = normal.X, normal.Y, normal.Z
+    except:
+        # Tuple인 경우
+        nx, ny, nz = abs(normal[0]), abs(normal[1]), abs(normal[2])
+        orig_x, orig_y, orig_z = normal[0], normal[1], normal[2]
+
+    # 가장 큰 성분 찾기
+    if nz > nx and nz > ny:
+        return '+Z' if orig_z > 0 else '-Z'
+    elif ny > nx and ny > nz:
+        return '+Y' if orig_y > 0 else '-Y'
+    else:
+        return '+X' if orig_x > 0 else '-X'
+
+
+# ================================================================
+# Cap Vibration Time Force Dialog - Phase 1
 # ================================================================
 
 class CapVibrationDialog(Window):
     """
-    Cap Vibration 하중 대화상자 (WPF)
-    진동 조건 입력 및 Named Selection 연결
+    Cap Vibration Time Force Setup (WPF)
+    Phase 1: STEP Import + Face Normal Analysis + Named Selection Creation
     """
 
     def __init__(self):
         # Window 속성
-        self.Title = "Cap Vibration Load Definition"
-        self.Width = 500
-        self.Height = 400
+        self.Title = "Cap Vibration Time Force Setup - Phase 1"
+        self.Width = 700
+        self.Height = 600
         self.WindowStartupLocation = System.Windows.WindowStartupLocation.CenterScreen
+
+        # 데이터 저장
+        self.step_file_path = ""
+        self.imported_bodies = []
+        self.face_data_list = []
+        self.ns_dict = {}
 
         # 메인 레이아웃
         main_panel = StackPanel()
@@ -64,128 +117,121 @@ class CapVibrationDialog(Window):
 
         # 헤더
         header = Label()
-        header.Content = "Cap Vibration Load Configuration"
+        header.Content = "Cap Vibration Time Force Setup"
         header.FontSize = 16
         header.FontWeight = System.Windows.FontWeights.Bold
         header.Margin = Thickness(0, 0, 0, 10)
         main_panel.Children.Add(header)
 
-        # Vibration Settings Group
-        vib_group = self._create_vibration_group()
-        main_panel.Children.Add(vib_group)
+        # Phase 1 Info
+        info_label = Label()
+        info_label.Content = "Phase 1: STEP Import + Face Analysis + Named Selection"
+        info_label.FontSize = 11
+        info_label.Foreground = Brushes.DarkBlue
+        info_label.Margin = Thickness(0, 0, 0, 10)
+        main_panel.Children.Add(info_label)
+
+        # STEP Files Group
+        step_group = self._create_step_group()
+        main_panel.Children.Add(step_group)
 
         # Named Selection Group
-        ns_group = self._create_named_selection_group()
+        ns_group = self._create_ns_group()
         main_panel.Children.Add(ns_group)
+
+        # Log Group
+        log_group = self._create_log_group()
+        main_panel.Children.Add(log_group)
 
         # 버튼 패널
         btn_panel = self._create_button_panel()
         main_panel.Children.Add(btn_panel)
 
-        # Status Label
-        self.status_label = Label()
-        self.status_label.Content = "Ready"
-        self.status_label.Foreground = Brushes.Gray
-        self.status_label.Margin = Thickness(0, 10, 0, 0)
-        main_panel.Children.Add(self.status_label)
-
         self.Content = main_panel
 
-    def _create_vibration_group(self):
-        """진동 설정 그룹"""
+    def _create_step_group(self):
+        """STEP 파일 그룹"""
         group = GroupBox()
-        group.Header = "Vibration Parameters"
+        group.Header = "STEP File Import"
         group.Margin = Thickness(0, 0, 0, 10)
 
         panel = StackPanel()
         panel.Margin = Thickness(5)
 
-        # Frequency
-        freq_panel = StackPanel()
-        freq_panel.Orientation = Orientation.Horizontal
-        freq_panel.Margin = Thickness(0, 5, 0, 5)
+        # File path
+        file_panel = StackPanel()
+        file_panel.Orientation = Orientation.Horizontal
+        file_panel.Margin = Thickness(0, 5, 0, 5)
 
-        freq_label = Label()
-        freq_label.Content = "Frequency (Hz):"
-        freq_label.Width = 120
-        freq_panel.Children.Add(freq_label)
+        file_label = Label()
+        file_label.Content = "STEP File:"
+        file_label.Width = 80
+        file_panel.Children.Add(file_label)
 
-        self.freq_textbox = TextBox()
-        self.freq_textbox.Width = 150
-        self.freq_textbox.Text = "100.0"
-        freq_panel.Children.Add(self.freq_textbox)
+        self.file_textbox = TextBox()
+        self.file_textbox.Width = 400
+        self.file_textbox.IsReadOnly = True
+        file_panel.Children.Add(self.file_textbox)
 
-        panel.Children.Add(freq_panel)
+        browse_btn = Button()
+        browse_btn.Content = "Browse..."
+        browse_btn.Width = 80
+        browse_btn.Margin = Thickness(5, 0, 0, 0)
+        browse_btn.Click += self.on_browse_click
+        file_panel.Children.Add(browse_btn)
 
-        # Amplitude
-        amp_panel = StackPanel()
-        amp_panel.Orientation = Orientation.Horizontal
-        amp_panel.Margin = Thickness(0, 5, 0, 5)
+        panel.Children.Add(file_panel)
 
-        amp_label = Label()
-        amp_label.Content = "Amplitude (mm):"
-        amp_label.Width = 120
-        amp_panel.Children.Add(amp_label)
-
-        self.amp_textbox = TextBox()
-        self.amp_textbox.Width = 150
-        self.amp_textbox.Text = "0.5"
-        amp_panel.Children.Add(self.amp_textbox)
-
-        panel.Children.Add(amp_panel)
-
-        # Duration
-        dur_panel = StackPanel()
-        dur_panel.Orientation = Orientation.Horizontal
-        dur_panel.Margin = Thickness(0, 5, 0, 5)
-
-        dur_label = Label()
-        dur_label.Content = "Duration (s):"
-        dur_label.Width = 120
-        dur_panel.Children.Add(dur_label)
-
-        self.dur_textbox = TextBox()
-        self.dur_textbox.Width = 150
-        self.dur_textbox.Text = "1.0"
-        dur_panel.Children.Add(self.dur_textbox)
-
-        panel.Children.Add(dur_panel)
+        # Import button
+        import_btn = Button()
+        import_btn.Content = "Import and Analyze Faces"
+        import_btn.Width = 180
+        import_btn.Height = 28
+        import_btn.Margin = Thickness(0, 10, 0, 0)
+        import_btn.HorizontalAlignment = HorizontalAlignment.Left
+        import_btn.Click += self.on_import_click
+        panel.Children.Add(import_btn)
 
         group.Content = panel
         return group
 
-    def _create_named_selection_group(self):
-        """Named Selection 설정 그룹"""
+    def _create_ns_group(self):
+        """Named Selection 결과 그룹"""
         group = GroupBox()
-        group.Header = "Named Selection"
+        group.Header = "Named Selections (Auto-Created)"
         group.Margin = Thickness(0, 0, 0, 10)
 
         panel = StackPanel()
         panel.Margin = Thickness(5)
 
-        ns_panel = StackPanel()
-        ns_panel.Orientation = Orientation.Horizontal
-        ns_panel.Margin = Thickness(0, 5, 0, 5)
-
-        ns_label = Label()
-        ns_label.Content = "Target NS:"
-        ns_label.Width = 120
-        ns_panel.Children.Add(ns_label)
-
-        self.ns_textbox = TextBox()
-        self.ns_textbox.Width = 200
-        self.ns_textbox.Text = "Cap_Surface"
-        ns_panel.Children.Add(self.ns_textbox)
-
-        panel.Children.Add(ns_panel)
-
-        info_label = Label()
-        info_label.Content = "Specify the Named Selection to apply vibration load"
-        info_label.FontSize = 10
-        info_label.Foreground = Brushes.Gray
-        panel.Children.Add(info_label)
+        self.ns_status_label = Label()
+        self.ns_status_label.Content = "No Named Selections created yet"
+        self.ns_status_label.FontSize = 10
+        self.ns_status_label.Foreground = Brushes.Gray
+        panel.Children.Add(self.ns_status_label)
 
         group.Content = panel
+        return group
+
+    def _create_log_group(self):
+        """로그 그룹"""
+        group = GroupBox()
+        group.Header = "Log"
+        group.Margin = Thickness(0, 0, 0, 10)
+
+        # ScrollViewer로 감싸기
+        scroll = ScrollViewer()
+        scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        scroll.Height = 200
+
+        self.log_textbox = TextBox()
+        self.log_textbox.IsReadOnly = True
+        self.log_textbox.TextWrapping = System.Windows.TextWrapping.Wrap
+        self.log_textbox.AcceptsReturn = True
+        self.log_textbox.VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+
+        scroll.Content = self.log_textbox
+        group.Content = scroll
         return group
 
     def _create_button_panel(self):
@@ -195,14 +241,14 @@ class CapVibrationDialog(Window):
         panel.HorizontalAlignment = HorizontalAlignment.Right
         panel.Margin = Thickness(0, 10, 0, 0)
 
-        # Apply 버튼
-        apply_btn = Button()
-        apply_btn.Content = "Apply"
-        apply_btn.Width = 80
-        apply_btn.Height = 28
-        apply_btn.Margin = Thickness(0, 0, 10, 0)
-        apply_btn.Click += self.on_apply_click
-        panel.Children.Add(apply_btn)
+        # Create NS 버튼
+        create_ns_btn = Button()
+        create_ns_btn.Content = "Create Named Selections"
+        create_ns_btn.Width = 180
+        create_ns_btn.Height = 28
+        create_ns_btn.Margin = Thickness(0, 0, 10, 0)
+        create_ns_btn.Click += self.on_create_ns_click
+        panel.Children.Add(create_ns_btn)
 
         # Close 버튼
         close_btn = Button()
@@ -214,80 +260,107 @@ class CapVibrationDialog(Window):
 
         return panel
 
-    def on_apply_click(self, sender, e):
-        """Apply 버튼 클릭"""
+    # ================================================================
+    # Event Handlers
+    # ================================================================
+
+    def on_browse_click(self, sender, e):
+        """Browse 버튼 클릭"""
+        dialog = OpenFileDialog()
+        dialog.Filter = "STEP Files (*.stp;*.step)|*.stp;*.step|All Files (*.*)|*.*"
+        dialog.Title = "Select STEP File"
+
+        if dialog.ShowDialog() == DialogResult.OK:
+            self.step_file_path = dialog.FileName
+            self.file_textbox.Text = self.step_file_path
+            self.log("Selected STEP file: {0}".format(self.step_file_path))
+
+    def on_import_click(self, sender, e):
+        """Import 버튼 클릭 - STEP 임포트 + 면 분석"""
+        if not self.step_file_path:
+            MessageBox.Show(
+                "Please select a STEP file first",
+                "No File Selected",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning
+            )
+            return
+
         try:
-            # 입력값 가져오기
-            freq = float(self.freq_textbox.Text)
-            amp = float(self.amp_textbox.Text)
-            dur = float(self.dur_textbox.Text)
-            ns_name = self.ns_textbox.Text
+            self.log("\n=== Starting STEP Import ===")
 
-            # 유효성 검증
-            if freq <= 0 or amp <= 0 or dur <= 0:
-                raise ValueError("All values must be positive")
+            # Phase 1-1: STEP 임포트
+            self.import_step_file()
 
-            if not ns_name:
-                raise ValueError("Named Selection name is required")
+            # Phase 1-2: 면 법선 분석
+            self.analyze_face_normals()
 
-            # Mechanical API를 통해 실제 하중 적용
-            try:
-                model = ExtAPI.DataModel.Project.Model
-                analysis = model.Analyses[0]  # 첫 번째 분석
+            self.log("\n=== Import and Analysis Complete ===")
+            self.log("Total faces analyzed: {0}".format(len(self.face_data_list)))
 
-                # Displacement 하중 추가 (Harmonic)
-                displacement = analysis.AddDisplacement()
-                displacement.DefineBy = LoadDefineBy.Components
+            # 방향별 통계
+            direction_counts = {}
+            for face_data in self.face_data_list:
+                direction = face_data['direction']
+                direction_counts[direction] = direction_counts.get(direction, 0) + 1
 
-                # Y 방향 진동 (mm 단위)
-                displacement.YComponent.Output.DiscreteValues = [
-                    Quantity(0, "mm"),
-                    Quantity(amp, "mm")
-                ]
-
-                # Named Selection 연결
-                ns = model.NamedSelections.Children.GetByName(ns_name)
-                if ns:
-                    displacement.Location = ns
-                else:
-                    raise ValueError("Named Selection '{0}' not found".format(ns_name))
-
-                # 주파수 설정 (분석 설정에 따라 다름)
-                # analysis.FrequencyRange = freq
-
-                self.status_label.Content = "Load applied: {0} @ {1} Hz".format(ns_name, freq)
-                self.status_label.Foreground = Brushes.Green
-
-            except Exception as api_ex:
-                raise Exception("Mechanical API error: {0}".format(str(api_ex)))
+            self.log("\nFaces by direction:")
+            for direction in sorted(direction_counts.keys()):
+                self.log("  {0}: {1} faces".format(direction, direction_counts[direction]))
 
             MessageBox.Show(
-                "Cap Vibration load applied successfully!\n\n" +
-                "Frequency: {0} Hz\n".format(freq) +
-                "Amplitude: {0} mm\n".format(amp) +
-                "Duration: {0} s\n".format(dur) +
-                "Target: {0}".format(ns_name),
-                "Cap Vibration",
+                "Import complete!\n\n" +
+                "Bodies: {0}\n".format(len(self.imported_bodies)) +
+                "Faces analyzed: {0}\n\n".format(len(self.face_data_list)) +
+                "Click 'Create Named Selections' to create directional NS",
+                "Success",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information
             )
 
-        except ValueError as ex:
-            self.status_label.Content = "Input error: {0}".format(str(ex))
-            self.status_label.Foreground = Brushes.Red
-
+        except Exception as ex:
+            self.log("\nERROR: {0}".format(str(ex)))
             MessageBox.Show(
-                str(ex),
-                "Input Error",
+                "Import failed:\n\n{0}".format(str(ex)),
+                "Error",
+                MessageBoxButton.OK,
+                MessageBoxImage.Error
+            )
+
+    def on_create_ns_click(self, sender, e):
+        """Named Selection 생성 버튼"""
+        if not self.face_data_list:
+            MessageBox.Show(
+                "Please import and analyze STEP file first",
+                "No Data",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning
             )
-        except Exception as ex:
-            self.status_label.Content = "Error: {0}".format(str(ex))
-            self.status_label.Foreground = Brushes.Red
+            return
+
+        try:
+            self.log("\n=== Creating Named Selections ===")
+            self.create_directional_named_selections()
+            self.log("\n=== Named Selections Created ===")
+
+            # NS 상태 업데이트
+            ns_list = ", ".join(sorted(self.ns_dict.keys()))
+            self.ns_status_label.Content = "Created: {0}".format(ns_list)
+            self.ns_status_label.Foreground = Brushes.Green
 
             MessageBox.Show(
-                "An error occurred:\n\n{0}".format(str(ex)),
+                "Named Selections created:\n\n{0}".format(
+                    "\n".join(["Contact_" + d for d in sorted(self.ns_dict.keys())])
+                ),
+                "Success",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information
+            )
+
+        except Exception as ex:
+            self.log("\nERROR: {0}".format(str(ex)))
+            MessageBox.Show(
+                "Failed to create Named Selections:\n\n{0}".format(str(ex)),
                 "Error",
                 MessageBoxButton.OK,
                 MessageBoxImage.Error
@@ -296,6 +369,154 @@ class CapVibrationDialog(Window):
     def on_close_click(self, sender, e):
         """Close 버튼 클릭"""
         self.Close()
+
+    # ================================================================
+    # Core Logic - Phase 1
+    # ================================================================
+
+    def import_step_file(self):
+        """
+        STEP 파일 임포트
+        GeometryImport API 사용
+        """
+        self.log("Importing STEP file...")
+
+        model = ExtAPI.DataModel.Project.Model
+        geometry = model.Geometry
+
+        # GeometryImport 추가
+        geom_import = geometry.AddGeometryImport()
+
+        # Import preferences 설정
+        import_pref = Ansys.ACT.Mechanical.Utilities.GeometryImportPreference()
+        import_pref.ProcessNamedSelections = True
+
+        # 임포트 실행
+        geom_import.Import(
+            self.step_file_path,
+            Ansys.ACT.Mechanical.Utilities.GeometryImportPreference.FormatType.Automatic,
+            import_pref
+        )
+
+        self.log("Import command executed")
+
+        # 임포트된 바디 가져오기 (새로 추가된 바디들)
+        # Note: IsImported 속성이 없을 수 있으므로, 모든 바디를 가져옴
+        all_bodies = model.Geometry.GetChildren(DataModelObjectCategory.Body, True)
+
+        self.imported_bodies = list(all_bodies)
+        self.log("Found {0} bodies in model".format(len(self.imported_bodies)))
+
+    def analyze_face_normals(self):
+        """
+        각 바디의 면을 순회하며 법선 방향 분석
+        """
+        self.log("\nAnalyzing face normals...")
+        self.face_data_list = []
+
+        for body_idx, body in enumerate(self.imported_bodies):
+            try:
+                # GeoBody 가져오기
+                geo_body = body.GetGeoBody()
+
+                if geo_body is None:
+                    self.log("  Body {0}: No geometry".format(body_idx))
+                    continue
+
+                # Faces 컬렉션 순회
+                face_count = geo_body.Faces.Count
+                self.log("  Body {0}: {1} faces".format(body_idx, face_count))
+
+                for face_idx in range(face_count):
+                    try:
+                        face = geo_body.Faces[face_idx]
+
+                        # 면 중심에서 법선 계산 (u=0.5, v=0.5는 파라미터 공간 중심)
+                        normal_vec = face.GetFaceNormal(0.5, 0.5)
+
+                        # 법선을 주요 축으로 분류
+                        direction = classify_normal_direction(normal_vec)
+
+                        # 데이터 저장
+                        self.face_data_list.append({
+                            'body': body,
+                            'body_idx': body_idx,
+                            'face': face,
+                            'face_idx': face_idx,
+                            'normal': (normal_vec.X, normal_vec.Y, normal_vec.Z),
+                            'direction': direction
+                        })
+
+                    except Exception as face_ex:
+                        self.log("    Face {0} error: {1}".format(face_idx, str(face_ex)))
+                        continue
+
+            except Exception as body_ex:
+                self.log("  Body {0} error: {1}".format(body_idx, str(body_ex)))
+                continue
+
+        self.log("Face analysis complete: {0} faces".format(len(self.face_data_list)))
+
+    def create_directional_named_selections(self):
+        """
+        방향별로 Named Selection 생성
+        Contact_+Z, Contact_-Z, etc.
+        """
+        model = ExtAPI.DataModel.Project.Model
+
+        # 방향별 그룹화
+        by_direction = {}
+        for face_data in self.face_data_list:
+            direction = face_data['direction']
+            if direction not in by_direction:
+                by_direction[direction] = []
+            by_direction[direction].append(face_data)
+
+        self.log("Creating Named Selections for {0} directions...".format(len(by_direction)))
+
+        # 각 방향별 NS 생성
+        self.ns_dict = {}
+
+        for direction, face_data_group in by_direction.items():
+            ns_name = "Contact_" + direction
+            self.log("  Creating NS: {0} ({1} faces)".format(ns_name, len(face_data_group)))
+
+            try:
+                # Named Selection 생성
+                ns = model.AddNamedSelection()
+                ns.Name = ns_name
+                ns.ScopingMethod = GeometryDefineByType.Worksheet
+
+                # 면 선택 - SelectionManager 사용
+                selection = ExtAPI.SelectionManager.CreateSelectionInfo(
+                    Ansys.ACT.Interfaces.Common.SelectionTypeEnum.GeometryEntities
+                )
+
+                for face_data in face_data_group:
+                    # IGeoFace를 선택에 추가
+                    # Note: face_data['face']는 IGeoFace 객체
+                    selection.Entities.Add(face_data['face'])
+
+                ns.Location = selection
+
+                self.ns_dict[direction] = ns
+                self.log("    Created: {0}".format(ns_name))
+
+            except Exception as ns_ex:
+                self.log("    ERROR creating {0}: {1}".format(ns_name, str(ns_ex)))
+                raise
+
+        self.log("Named Selections created: {0}".format(len(self.ns_dict)))
+
+    # ================================================================
+    # Utility
+    # ================================================================
+
+    def log(self, message):
+        """로그 출력"""
+        current = self.log_textbox.Text
+        self.log_textbox.Text = current + message + "\n"
+        self.log_textbox.ScrollToEnd()
 
 
 # ================================================================
