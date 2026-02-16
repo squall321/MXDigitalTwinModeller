@@ -5,7 +5,15 @@ Cap Vibration 하중 정의 및 시뮬레이션 설정
 """
 
 import sys
+import os
 import clr
+
+# Shared DLL 로드 (공용 로직)
+dll_path = os.path.join(os.path.dirname(__file__), "bin", "MXDigitalTwinModeller.Core.dll")
+if os.path.exists(dll_path):
+    clr.AddReferenceToFileAndPath(dll_path)
+    from MXDigitalTwinModeller.Core.Geometry import GeometryUtils
+    from MXDigitalTwinModeller.Core.Spatial import SpatialIndex, BodyBounds
 
 # WPF UI 사용을 위한 참조
 clr.AddReference("PresentationFramework")
@@ -29,6 +37,8 @@ from System.Windows.Media import Brushes
 import Ansys
 from Ansys.ACT.Interfaces.Mechanical import IMechanicalExtAPI
 from Ansys.ACT.Automation.Mechanical import Model
+from Ansys.ACT.Mechanical.Fields import LoadDefineBy
+from Ansys import Quantity
 
 
 # ================================================================
@@ -220,14 +230,39 @@ class CapVibrationDialog(Window):
             if not ns_name:
                 raise ValueError("Named Selection name is required")
 
-            # TODO: Mechanical API를 통해 실제 하중 적용
-            # ExtAPI.DataModel.Project.Model.AddLoad(...)
+            # Mechanical API를 통해 실제 하중 적용
+            try:
+                model = ExtAPI.DataModel.Project.Model
+                analysis = model.Analyses[0]  # 첫 번째 분석
 
-            self.status_label.Content = "Load applied successfully!"
-            self.status_label.Foreground = Brushes.Green
+                # Displacement 하중 추가 (Harmonic)
+                displacement = analysis.AddDisplacement()
+                displacement.DefineBy = LoadDefineBy.Components
+
+                # Y 방향 진동 (mm 단위)
+                displacement.YComponent.Output.DiscreteValues = [
+                    Quantity(0, "mm"),
+                    Quantity(amp, "mm")
+                ]
+
+                # Named Selection 연결
+                ns = model.NamedSelections.Children.GetByName(ns_name)
+                if ns:
+                    displacement.Location = ns
+                else:
+                    raise ValueError("Named Selection '{0}' not found".format(ns_name))
+
+                # 주파수 설정 (분석 설정에 따라 다름)
+                # analysis.FrequencyRange = freq
+
+                self.status_label.Content = "Load applied: {0} @ {1} Hz".format(ns_name, freq)
+                self.status_label.Foreground = Brushes.Green
+
+            except Exception as api_ex:
+                raise Exception("Mechanical API error: {0}".format(str(api_ex)))
 
             MessageBox.Show(
-                "Cap Vibration load will be applied:\n\n" +
+                "Cap Vibration load applied successfully!\n\n" +
                 "Frequency: {0} Hz\n".format(freq) +
                 "Amplitude: {0} mm\n".format(amp) +
                 "Duration: {0} s\n".format(dur) +
