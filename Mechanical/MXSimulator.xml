@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<extension version="2025" minorversion="2" name="MX Digital Twin Simulation">
+  <guid shortid="MXSimulator">8F7A9B2C-3D4E-5F6A-7B8C-9D0E1F2A3B4C</guid>
+  <author>MX Digital Twin Team</author>
+  <description>MX Digital Twin Simulator - Cap Vibration Time Force Setup</description>
+  <script src="main.py" />
+  <interface context="Mechanical">
+    <images>images</images>
+    <callbacks>
+      <oninit>on_init</oninit>
+    </callbacks>
+    <toolbar name="MXDigitalTwin" caption="MX Digital Twin Simulation">
+      <entry name="FacePairNS" caption="Face Pair NS" icon="face_pair">
+        <callbacks>
+          <onclick>show_face_pair_dialog</onclick>
+        </callbacks>
+      </entry>
+      <separator />
+      <entry name="NamedSelections" caption="Named Selections" icon="cap_vibration">
+        <callbacks>
+          <onclick>show_ns_dialog</onclick>
+        </callbacks>
+      </entry>
+      <entry name="ModalAnalysis" caption="Modal Analysis" icon="modal_analysis">
+        <callbacks>
+          <onclick>show_modal_dialog</onclick>
+        </callbacks>
+      </entry>
+      <entry name="AddScenario" caption="Add Scenario" icon="add_scenario">
+        <callbacks>
+          <onclick>show_scenario_dialog</onclick>
+        </callbacks>
+      </entry>
+    </toolbar>
+  </interface>
+</extension>
