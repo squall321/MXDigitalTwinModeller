@@ -2737,20 +2737,21 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                     // face. (Previous version put the frame at pz + margin and extruded by a
                     // NEGATIVE value; in this SpaceClaim build that variant produces a cutter
                     // that does not intersect the body — Subtract becomes a no-op.)
-                    // base plane frame: DirX = shortAxis, DirY = longAxis so RectangleProfile (W,L)
-                    // = (widthM along shortAxis, lengthM along longAxis); plane normal = nAxis.
-                    // Place the base BELOW the face along -nAxis by (depth+margin), then extrude
-                    // +nAxis by (depth+margin) so the cutter spans [P - n*(depth+margin), P],
-                    // reliably breaching the face. (n defaults to +Z = legacy behaviour.)
+                    // BUGFIX (P0/P5, same defect as AddPocket): the cutter must BREACH the face.
+                    // Frame.Create(center, longAxis, shortAxis) gives DirZ = +nAxis (up); base at
+                    // P - n*depth, extrude (depth+margin) so the cutter spans [faceZ-depth,
+                    // faceZ+margin]. The previous Frame.Create(center, shortAxis, longAxis) gave
+                    // DirZ = -nAxis, burying the cutter inside the body (dV=0, no breach) — masked
+                    // by the sign-only matrix oracle. With dirX=longAxis, dirY=shortAxis the
+                    // profile's first dim follows longAxis, so pass (lengthM, widthM).
                     double ext = depthM + marginM;
                     Point center = Point.Create(
-                        pxM - nAxis[0] * ext, pyM - nAxis[1] * ext, pzM - nAxis[2] * ext);
-                    Direction dirX = Direction.Create(shortAxis[0], shortAxis[1], shortAxis[2]);
-                    Direction dirY = Direction.Create(longAxis[0], longAxis[1], longAxis[2]);
+                        pxM - nAxis[0] * depthM, pyM - nAxis[1] * depthM, pzM - nAxis[2] * depthM);
+                    Direction dirX = Direction.Create(longAxis[0], longAxis[1], longAxis[2]);
+                    Direction dirY = Direction.Create(shortAxis[0], shortAxis[1], shortAxis[2]);
                     Frame frame = Frame.Create(center, dirX, dirY);
                     Plane basePlane = Plane.Create(frame);
-                    Profile profile = new RectangleProfile(basePlane, widthM, lengthM);
-                    // Positive extrude = +nAxis up to the face point P, breaching it.
+                    Profile profile = new RectangleProfile(basePlane, lengthM, widthM);
                     Body cutter = Body.ExtrudeProfile(profile, ext);
 
                     Part part = designBody.Parent as Part;

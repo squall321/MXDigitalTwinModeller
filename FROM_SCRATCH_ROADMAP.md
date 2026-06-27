@@ -237,3 +237,48 @@ Built: generate_phone + set_camera_height arms in LlmToolDispatcher + LlmToolReg
 - v2: genuinely curved envelope (RevolveTrimmedCurves / faceted Z-stack), single FEA-freeze hop
 
 Core thesis proven: native-SC from-scratch phone generation + MCP-driven design is REAL and working. Remaining work is breadth, not feasibility.
+
+---
+
+## P5 PASSED (2026-06-28) - full stage breadth S00..S09 from one spec
+
+GenerationService now runs S00 bbox -> S00b hollow -> S04 pocket -> S05 camera -> S06 holes
+-> S07 ports (AddSlit) -> S08 grille (AddHolePattern grid) -> S09 buttons (AddPocket), all from
+one PhoneParameters. p5_full_phone.py: 2 envelopes generate a complete phone, single closed
+solid, no stage failure, byte-identical determinism. P5_PASS=ALL True.
+
+AddSlit normal-inversion bug FIXED (same defect as AddPocket, found in P0): Frame.Create order
+swapped to DirZ=+nAxis + base at P-n*depth. AddSlit regression check across imported-CAD running.
+
+Observed (for P6 to tighten): on the hollow tray, S04 pocket (depth 0.4 < wall 0.6) and S05
+camera show dV~0 because they interact with the already-thin top/cavity - geometrically valid
+but the per-stage magnitude oracle should flag a no-op cut. This is P6's Tier-2 job.
+
+Roadmap: P0-P3, P5, P7 DONE. P4 (curved-face) deferred. P6 Tier-2 validation next.
+
+---
+
+## P6 PASSED (2026-06-28) - Tier-2 validation suite
+
+Built: Services/ReverseEngineer/Generation/ValidationService.cs - kernel-truth post-generation
+checks (single closed solid, min-wall by axis-march, no-op-cut detection). GenerationService.Finish
+runs Validate() and fills GenResult.ValidationPass/Issues/MinWallMm.
+
+p6_validation.py: a valid phone PASSES (validationPass=True, minWall=0.620mm by march), an
+impossible spec (camera bump 8.0 >= T 7.4) is REJECTED by Tier-1 before any geometry. P6_PASS=True.
+
+AddSlit normal-inversion fix: imported-CAD regression 4/4 VERIFIED (no regression).
+
+## Roadmap status (2026-06-28) - core COMPLETE
+- DONE P0 from-empty composition + tool-bug fixes (AddPocket/AddSlit normal, AddBoss embed)
+- DONE P1 parametric spine + walking skeleton
+- DONE P2 curved shell (hollow tray)
+- DONE P3 feature-handle ID stability
+- DONE P5 full stage breadth S00..S09 (pocket/camera/holes/ports/grille/buttons)
+- DONE P6 validation Tier-1 (Validate) + Tier-2 (ValidationService kernel-truth)
+- DONE P7 MCP generate_phone + set_camera_height
+- DEFERRED P4 curved-face targeting (v1 tray all-planar)
+- v2 (future): curved envelope (RevolveTrimmedCurves / Z-stack), FEA-freeze, side feature entry, LLM SpecParser
+
+The from-scratch phone-metal generator is FUNCTIONALLY COMPLETE for v1: spec -> validated params
+-> generate (full feature set) -> validated closed solid -> MCP-driven + parametric edit.

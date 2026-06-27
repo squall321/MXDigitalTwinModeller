@@ -39,6 +39,11 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
             public double MeasuredVolumeMm3;
             // P3: stable feature handles minted at generation time (survive renumber).
             public HandleRegistry Handles = new HandleRegistry();
+            // P6: Tier-2 post-generation validation (closed-solid, min-wall).
+            public bool ValidationPass;
+            public List<string> ValidationIssues = new List<string>();
+            public double MinWallMm = -1;
+            public PhoneParameters Params;
         }
 
         /// <summary>
@@ -61,7 +66,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                 DesignBody body = CreateBaseSolid(part, p);
                 r.Body = body;
                 r.StageLog.Add("S00 bbox vol=" + VolMm3(body).ToString("0.#"));
-                if (stopAtStage == "S00") { Finish(r, body); return r; }
+                if (stopAtStage == "S00") { Finish(r, body, p); return r; }
 
                 // S00b — HOLLOW into a uniform-wall tray (P2). Runs BEFORE the discrete features
                 // so S04-S06 cut into the already-thin walls (the P0 magnitude/min-wall guard then
@@ -74,7 +79,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                         " vol=" + VolMm3(body).ToString("0.#"));
                     if (!rs.Success) { r.Error = "S00b hollow failed: " + rs.Error; r.Body = body; return r; }
                 }
-                if (stopAtStage == "S00b") { Finish(r, body); return r; }
+                if (stopAtStage == "S00b") { Finish(r, body, p); return r; }
 
                 // S04 — display pocket (top face step-down).
                 if (p.Pocket != null && p.Pocket.Enabled)
@@ -86,7 +91,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                     r.StageLog.Add("S04 pocket success=" + rp.Success + " vol=" + VolMm3(body).ToString("0.#"));
                     if (!rp.Success) { r.Error = "S04 pocket failed: " + rp.ErrorMessage; r.Body = body; return r; }
                 }
-                if (stopAtStage == "S04") { Finish(r, body); return r; }
+                if (stopAtStage == "S04") { Finish(r, body, p); return r; }
 
                 // S05 — camera plateau (boss on top face).
                 if (p.Camera != null)
@@ -101,7 +106,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                         new double[] { p.Camera.XMm, p.Camera.YMm, p.ThicknessMm },
                         new double[] { 0, 0, 1 }, p.Camera.DiameterMm));
                 }
-                if (stopAtStage == "S05") { Finish(r, body); return r; }
+                if (stopAtStage == "S05") { Finish(r, body, p); return r; }
 
                 // S06 — corner / mounting holes (through).
                 int hOk = 0, hOrd = 0;
@@ -117,8 +122,51 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                         new double[] { 0, 0, 1 }, h.DiameterMm));
                 }
                 r.StageLog.Add("S06 holes " + hOk + "/" + p.Holes.Count + " vol=" + VolMm3(body).ToString("0.#"));
+                if (stopAtStage == "S06") { Finish(r, body, p); return r; }
 
-                Finish(r, body);
+                // S07 — ports (rectangular slots). v1: cut on the top face as a shallow recess
+                // (true side/flank entry needs the P4 oriented-face overloads, deferred).
+                int portOk = 0;
+                foreach (var port in p.Ports)
+                {
+                    var rpo = ModificationService.AddSlit(
+                        body, MmPos(port.XMm, port.YMm, p.ThicknessMm),
+                        port.WidthMm, port.HeightMm, Math.Max(0.5, port.HeightMm),
+                        new double[] { 0, 0, 1 });
+                    if (rpo.Success) portOk++;
+                }
+                if (p.Ports.Count > 0)
+                    r.StageLog.Add("S07 ports " + portOk + "/" + p.Ports.Count + " vol=" + VolMm3(body).ToString("0.#"));
+                if (stopAtStage == "S07") { Finish(r, body, p); return r; }
+
+                // S08 — speaker grille (hole-pattern grid on the top face).
+                if (p.Grille != null)
+                {
+                    var rg = ModificationService.AddHolePattern(
+                        body, MmPos(p.Grille.OriginXMm, p.Grille.OriginYMm, p.ThicknessMm),
+                        new double[] { 0, 0, 1 }, "grid", p.Grille.Rows * p.Grille.Cols,
+                        p.Grille.PitchMm, p.Grille.HoleDiameterMm, true,
+                        p.Grille.Rows, p.Grille.Cols, p.Grille.PitchMm, p.Grille.PitchMm,
+                        0.0, new double[] { 0, 0, 1 });
+                    r.StageLog.Add("S08 grille success=" + rg.Success + " (" + p.Grille.Rows + "x" + p.Grille.Cols +
+                        ") vol=" + VolMm3(body).ToString("0.#"));
+                }
+                if (stopAtStage == "S08") { Finish(r, body, p); return r; }
+
+                // S09 — button recesses (shallow pockets on the top face).
+                int btnOk = 0;
+                foreach (var b in p.Buttons)
+                {
+                    var rbn = ModificationService.AddPocket(
+                        body, MmPos(b.XMm, b.YMm, p.ThicknessMm),
+                        b.WidthMm, b.HeightMm, Math.Max(0.3, b.DepthMm),
+                        new double[] { 0, 0, 1 });
+                    if (rbn.Success) btnOk++;
+                }
+                if (p.Buttons.Count > 0)
+                    r.StageLog.Add("S09 buttons " + btnOk + "/" + p.Buttons.Count + " vol=" + VolMm3(body).ToString("0.#"));
+
+                Finish(r, body, p);
                 return r;
             }
             catch (Exception ex)
@@ -160,11 +208,17 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
             try { return b.Shape.Volume * 1e9; } catch { return 0; }
         }
 
-        private static void Finish(GenResult r, DesignBody body)
+        private static void Finish(GenResult r, DesignBody body, PhoneParameters p)
         {
             r.Body = body;
             r.MeasuredVolumeMm3 = VolMm3(body);
             r.Success = true;
+            r.Params = p;
+            // P6 Tier-2: validate the finished solid (closed + min-wall) via kernel-truth.
+            var v = ValidationService.Validate(body, p);
+            r.ValidationPass = v.Pass;
+            r.ValidationIssues = v.Issues;
+            r.MinWallMm = v.MinWallMm;
         }
     }
 }
