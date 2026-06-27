@@ -107,3 +107,42 @@ V252/
 # Installer build artifacts
 Installer/*.msi
 Installer/*.wixpdb
+
+# PyInstaller build artifacts (postprocess viewer)
+Mechanical/MXSimulator/postprocess/build/
+Mechanical/MXSimulator/postprocess/dist/
+Mechanical/MXSimulator/postprocess/*.spec
+Mechanical/MXSimulator/postprocess/MXPostViewer.exe
+Mechanical/MXSimulator/postprocess/venv/
+
+# Gmsh SDK binaries (large, download separately)
+Libs/gmsh/*.exe
+Libs/gmsh/*.dll
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Generated reports
+*.docx
+
+# --- Test artifacts & data (large, regenerable; keep scripts only) ---
+Test/RE_SelfTest/headless_*/
+Test/RE_SelfTest/*.log
+Test/RE_SelfTest/*.scdoc
+Test/RE_SelfTest/*.scdocx
+Test/RealCAD/
+warm_done.txt
+solo_target.txt
+solo_done.txt
+
+# --- Large reference assets (binary, not git-suitable) ---
+Examples/iphone/*.zip
+Examples/iphone/*.glb
+.bkit/
+
+# --- Large build artifacts (regenerable, exceed GitHub limits) ---
+Mechanical/MXSimulator/calibration/dist/
+Mechanical/MXSimulator/calibration/build/
+*.exe
+*.pkg

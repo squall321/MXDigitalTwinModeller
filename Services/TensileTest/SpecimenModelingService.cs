@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
+using System.Windows.Forms;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Core.Geometry;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.TensileTest;
 
@@ -117,6 +119,21 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.TensileTest
                 parameters.SpecimenType != ASTMSpecimenType.ASTM_D7078_VNotchRailShear)
             {
                 CreateGrippingFixtures(part, parameters);
+            }
+
+            // Phase 0: Named Selections 자동 생성 (계획 line 252-260)
+            CreateSpecimenNamedSelections(part, specimenBody, parameters);
+
+            // Phase 0: YAML 메타데이터 저장 (SpaceClaim → Mechanical 전달)
+            // Document 저장 안되어 있어도 temp에 저장됨 (Mechanical fallback)
+            try
+            {
+                SpecimenMetadataService.SaveMetadata(part.Document, parameters);
+            }
+            catch (Exception ex)
+            {
+                // Metadata 저장 실패는 치명적이지 않음 (경고만)
+                System.Diagnostics.Debug.WriteLine($"[Warning] Failed to save specimen metadata: {ex.Message}");
             }
 
             return specimenBody;
@@ -847,6 +864,193 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.TensileTest
             catch (Exception ex)
             {
                 System.Diagnostics.Debug.WriteLine($"Failed to name grip faces: {ex.Message}");
+            }
+        }
+
+        /// <summary>
+        /// Named Selections 자동 생성
+        /// Phase 0: Workbench → Mechanical 연동을 위한 경계조건 영역 정의
+        /// </summary>
+        private void CreateSpecimenNamedSelections(Part part, DesignBody specimenBody, TensileSpecimenParameters parameters)
+        {
+            if (part == null || specimenBody == null)
+                return;
+
+            try
+            {
+                // 1. Specimen_LeftEnd: X 최소 평면 (고정 경계조건용)
+                var leftFaces = FaceNamingHelper.FindPlanarFaces(
+                    specimenBody,
+                    Direction.DirX,
+                    null,
+                    null);
+
+                if (leftFaces.Count > 0)
+                {
+                    // X 좌표 최소값 찾기
+                    DesignFace leftmostFace = null;
+                    double minX = double.MaxValue;
+
+                    foreach (var face in leftFaces)
+                    {
+                        if (face.Shape.Geometry is Plane plane)
+                        {
+                            double x = plane.Frame.Origin.X;
+                            if (x < minX)
+                            {
+                                minX = x;
+                                leftmostFace = face;
+                            }
+                        }
+                    }
+
+                    if (leftmostFace != null)
+                    {
+                        FaceNamingHelper.NameFace(part, leftmostFace, "Specimen_LeftEnd");
+                        System.Diagnostics.Debug.WriteLine("[NS] Created: Specimen_LeftEnd");
+                    }
+                }
+
+                // 2. Specimen_RightEnd: X 최대 평면 (변위 경계조건용)
+                var rightFaces = FaceNamingHelper.FindPlanarFaces(
+                    specimenBody,
+                    Direction.Create(-1, 0, 0),  // -X 방향
+                    null,
+                    null);
+
+                if (rightFaces.Count > 0)
+                {
+                    // X 좌표 최대값 찾기
+                    DesignFace rightmostFace = null;
+                    double maxX = double.MinValue;
+
+                    foreach (var face in rightFaces)
+                    {
+                        if (face.Shape.Geometry is Plane plane)
+                        {
+                            double x = plane.Frame.Origin.X;
+                            if (x > maxX)
+                            {
+                                maxX = x;
+                                rightmostFace = face;
+                            }
+                        }
+                    }
+
+                    if (rightmostFace != null)
+                    {
+                        FaceNamingHelper.NameFace(part, rightmostFace, "Specimen_RightEnd");
+                        System.Diagnostics.Debug.WriteLine("[NS] Created: Specimen_RightEnd");
+                    }
+                }
+
+                // 3. Specimen_GaugeSection (선택): 게이지 영역 전체 (gripped specimen만)
+                if (IsGrippedSpecimen(parameters.SpecimenType))
+                {
+                    // 모든 face 중 게이지 영역에 있는 것들 찾기
+                    // (간단히: Y 방향 평면 중 gauge width에 해당하는 것들)
+                    var gaugeFaces = new System.Collections.Generic.List<DesignFace>();
+
+                    foreach (var face in specimenBody.Faces)
+                    {
+                        if (face.Shape.Geometry is Plane plane)
+                        {
+                            // Y 방향 평면이고, gauge width 범위 내에 있으면
+                            double dot = Math.Abs(Vector.Dot(plane.Frame.DirZ.UnitVector, Direction.DirY.UnitVector));
+                            if (dot > 0.99) // Y 방향 평행
+                            {
+                                gaugeFaces.Add(face);
+                            }
+                        }
+                    }
+
+                    if (gaugeFaces.Count > 0)
+                    {
+                        FaceNamingHelper.NameFaces(part, gaugeFaces, "Specimen_GaugeSection");
+                        System.Diagnostics.Debug.WriteLine($"[NS] Created: Specimen_GaugeSection ({gaugeFaces.Count} faces)");
+                    }
+                }
+
+                System.Diagnostics.Debug.WriteLine("[NS] Named Selections creation completed");
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[Warning] Failed to create Named Selections: {ex.Message}");
+                // Named Selection 생성 실패는 치명적이지 않음
+            }
+        }
+
+        /// <summary>
+        /// Gripped specimen 여부 확인
+        /// </summary>
+        private bool IsGrippedSpecimen(ASTMSpecimenType type)
+        {
+            switch (type)
+            {
+                case ASTMSpecimenType.ASTM_E8_Standard:
+                case ASTMSpecimenType.ASTM_E8_SubSize:
+                case ASTMSpecimenType.ISO_6892_1:
+                case ASTMSpecimenType.ASTM_D638_TypeI:
+                case ASTMSpecimenType.ASTM_D638_TypeII:
+                case ASTMSpecimenType.ASTM_D638_TypeIII:
+                case ASTMSpecimenType.ASTM_D638_TypeIV:
+                case ASTMSpecimenType.ASTM_D638_TypeV:
+                case ASTMSpecimenType.ISO_527_2_Type1A:
+                case ASTMSpecimenType.ISO_527_2_Type1B:
+                case ASTMSpecimenType.DMA_Tensile_DogBone:
+                    return true;
+
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>
+        /// Document가 저장되지 않았으면 저장 대화창 표시
+        /// Material Twin YAML 생성을 위해 필수
+        /// </summary>
+        private static void EnsureDocumentSaved(Document document)
+        {
+            if (document == null)
+                return;
+
+            // Document가 이미 저장되어 있으면 종료
+            string documentPath = document.Path;
+            if (!string.IsNullOrEmpty(documentPath) && File.Exists(documentPath))
+            {
+                System.Diagnostics.Debug.WriteLine($"[Specimen] Document already saved: {documentPath}");
+                return;
+            }
+
+            // 저장 대화창 표시
+            using (var dlg = new System.Windows.Forms.SaveFileDialog())
+            {
+                dlg.Title = "시편 Document 저장 (Material Twin YAML 생성용)";
+                dlg.Filter = "SpaceClaim Documents (*.scdoc)|*.scdoc";
+                dlg.DefaultExt = "scdoc";
+                dlg.OverwritePrompt = true;
+
+                if (dlg.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                {
+                    try
+                    {
+                        document.SaveAs(dlg.FileName);
+                        System.Diagnostics.Debug.WriteLine($"[Specimen] Document saved: {dlg.FileName}");
+                    }
+                    catch (Exception ex)
+                    {
+                        System.Diagnostics.Debug.WriteLine($"[Specimen] Failed to save document: {ex.Message}");
+                        System.Windows.Forms.MessageBox.Show(
+                            $"Document 저장 실패:\n\n{ex.Message}\n\nMaterial Twin YAML이 생성되지 않을 수 있습니다.",
+                            "저장 오류",
+                            System.Windows.Forms.MessageBoxButtons.OK,
+                            System.Windows.Forms.MessageBoxIcon.Warning);
+                    }
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("[Specimen] User canceled document save. YAML will not be generated.");
+                }
             }
         }
     }

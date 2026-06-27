@@ -17,6 +17,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.CAI
     /// <summary>
     /// CAI 시편 생성 커맨드
     /// </summary>
+    // @lat: [[specimens#CAI 시편]]
     public class CreateCAISpecimenCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.CreateCAISpecimen";

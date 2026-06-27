@@ -19,6 +19,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.DMA
     /// DMA 4점 굽힘시편 생성 커맨드
     /// BendingSpecimenDialog를 열어 4점 굽힘으로 초기 선택
     /// </summary>
+    // @lat: [[specimens#DMA 4점 굽힘 시편]]
     public class CreateDMA4PointBendingCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.CreateDMA4PointBending";

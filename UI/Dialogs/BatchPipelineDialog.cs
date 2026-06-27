@@ -66,13 +66,16 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
         private void InitializeLayout()
         {
+            SuspendLayout();
             Text = "Batch Pipeline (\uC77C\uAD04 \uC2E4\uD589)";
             Width = 720;
-            Height = 700;
+            Height = 740;
             StartPosition = FormStartPosition.CenterScreen;
             MinimizeBox = false;
             MaximizeBox = false;
             FormBorderStyle = FormBorderStyle.FixedDialog;
+            AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
+            AutoScaleMode = AutoScaleMode.Font;
 
             int y = 12;
             int lx = 32;
@@ -297,7 +300,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             btnRun = new Button
             {
                 Text = "\u25B6 \uD30C\uC774\uD504\uB77C\uC778 \uC2E4\uD589",
-                Location = new Point(470, y),
+                Location = new Point(460, y),
                 Width = 140,
                 Height = 28,
                 Font = new Font(Font.FontFamily, 9f, FontStyle.Bold)
@@ -307,7 +310,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             btnClose = new Button
             {
                 Text = "\uB2EB\uAE30",
-                Location = new Point(618, y),
+                Location = new Point(614, y),
                 Width = 70,
                 Height = 28
             };
@@ -335,7 +338,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             txtLog = new TextBox
             {
                 Location = new Point(12, y),
-                Size = new Size(680, 700 - y - 40),
+                Size = new Size(680, 740 - y - 40),
                 Multiline = true,
                 ReadOnly = true,
                 ScrollBars = ScrollBars.Vertical,
@@ -346,7 +349,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             var btnCopyLog = new Button
             {
                 Text = "\uBCF5\uC0AC",
-                Location = new Point(618, 700 - 38),
+                Location = new Point(618, 740 - 38),
                 Width = 70,
                 Height = 26
             };
@@ -373,6 +376,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             });
 
             CancelButton = btnClose;
+
+            ResumeLayout(false);
+            PerformLayout();
         }
 
         // ─── 기본 내보내기 경로 설정 ───

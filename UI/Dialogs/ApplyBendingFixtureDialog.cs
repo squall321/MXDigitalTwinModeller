@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Windows.Forms;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Core.Geometry;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Core.UI;
@@ -18,6 +19,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 {
     /// <summary>
     /// 기존 바디에 3점 벤딩 지지구조를 적용하는 다이얼로그
+    /// 수치 변경 시 300ms 디바운스 후 자동 미리보기 갱신
     /// </summary>
     public partial class ApplyBendingFixtureDialog : Form
     {
@@ -35,6 +37,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
         // 방향 콤보 변경 중 재진입 방지
         private bool updatingDirectionCombos;
 
+        // 자동 미리보기 디바운스 타이머
+        private Timer previewTimer;
+
         public ApplyBendingFixtureDialog(Part part, DesignBody preSelected)
         {
             InitializeComponent();
@@ -45,8 +50,16 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             previewFixtures = new List<DesignBody>();
             bodyList = new List<DesignBody>();
 
+            // 디바운스 타이머 (300ms)
+            previewTimer = new Timer();
+            previewTimer.Interval = 300;
+            previewTimer.Tick += PreviewTimer_Tick;
+
             PopulateBodyCombo();
             SetupEventHandlers();
+
+            // 초기 선택 트리거 (PopulateBodyCombo가 핸들러 등록 전에 SelectedIndex 설정하므로)
+            cmbBody_SelectedIndexChanged(cmbBody, EventArgs.Empty);
 
             this.TopMost = true;
             this.FormClosing += ApplyBendingFixtureDialog_FormClosing;
@@ -64,26 +77,37 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             cmbLoadDir.SelectedIndexChanged += cmbDirection_SelectedIndexChanged;
             numSpanRatio.ValueChanged += numSpanRatio_ValueChanged;
             numSpanAbsolute.ValueChanged += numSpanAbsolute_ValueChanged;
+
+            // 지지구조 치수 변경 → 자동 미리보기
+            numSupportDia.ValueChanged += FixtureParam_ValueChanged;
+            numNoseDia.ValueChanged += FixtureParam_ValueChanged;
+            numSupportHeight.ValueChanged += FixtureParam_ValueChanged;
+            numNoseHeight.ValueChanged += FixtureParam_ValueChanged;
         }
 
         /// <summary>
-        /// Part.Bodies에서 바디 목록을 콤보박스에 채움
+        /// 모든 바디(Component 포함)를 재귀 수집하여 콤보박스에 채움
+        /// 인덱스 0 = "All Bodies (전체)" → 전체 병합 바운딩박스 사용
+        /// Component.Content 접근에 WriteBlock 트랜잭션 컨텍스트 필요
         /// </summary>
         private void PopulateBodyCombo()
         {
             cmbBody.Items.Clear();
             bodyList.Clear();
 
-            int preSelectedIndex = -1;
-
-            foreach (DesignBody body in activePart.Bodies)
+            // Component.Content는 WriteBlock 내에서만 안정적으로 접근 가능
+            try
             {
-                string name = string.IsNullOrEmpty(body.Name) ? body.ToString() : body.Name;
-                cmbBody.Items.Add(name);
-                bodyList.Add(body);
-
-                if (preSelectedBody != null && body == preSelectedBody)
-                    preSelectedIndex = bodyList.Count - 1;
+                WriteBlock.ExecuteTask("Collect Bodies", () =>
+                {
+                    CollectBodiesRecursive(activePart, bodyList);
+                });
+            }
+            catch
+            {
+                bodyList.Clear();
+                try { CollectBodiesRecursive(activePart, bodyList); }
+                catch { }
             }
 
             if (bodyList.Count == 0)
@@ -92,8 +116,49 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                 return;
             }
 
-            // 사전 선택된 바디가 있으면 선택, 없으면 첫 번째 선택
+            // 첫 항목: 전체 바디
+            cmbBody.Items.Add("All Bodies (전체) [" + bodyList.Count + "개]");
+
+            // 개별 바디 항목
+            int preSelectedIndex = -1;
+            for (int i = 0; i < bodyList.Count; i++)
+            {
+                var body = bodyList[i];
+                string name = string.IsNullOrEmpty(body.Name) ? body.ToString() : body.Name;
+                var bodyPart = body.Parent as Part;
+                if (bodyPart != null && !ReferenceEquals(bodyPart, activePart))
+                    name = "[C] " + name;
+                cmbBody.Items.Add(name);
+
+                if (preSelectedBody != null && body == preSelectedBody)
+                    preSelectedIndex = i + 1;
+            }
+
             cmbBody.SelectedIndex = preSelectedIndex >= 0 ? preSelectedIndex : 0;
+        }
+
+        /// <summary>
+        /// IPart에서 재귀적으로 모든 DesignBody 수집 (nested Component 포함)
+        /// </summary>
+        private void CollectBodiesRecursive(IPart part, List<DesignBody> result)
+        {
+            if (part == null) return;
+
+            foreach (var body in part.Bodies)
+            {
+                var db = body as DesignBody;
+                if (db != null) result.Add(db);
+            }
+
+            foreach (var comp in part.Components)
+            {
+                try
+                {
+                    if (comp.Content != null)
+                        CollectBodiesRecursive(comp.Content, result);
+                }
+                catch { }
+            }
         }
 
         // =============================================
@@ -103,14 +168,23 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
         private void cmbBody_SelectedIndexChanged(object sender, EventArgs e)
         {
             int idx = cmbBody.SelectedIndex;
-            if (idx < 0 || idx >= bodyList.Count) return;
+            if (idx < 0) return;
 
             CleanupPreview();
 
-            DesignBody selectedBody = bodyList[idx];
             try
             {
-                currentBbox = service.ComputeBoundingBox(selectedBody);
+                AxisAlignedBoundingBox bbox = null;
+                var localBodyList = bodyList;
+                WriteBlock.ExecuteTask("Compute BBox", () =>
+                {
+                    if (idx == 0)
+                        bbox = service.ComputeBoundingBox(localBodyList);
+                    else
+                        bbox = service.ComputeBoundingBox(localBodyList[idx - 1]);
+                });
+                currentBbox = bbox;
+
                 service.DetectDirections(currentBbox, parameters);
                 UpdateDirectionCombos();
                 UpdateDimensionLabels();
@@ -121,6 +195,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                     GeometryUtils.MetersToMm(currentBbox.ExtentX),
                     GeometryUtils.MetersToMm(currentBbox.ExtentY),
                     GeometryUtils.MetersToMm(currentBbox.ExtentZ));
+
+                // 바디 변경 시 자동 미리보기
+                SchedulePreview();
             }
             catch (Exception ex)
             {
@@ -154,7 +231,6 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             AxisDirection oldWidth = parameters.WidthDirection;
             AxisDirection oldLoad = parameters.LoadingDirection;
 
-            // 변경된 콤보에 맞춰 swap 처리
             if (cmb == cmbSpanDir)
             {
                 if (newAxis == oldWidth)
@@ -184,6 +260,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             UpdateDirectionCombos();
             UpdateDimensionLabels();
             UpdateSpanDisplay();
+
+            // 방향 변경 시 자동 미리보기
+            SchedulePreview();
         }
 
         private void btnAutoDetect_Click(object sender, EventArgs e)
@@ -193,6 +272,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             UpdateDirectionCombos();
             UpdateDimensionLabels();
             UpdateSpanDisplay();
+            SchedulePreview();
         }
 
         private void UpdateDimensionLabels()
@@ -213,18 +293,29 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             numSpanAbsolute.Enabled = !useRatio;
             parameters.UseSpanRatio = useRatio;
             UpdateSpanDisplay();
+            SchedulePreview();
         }
 
         private void numSpanRatio_ValueChanged(object sender, EventArgs e)
         {
             parameters.SpanRatio = (double)numSpanRatio.Value / 100.0;
             UpdateSpanDisplay();
+            SchedulePreview();
         }
 
         private void numSpanAbsolute_ValueChanged(object sender, EventArgs e)
         {
             parameters.SpanMm = (double)numSpanAbsolute.Value;
             UpdateSpanDisplay();
+            SchedulePreview();
+        }
+
+        /// <summary>
+        /// 지지구조 치수(직경, 높이) 변경 → 자동 미리보기
+        /// </summary>
+        private void FixtureParam_ValueChanged(object sender, EventArgs e)
+        {
+            SchedulePreview();
         }
 
         private void UpdateSpanDisplay()
@@ -258,7 +349,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
         private bool ValidateInputs()
         {
-            if (cmbBody.SelectedIndex < 0 || currentBbox == null)
+            if (currentBbox == null)
             {
                 ValidationHelper.ShowError("바디를 선택하세요.", "입력 오류");
                 return false;
@@ -275,32 +366,88 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             return true;
         }
 
+        /// <summary>
+        /// 팝업 없이 파라미터 검증 (자동 미리보기용)
+        /// </summary>
+        private bool ValidateInputsSilent()
+        {
+            if (currentBbox == null) return false;
+
+            ReadParametersFromUI();
+            string errorMessage;
+            return parameters.Validate(out errorMessage);
+        }
+
         // =============================================
-        //  미리보기 / 생성 / 취소
+        //  선택된 바디 목록 반환
         // =============================================
 
-        private void btnPreview_Click(object sender, EventArgs e)
+        private List<DesignBody> GetSelectedBodies()
         {
-            if (!ValidateInputs()) return;
+            int idx = cmbBody.SelectedIndex;
+            if (idx <= 0)
+                return new List<DesignBody>(bodyList);
+            else
+                return new List<DesignBody> { bodyList[idx - 1] };
+        }
+
+        // =============================================
+        //  자동 미리보기 (디바운스)
+        // =============================================
+
+        /// <summary>
+        /// 디바운스 타이머 (재)시작. 300ms 동안 추가 변경이 없으면 미리보기 실행.
+        /// </summary>
+        private void SchedulePreview()
+        {
+            previewTimer.Stop();
+            previewTimer.Start();
+        }
+
+        private void PreviewTimer_Tick(object sender, EventArgs e)
+        {
+            previewTimer.Stop();
+            ExecuteAutoPreview();
+        }
+
+        /// <summary>
+        /// 자동 미리보기 실행. 충돌/에러 시 라벨에 경고 표시 (팝업 없음).
+        /// </summary>
+        private void ExecuteAutoPreview()
+        {
+            if (!ValidateInputsSilent())
+            {
+                CleanupPreview();
+                lblPreviewStatus.Text = "";
+                return;
+            }
 
             try
             {
                 CleanupPreview();
-                DesignBody targetBody = bodyList[cmbBody.SelectedIndex];
+                var bbox = currentBbox;
+                var targetBodies = GetSelectedBodies();
 
                 WriteBlock.ExecuteTask("Bending Fixture Preview", () =>
                 {
-                    var fixtures = service.CreateFixtures(activePart, targetBody, parameters);
+                    var fixtures = service.CreateFixtures(activePart, bbox, parameters, targetBodies);
                     previewFixtures.AddRange(fixtures);
                 });
+                Window.ActiveWindow?.ZoomExtents();
+
+                lblPreviewStatus.ForeColor = Color.Green;
+                lblPreviewStatus.Text = "미리보기 적용됨";
             }
             catch (Exception ex)
             {
-                ValidationHelper.ShowError(
-                    $"미리보기 생성 중 오류가 발생했습니다:\n\n{ex.Message}",
-                    "미리보기 오류");
+                lblPreviewStatus.ForeColor = Color.Red;
+                lblPreviewStatus.Text = ex.Message.Split('\n')[0];
             }
         }
+
+        // =============================================
+        //  생성 / 취소
+        // =============================================
 
         private void btnCreate_Click(object sender, EventArgs e)
         {
@@ -316,10 +463,11 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                 else
                 {
                     // 미리보기 없으면 새로 생성
-                    DesignBody targetBody = bodyList[cmbBody.SelectedIndex];
+                    var bbox = currentBbox;
+                    var targetBodies = GetSelectedBodies();
                     WriteBlock.ExecuteTask("Create Bending Fixture", () =>
                     {
-                        service.CreateFixtures(activePart, targetBody, parameters);
+                        service.CreateFixtures(activePart, bbox, parameters, targetBodies);
                     });
                 }
 
@@ -369,6 +517,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
         private void ApplyBendingFixtureDialog_FormClosing(object sender, FormClosingEventArgs e)
         {
+            previewTimer.Stop();
+            previewTimer.Dispose();
+
             if (DialogResult != DialogResult.OK)
             {
                 CleanupPreview();

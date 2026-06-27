@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Windows.Forms;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Core.UI;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.Joint;
@@ -20,6 +21,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
         private readonly JointSpecimenService service;
         private Part activePart;
         private List<DesignBody> previewBodies;
+        private Timer previewTimer;
         private bool suppressPresetEvent = false;
 
         public JointSpecimenDialog(Part part)
@@ -29,9 +31,27 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             activePart = part;
             previewBodies = new List<DesignBody>();
 
+            previewTimer = new Timer();
+            previewTimer.Interval = 300;
+            previewTimer.Tick += PreviewTimer_Tick;
+
             cmbPreset.Items.AddRange(JointSpecimenFactory.PresetLabels);
             cmbPreset.SelectedIndex = 0;
             cmbPreset.SelectedIndexChanged += cmbPreset_SelectedIndexChanged;
+
+            // 파라미터 변경 시 자동 미리보기
+            numAdherendWidth.ValueChanged += (s, ev) => SchedulePreview();
+            numAdherendLength.ValueChanged += (s, ev) => SchedulePreview();
+            numAdherendThickness.ValueChanged += (s, ev) => SchedulePreview();
+            numOverlapLength.ValueChanged += (s, ev) => SchedulePreview();
+            numAdhesiveThickness.ValueChanged += (s, ev) => SchedulePreview();
+            numScarfAngle.ValueChanged += (s, ev) => SchedulePreview();
+            numFlangeLength.ValueChanged += (s, ev) => SchedulePreview();
+            numWebHeight.ValueChanged += (s, ev) => SchedulePreview();
+            numWebThickness.ValueChanged += (s, ev) => SchedulePreview();
+            numFilletBondSize.ValueChanged += (s, ev) => SchedulePreview();
+            chkCreateAdhesive.CheckedChanged += (s, ev) => SchedulePreview();
+            chkCreateGrips.CheckedChanged += (s, ev) => SchedulePreview();
 
             this.TopMost = true;
             this.FormClosing += JointSpecimenDialog_FormClosing;
@@ -50,6 +70,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             ApplyParamsToUI(p);
             UpdateDescription();
             UpdateUIVisibility();
+            SchedulePreview();
         }
 
         private void UpdateDescription()
@@ -111,15 +132,14 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             // T-Joint 그룹
             grpTJoint.Visible = isTJoint;
 
-            // 동적 레이아웃
-            const int presetHeight = 90;
-            const int adherendHeight = 110;
-            const int tJointHeight = 130;
-            const int optionsHeight = 50;
+            // 동적 레이아웃 (DPI 스케일링 대응: 실제 스케일된 크기 사용)
+            int panelX = grpPreset.Location.X;
+            int panelW = grpPreset.Width;
 
-            int nextY = 12 + presetHeight + 6; // after grpPreset
-            grpAdherend.SetBounds(12, nextY, 440, adherendHeight);
-            nextY += adherendHeight + 6;
+            int nextY = grpPreset.Location.Y + grpPreset.Height + 6;
+            grpAdherend.Location = new System.Drawing.Point(panelX, nextY);
+            grpAdherend.Width = panelW;
+            nextY += grpAdherend.Height + 6;
 
             // grpJoint 높이 조정
             int visibleJointRows = 0;
@@ -128,24 +148,29 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             if (isScarf) visibleJointRows++; // scarf angle
             int actualJointHeight = 24 + visibleJointRows * 27 + 10;
             if (actualJointHeight < 60) actualJointHeight = 60;
-            grpJoint.SetBounds(12, nextY, 440, actualJointHeight);
+            grpJoint.Location = new System.Drawing.Point(panelX, nextY);
+            grpJoint.Size = new System.Drawing.Size(panelW, actualJointHeight);
             nextY += actualJointHeight + 6;
 
             if (isTJoint)
             {
-                grpTJoint.SetBounds(12, nextY, 440, tJointHeight);
-                nextY += tJointHeight + 6;
+                grpTJoint.Location = new System.Drawing.Point(panelX, nextY);
+                grpTJoint.Width = panelW;
+                nextY += grpTJoint.Height + 6;
             }
 
-            grpOptions.SetBounds(12, nextY, 440, optionsHeight);
-            nextY += optionsHeight + 10;
+            grpOptions.Location = new System.Drawing.Point(panelX, nextY);
+            grpOptions.Width = panelW;
+            nextY += grpOptions.Height + 10;
 
-            btnPreview.Location = new System.Drawing.Point(140, nextY);
-            btnCreate.Location = new System.Drawing.Point(250, nextY);
-            btnCancel.Location = new System.Drawing.Point(360, nextY);
+            int btnGap = 10;
+            lblPreviewStatus.Location = new System.Drawing.Point(12, nextY);
+            int btnRow = nextY + 18;
+            btnCreate.Location = new System.Drawing.Point(250, btnRow);
+            btnCancel.Location = new System.Drawing.Point(btnCreate.Right + btnGap, btnRow);
 
             int borderHeight = this.Height - this.ClientSize.Height;
-            this.Height = nextY + 46 + borderHeight;
+            this.Height = btnRow + 46 + borderHeight;
         }
 
         private JointSpecimenParameters ReadParams()
@@ -177,13 +202,26 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             return p;
         }
 
-        private void btnPreview_Click(object sender, EventArgs e)
+        private void SchedulePreview()
+        {
+            previewTimer.Stop();
+            previewTimer.Start();
+        }
+
+        private void PreviewTimer_Tick(object sender, EventArgs e)
+        {
+            previewTimer.Stop();
+            ExecuteAutoPreview();
+        }
+
+        private void ExecuteAutoPreview()
         {
             var p = ReadParams();
             string error;
             if (!p.Validate(out error))
             {
-                ValidationHelper.ShowError(error, "입력 오류");
+                CleanupPreview();
+                lblPreviewStatus.Text = "";
                 return;
             }
             try
@@ -194,10 +232,14 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                     var bodies = service.CreateJointSpecimen(activePart, p);
                     previewBodies.AddRange(bodies);
                 });
+                Window.ActiveWindow?.ZoomExtents();
+                lblPreviewStatus.ForeColor = Color.Green;
+                lblPreviewStatus.Text = "미리보기 적용됨";
             }
             catch (Exception ex)
             {
-                ValidationHelper.ShowError($"미리보기 생성 중 오류:\n\n{ex.Message}", "오류");
+                lblPreviewStatus.ForeColor = Color.Red;
+                lblPreviewStatus.Text = ex.Message.Split('\n')[0];
             }
         }
 
@@ -252,6 +294,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
         private void JointSpecimenDialog_FormClosing(object sender, FormClosingEventArgs e)
         {
+            previewTimer.Stop();
+            previewTimer.Dispose();
             if (DialogResult != DialogResult.OK)
                 CleanupPreview();
         }

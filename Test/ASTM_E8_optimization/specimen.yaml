@@ -1,0 +1,22 @@
+﻿# MX Material Twin - Specimen Metadata
+# Auto-generated from SpaceClaim: 2026-02-23 08:02:28
+
+specimen_type: ASTM_E8_Standard
+gauge_length_mm: 50.000000
+gauge_width_mm: 12.500000
+thickness_mm: 3.000000
+grip_length_mm: 50.000000
+grip_width_mm: 20.000000
+total_length_mm: 200.000000
+fillet_radius_mm: 12.500000
+
+# Named Selections for boundary conditions
+named_selections:
+  - Specimen_LeftEnd
+  - Specimen_RightEnd
+  - Specimen_GaugeSection
+
+# Creation information
+created_date: 2026-02-22T23:02:28Z
+spaceclaim_version: V252
+document_path: "D:\MXDigitalTwinModeller\Test\ASTM_E8_optimization\Test.scdocx"

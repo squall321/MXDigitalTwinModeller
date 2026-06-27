@@ -17,6 +17,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Fatigue
     /// <summary>
     /// 피로 시편 생성 커맨드
     /// </summary>
+    // @lat: [[specimens#피로 시편]]
     public class CreateFatigueSpecimenCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.CreateFatigueSpecimen";

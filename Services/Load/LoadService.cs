@@ -143,9 +143,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Load
         /// 타겟 주파수의 순수 사인파를 가장 잘 모사하는 소스 하모닉 조합을 탐색.
         /// nHarmonics개의 주파수를 선정하여 PWM 출력과 이상적 사인파의 RMS 오차를 최소화.
         /// </summary>
-        public static void OptimizePwmHarmonics(LoadDefinition ld, int nHarmonics)
+        public static void OptimizePwmHarmonics(LoadDefinition ld, int nCorrections)
         {
-            if (nHarmonics < 1 || ld.PwmTargetFrequency <= 0 || ld.DeltaTime <= 0 || ld.EndTime <= 0)
+            if (nCorrections < 1 || ld.PwmTargetFrequency <= 0 || ld.DeltaTime <= 0 || ld.EndTime <= 0)
                 return;
 
             double targetFreq = ld.PwmTargetFrequency;
@@ -166,19 +166,58 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Load
             double freqRes = 1.0 / (fftN * dt);
             int half = fftN / 2;
 
-            // Track used frequency bins (± tolerance)
-            int fundBin = (int)Math.Round(targetFreq / freqRes);
+            // Track used frequency bins — mark target freq and existing source harmonics
             var usedBins = new HashSet<int>();
+            int fundBin = (int)Math.Round(targetFreq / freqRes);
             for (int b = Math.Max(0, fundBin - 3); b <= Math.Min(half - 1, fundBin + 3); b++)
                 usedBins.Add(b);
 
-            // Phase 1: Start with fundamental
-            ld.PwmHarmonics = new List<PwmHarmonic>();
-            ld.PwmHarmonics.Add(new PwmHarmonic(targetFreq, outputAmp * 0.85, 0));
+            // Mark existing source harmonic bins (don't add corrections at same frequencies)
+            int sourceCount = ld.PwmHarmonics.Count;
+            foreach (var h in ld.PwmHarmonics)
+            {
+                int bin = (int)Math.Round(h.Frequency / freqRes);
+                for (int b = Math.Max(0, bin - 3); b <= Math.Min(half - 1, bin + 3); b++)
+                    usedBins.Add(b);
+            }
+
+            // Generate PWM with existing source harmonics first
             GeneratePwm(ld);
 
-            // Phase 2: Iteratively add harmonics to cancel dominant error components
-            for (int h = 1; h < nHarmonics; h++)
+            // Phase 1: Fine-tune existing source amplitudes/phases (keep frequencies)
+            for (int hi = 0; hi < sourceCount; hi++)
+            {
+                var harm = ld.PwmHarmonics[hi];
+                double origAmp = harm.Amplitude;
+                double bestErr = RmsError(ld.ComputedAmplitude, ideal, n);
+
+                double bestA = origAmp;
+                for (int s = 0; s < 20; s++)
+                {
+                    double tryA = origAmp * (0.2 + s * 0.1); // 0.2x ~ 2.1x
+                    if (tryA <= 0) continue;
+                    harm.Amplitude = tryA;
+                    GeneratePwm(ld);
+                    double err = RmsError(ld.ComputedAmplitude, ideal, n);
+                    if (err < bestErr) { bestErr = err; bestA = tryA; }
+                }
+                harm.Amplitude = bestA;
+
+                double bestP = harm.Phase;
+                for (int s = -6; s <= 6; s++)
+                {
+                    if (s == 0) continue;
+                    harm.Phase = bestP + s * 15.0;
+                    GeneratePwm(ld);
+                    double err = RmsError(ld.ComputedAmplitude, ideal, n);
+                    if (err < bestErr) { bestErr = err; bestP = harm.Phase; }
+                }
+                harm.Phase = bestP;
+                GeneratePwm(ld);
+            }
+
+            // Phase 2: Iteratively add correction harmonics to cancel dominant error
+            for (int h = 0; h < nCorrections; h++)
             {
                 // Error = PWM output - ideal
                 double[] errRe = new double[fftN];
@@ -206,11 +245,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Load
                 double peakFreq = bestK * freqRes;
                 double errAmp = Math.Sqrt(bestMagSq) * 2.0 / fftN;
 
-                // Cancellation phase: for sin representation, φ = atan2(re, -im)
-                // Opposite phase = φ + 180°
+                // Cancellation phase: opposite phase
                 double cancelPhaseDeg = Math.Atan2(errRe[bestK], -errIm[bestK]) * 180.0 / Math.PI + 180.0;
 
-                // Grid search: find best amplitude for this harmonic
+                // Grid search: find best amplitude for this correction harmonic
                 double baseErr = RmsError(ld.ComputedAmplitude, ideal, n);
                 double bestAmp = errAmp * 0.3;
                 double bestNewErr = baseErr;
@@ -229,29 +267,13 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Load
                 GeneratePwm(ld);
             }
 
-            // Phase 3: Fine-tune fundamental amplitude
-            {
-                double bestErr = RmsError(ld.ComputedAmplitude, ideal, n);
-                double bestAmp = ld.PwmHarmonics[0].Amplitude;
-                for (int s = 0; s < 20; s++)
-                {
-                    double tryAmp = outputAmp * (0.4 + s * 0.06);
-                    ld.PwmHarmonics[0].Amplitude = tryAmp;
-                    GeneratePwm(ld);
-                    double err = RmsError(ld.ComputedAmplitude, ideal, n);
-                    if (err < bestErr) { bestErr = err; bestAmp = tryAmp; }
-                }
-                ld.PwmHarmonics[0].Amplitude = bestAmp;
-            }
-
-            // Phase 4: Coordinate descent on all harmonics (2 rounds)
+            // Phase 3: Coordinate descent on all harmonics (2 rounds)
             for (int round = 0; round < 2; round++)
             {
                 for (int hi = 0; hi < ld.PwmHarmonics.Count; hi++)
                 {
                     var harm = ld.PwmHarmonics[hi];
                     double origAmp = harm.Amplitude;
-                    double origPhase = harm.Phase;
                     double bestErr = RmsError(ld.ComputedAmplitude, ideal, n);
 
                     // Tune amplitude (±30% in 7 steps)
@@ -268,7 +290,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Load
                     }
                     harm.Amplitude = bestA;
 
-                    // Tune phase (±30° in 6 steps)
+                    // Tune phase (±30° in 6 steps) — skip source frequency changes
                     double bestP = harm.Phase;
                     for (int s = -3; s <= 3; s++)
                     {
@@ -276,7 +298,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Load
                         harm.Phase = bestP + s * 10.0;
                         GeneratePwm(ld);
                         double err = RmsError(ld.ComputedAmplitude, ideal, n);
-                        if (err < bestErr) { bestErr = err; harm.Phase = bestP + s * 10.0; bestP = harm.Phase; }
+                        if (err < bestErr) { bestErr = err; bestP = harm.Phase; }
                     }
                     harm.Phase = bestP;
                     GeneratePwm(ld);

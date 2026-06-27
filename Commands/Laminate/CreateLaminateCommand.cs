@@ -17,6 +17,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Laminate
     /// <summary>
     /// 적층 모델 생성 커맨드
     /// </summary>
+    // @lat: [[specimens#Laminate]]
     public class CreateLaminateCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.CreateLaminate";

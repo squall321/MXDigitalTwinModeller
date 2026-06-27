@@ -190,6 +190,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                     var bodies = service.CreateCompressionSpecimen(activePart, p);
                     previewBodies.AddRange(bodies);
                 });
+                Window.ActiveWindow?.ZoomExtents();
             }
             catch (Exception ex)
             {

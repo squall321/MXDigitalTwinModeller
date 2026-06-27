@@ -17,6 +17,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.BendingFixture
     /// <summary>
     /// 기존 바디에 3점 벤딩 지지구조 적용 커맨드
     /// </summary>
+    // @lat: [[specimens#Bending Fixture 적용]]
     public class ApplyBendingFixtureCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.ApplyBendingFixture";

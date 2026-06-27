@@ -1,0 +1,17 @@
+[A] success=True vol_meas=8011.4 vol_analytic=8064.1 delta=-0.65% err=none
+    S00 bbox vol=77619
+    S00b hollow success=True wall=0.6 cornersR=4/4 vol=8011.4
+    S06 holes 0/0 vol=8011.4
+    WALL floor=0.620 +Xflank=0.620 +Yflank=0.620 (target=0.60)
+[B] success=True vol_meas=9219.2 vol_analytic=9276.1 delta=-0.61% err=none
+    S00 bbox vol=96000
+    S00b hollow success=True wall=0.6 cornersR=4/4 vol=9219.2
+    S06 holes 0/0 vol=9219.2
+    WALL floor=0.620 +Xflank=0.620 +Yflank=0.620 (target=0.60)
+[A2] success=True vol_meas=8011.4 vol_analytic=8064.1 delta=-0.65% err=none
+    S00 bbox vol=77619
+    S00b hollow success=True wall=0.6 cornersR=4/4 vol=8011.4
+    S06 holes 0/0 vol=8011.4
+    WALL floor=0.620 +Xflank=0.620 +Yflank=0.620 (target=0.60)
+DETERMINISM vA=8011.412 vA2=8011.412 identical=True
+P2_PASS A=True B=True determinism=True ALL=True

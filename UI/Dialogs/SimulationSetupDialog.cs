@@ -55,6 +55,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
         private void InitializeLayout()
         {
+            SuspendLayout();
             Text = "Simulation Setup (\uc2dc\ubbac\ub808\uc774\uc158 \uc124\uc815)";
             Width = 780;
             Height = 760;
@@ -62,6 +63,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             MinimizeBox = false;
             MaximizeBox = false;
             FormBorderStyle = FormBorderStyle.FixedDialog;
+            AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
+            AutoScaleMode = AutoScaleMode.Font;
 
             var font = new Font("Segoe UI", 9f);
             var monoFont = new Font("Consolas", 8.5f);
@@ -464,6 +467,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                 lblPreviewSec, txtPreview,
                 btnPreview, btnCopy, btnExport, btnClose
             });
+
+            ResumeLayout(false);
+            PerformLayout();
         }
 
         // ═══════════════════════════════════════

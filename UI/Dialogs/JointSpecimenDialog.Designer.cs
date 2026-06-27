@@ -45,7 +45,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             this.grpOptions = new System.Windows.Forms.GroupBox();
             this.chkCreateAdhesive = new System.Windows.Forms.CheckBox();
             this.chkCreateGrips = new System.Windows.Forms.CheckBox();
-            this.btnPreview = new System.Windows.Forms.Button();
+            this.lblPreviewStatus = new System.Windows.Forms.Label();
             this.btnCreate = new System.Windows.Forms.Button();
             this.btnCancel = new System.Windows.Forms.Button();
             this.SuspendLayout();
@@ -118,11 +118,11 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             this.chkCreateGrips.AutoSize = true;
             this.chkCreateGrips.Location = new System.Drawing.Point(180, 22);
             this.chkCreateGrips.Text = "그립/지그 생성";
-            // Buttons
-            this.btnPreview.Location = new System.Drawing.Point(140, 540);
-            this.btnPreview.Size = new System.Drawing.Size(90, 32);
-            this.btnPreview.Text = "미리보기";
-            this.btnPreview.Click += new System.EventHandler(this.btnPreview_Click);
+            // Preview Status
+            this.lblPreviewStatus.AutoSize = true;
+            this.lblPreviewStatus.Location = new System.Drawing.Point(12, 540);
+            this.lblPreviewStatus.Size = new System.Drawing.Size(440, 12);
+            this.lblPreviewStatus.Text = "";
             this.btnCreate.Location = new System.Drawing.Point(250, 540);
             this.btnCreate.Size = new System.Drawing.Size(90, 32);
             this.btnCreate.Text = "생성";
@@ -140,7 +140,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             this.Controls.Add(this.grpJoint);
             this.Controls.Add(this.grpTJoint);
             this.Controls.Add(this.grpOptions);
-            this.Controls.Add(this.btnPreview);
+            this.Controls.Add(this.lblPreviewStatus);
             this.Controls.Add(this.btnCreate);
             this.Controls.Add(this.btnCancel);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
@@ -199,7 +199,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
         private System.Windows.Forms.GroupBox grpOptions;
         private System.Windows.Forms.CheckBox chkCreateAdhesive;
         private System.Windows.Forms.CheckBox chkCreateGrips;
-        private System.Windows.Forms.Button btnPreview;
+        private System.Windows.Forms.Label lblPreviewStatus;
         private System.Windows.Forms.Button btnCreate;
         private System.Windows.Forms.Button btnCancel;
     }

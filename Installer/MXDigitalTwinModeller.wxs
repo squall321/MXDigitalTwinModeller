@@ -1,8 +1,9 @@
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
     <Package
         Name="MX Digital Twin Modeller"
         Manufacturer="MX Composites"
-        Version="1.0.0"
+        Version="1.4.0"
         UpgradeCode="A7E3B5C1-4D2F-4A8E-9B1C-6F3D8E2A1B5C"
         Scope="perMachine"
         InstallerVersion="500"
@@ -13,7 +14,17 @@
 
         <MediaTemplate EmbedCab="yes" />
 
-        <!-- Install directory structure -->
+        <!-- ================================================================ -->
+        <!-- Install UI (Welcome → License → InstallDir → Progress → Finish) -->
+        <!-- ================================================================ -->
+
+        <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+
+        <!-- ================================================================ -->
+        <!-- Directory structure                                               -->
+        <!-- ================================================================ -->
+
+        <!-- SpaceClaim Add-In: C:\ProgramData\SpaceClaim\AddIns\MXDigitalTwinModeller\V252 -->
         <StandardDirectory Id="CommonAppDataFolder">
             <Directory Id="SpaceClaimDir" Name="SpaceClaim">
                 <Directory Id="AddInsDir" Name="AddIns">
@@ -24,8 +35,31 @@
             </Directory>
         </StandardDirectory>
 
-        <!-- Components -->
-        <ComponentGroup Id="ProductComponents" Directory="INSTALLFOLDER">
+        <!-- Mechanical ACT Extension: %APPDATA%\Ansys\v252\ACT\extensions\MXSimulator -->
+        <StandardDirectory Id="AppDataFolder">
+            <Directory Id="AnsysDir" Name="Ansys">
+                <Directory Id="V252Dir" Name="v252">
+                    <Directory Id="ACTDir" Name="ACT">
+                        <Directory Id="ExtensionsDir" Name="extensions">
+                            <Directory Id="MECHANICALFOLDER" Name="MXSimulator">
+                                <Directory Id="MechanicalBinDir"    Name="bin" />
+                                <Directory Id="MechanicalImagesDir" Name="images" />
+                                <Directory Id="PostProcessDir"      Name="postprocess" />
+                                <Directory Id="CalibrationDir"      Name="calibration">
+                                    <Directory Id="CalibrationUtilsDir" Name="utils" />
+                                </Directory>
+                            </Directory>
+                        </Directory>
+                    </Directory>
+                </Directory>
+            </Directory>
+        </StandardDirectory>
+
+        <!-- ================================================================ -->
+        <!-- SpaceClaim Add-In                                                 -->
+        <!-- ================================================================ -->
+
+        <ComponentGroup Id="SpaceClaimComponents" Directory="INSTALLFOLDER">
             <Component Id="MainDll" Guid="*">
                 <File Id="MXDigitalTwinModeller.dll"
                       Source="$(BuildOutputDir)\MXDigitalTwinModeller.dll"
@@ -38,9 +72,223 @@
             </Component>
         </ComponentGroup>
 
-        <!-- Feature -->
-        <Feature Id="MainFeature" Title="MX Digital Twin Modeller" Level="1">
-            <ComponentGroupRef Id="ProductComponents" />
+        <!-- ================================================================ -->
+        <!-- Mechanical ACT Extension — XML                                    -->
+        <!-- ================================================================ -->
+
+        <!-- MXSimulator.xml goes in extensions root -->
+        <ComponentGroup Id="MechanicalExtensionXml" Directory="ExtensionsDir">
+            <Component Id="ExtensionXml" Guid="*">
+                <File Id="MXSimulator.xml" Name="MXSimulator.xml"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator.xml"
+                      KeyPath="yes" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- ================================================================ -->
+        <!-- Mechanical ACT Extension — Python scripts                         -->
+        <!-- ================================================================ -->
+
+        <ComponentGroup Id="MechanicalComponents" Directory="MECHANICALFOLDER">
+            <Component Id="MainPy" Guid="*">
+                <File Id="main.py"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\main.py"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="RunScript" Guid="*">
+                <File Id="run_cap_vibration.py"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\run_cap_vibration.py"
+                      KeyPath="yes" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- ================================================================ -->
+        <!-- Icons                                                             -->
+        <!-- ================================================================ -->
+
+        <ComponentGroup Id="MechanicalImages" Directory="MechanicalImagesDir">
+            <Component Id="CapVibrationIcon" Guid="*">
+                <File Id="cap_vibration.png"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\images\cap_vibration.png"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="ModalAnalysisIcon" Guid="*">
+                <File Id="modal_analysis.png"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\images\modal_analysis.png"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="AddScenarioIcon" Guid="*">
+                <File Id="add_scenario.png"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\images\add_scenario.png"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="FacePairIcon" Guid="*">
+                <File Id="face_pair.png"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\images\face_pair.png"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="PostProcessIcon" Guid="*">
+                <File Id="post_process.png"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\images\post_process.png"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="MaterialTwinIcon" Guid="*">
+                <File Id="material_twin.png"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\images\material_twin.png"
+                      KeyPath="yes" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- ================================================================ -->
+        <!-- Shared DLL (Mechanical bin)                                       -->
+        <!-- ================================================================ -->
+
+        <ComponentGroup Id="MechanicalBin" Directory="MechanicalBinDir">
+            <Component Id="SharedDll" Guid="*">
+                <File Id="MXDigitalTwinModeller.Core.dll"
+                      Source="$(ProjectDir)\bin\$(Configuration)\MXDigitalTwinModeller.Core.dll"
+                      KeyPath="yes" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- ================================================================ -->
+        <!-- Post-Process Viewer                                               -->
+        <!--   MXPostViewer.exe must be pre-built:                            -->
+        <!--     cd Mechanical\MXSimulator\postprocess                        -->
+        <!--     build_viewer.bat                                              -->
+        <!-- ================================================================ -->
+
+        <ComponentGroup Id="PostProcessComponents" Directory="PostProcessDir">
+            <!-- Standalone viewer (PyInstaller bundle) — primary launch target -->
+            <Component Id="PostViewerExe" Guid="*">
+                <File Id="MXPostViewer.exe"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\postprocess\MXPostViewer.exe"
+                      KeyPath="yes" />
+            </Component>
+
+            <!-- Python source fallback -->
+            <Component Id="RunnerPy" Guid="*">
+                <File Id="runner.py"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\postprocess\runner.py"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="AnalyzerPy" Guid="*">
+                <File Id="analyzer.py"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\postprocess\analyzer.py"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="VisualizerPy" Guid="*">
+                <File Id="visualizer.py"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\postprocess\visualizer.py"
+                      KeyPath="yes" />
+            </Component>
+
+            <!-- Setup helpers (for environments without the exe) -->
+            <Component Id="RequirementsTxt" Guid="*">
+                <File Id="requirements.txt"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\postprocess\requirements.txt"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="SetupVenvBat" Guid="*">
+                <File Id="setup_venv.bat"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\postprocess\setup_venv.bat"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="BuildViewerBat" Guid="*">
+                <File Id="build_viewer.bat"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\postprocess\build_viewer.bat"
+                      KeyPath="yes" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- ================================================================ -->
+        <!-- Material Twin Calibration Module                                  -->
+        <!--   MaterialCalibrator.exe must be pre-built:                      -->
+        <!--     cd Mechanical\MXSimulator\calibration                        -->
+        <!--     build_calibrator.bat                                         -->
+        <!-- ================================================================ -->
+
+        <ComponentGroup Id="CalibrationComponents" Directory="CalibrationDir">
+            <!-- Standalone calibrator (PyInstaller bundle) — primary -->
+            <Component Id="MaterialCalibratorExe" Guid="*">
+                <File Id="MaterialCalibrator.exe"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\calibration\MaterialCalibrator.exe"
+                      KeyPath="yes" />
+            </Component>
+
+            <!-- Python source fallback -->
+            <Component Id="CalibrationRunner" Guid="*">
+                <File Id="calibration_runner.py" Name="runner.py"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\calibration\runner.py"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="ElasticCalibrator" Guid="*">
+                <File Id="elastic_calibrator.py"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\calibration\elastic_calibrator.py"
+                      KeyPath="yes" />
+            </Component>
+
+            <!-- Setup helpers (from parent MXSimulator folder) -->
+            <Component Id="CalibrationRequirements" Guid="*">
+                <File Id="calibration_requirements.txt" Name="requirements.txt"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\requirements.txt"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="CalibrationSetupVenv" Guid="*">
+                <File Id="calibration_setup_venv.bat" Name="setup_venv.bat"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\setup_venv.bat"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="CalibrationInit" Guid="*">
+                <File Id="calibration_init.py" Name="__init__.py"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\calibration\__init__.py"
+                      KeyPath="yes" />
+            </Component>
+        </ComponentGroup>
+
+        <ComponentGroup Id="CalibrationUtils" Directory="CalibrationUtilsDir">
+            <Component Id="YamlParser" Guid="*">
+                <File Id="yaml_parser.py"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\calibration\utils\yaml_parser.py"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="CsvParser" Guid="*">
+                <File Id="csv_parser.py"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\calibration\utils\csv_parser.py"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="UtilsInit" Guid="*">
+                <File Id="calibration_utils_init.py" Name="__init__.py"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\calibration\utils\__init__.py"
+                      KeyPath="yes" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- ================================================================ -->
+        <!-- Features                                                          -->
+        <!-- ================================================================ -->
+
+        <Feature Id="SpaceClaimFeature" Title="SpaceClaim Add-In" Level="1"
+                 Description="SpaceClaim Add-In for composite specimen modeling">
+            <ComponentGroupRef Id="SpaceClaimComponents" />
         </Feature>
+
+        <Feature Id="MechanicalFeature" Title="Mechanical ACT Extension" Level="1"
+                 Description="ANSYS Mechanical ACT Extension for simulation and Material Twin">
+            <ComponentGroupRef Id="MechanicalExtensionXml" />
+            <ComponentGroupRef Id="MechanicalComponents" />
+            <ComponentGroupRef Id="MechanicalImages" />
+            <ComponentGroupRef Id="MechanicalBin" />
+            <Feature Id="PostProcessFeature" Title="Post-Process Viewer" Level="1"
+                     Description="Standalone PyQt5 viewer for FFT / FRF post-processing (MXPostViewer.exe)">
+                <ComponentGroupRef Id="PostProcessComponents" />
+            </Feature>
+            <Feature Id="MaterialTwinFeature" Title="Material Twin Calibration" Level="1"
+                     Description="Material property calibration from experimental data (MaterialCalibrator.exe)">
+                <ComponentGroupRef Id="CalibrationComponents" />
+                <ComponentGroupRef Id="CalibrationUtils" />
+            </Feature>
+        </Feature>
+
     </Package>
 </Wix>

@@ -77,6 +77,8 @@
     <Compile Include="Models\TensileTest\TensileSpecimenParameters.cs" />
     <Compile Include="Services\TensileTest\ASTMSpecimenFactory.cs" />
     <Compile Include="Services\TensileTest\SpecimenModelingService.cs" />
+    <Compile Include="Services\TensileTest\SpecimenMetadataService.cs" />
+    <Compile Include="Core\IO\YamlWriter.cs" />
     <Compile Include="UI\Dialogs\TensileSpecimenDialog.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -242,11 +244,100 @@
     <Compile Include="UI\Dialogs\ConformalMeshDialog.cs">
       <SubType>Form</SubType>
     </Compile>
+    <Compile Include="Commands\VoidCut\VoidCutCommand.cs" />
+    <Compile Include="Services\VoidCut\VoidCutService.cs" />
+    <Compile Include="UI\Dialogs\VoidCutDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="Models\GmshMesher\GmshMeshData.cs" />
+    <Compile Include="Models\GmshMesher\GmshMeshParameters.cs" />
+    <Compile Include="Services\GmshMesher\IGmshEngine.cs" />
+    <Compile Include="Services\GmshMesher\GmshGeoWriter.cs" />
+    <Compile Include="Services\GmshMesher\GmshMshParser.cs" />
+    <Compile Include="Services\GmshMesher\GmshCliEngine.cs" />
+    <Compile Include="Services\GmshMesher\GmshMeshService.cs" />
+    <Compile Include="Services\GmshMesher\MeshVisualizationService.cs" />
+    <Compile Include="Services\GmshMesher\GmshKFileWriter.cs" />
+    <Compile Include="Commands\GmshMesher\GmshMesherCommand.cs" />
+    <Compile Include="UI\Dialogs\GmshMesherDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <!-- Reverse Engineering (Stage 1 + 보강) -->
+    <Compile Include="Models\ReverseEngineer\CylinderRole.cs" />
+    <Compile Include="Models\ReverseEngineer\FaceAdjacency.cs" />
+    <Compile Include="Models\ReverseEngineer\FaceFeature.cs" />
+    <Compile Include="Models\ReverseEngineer\WallFeature.cs" />
+    <Compile Include="Models\ReverseEngineer\FilletFeature.cs" />
+    <Compile Include="Models\ReverseEngineer\FilletChain.cs" />
+    <Compile Include="Models\ReverseEngineer\HoleFeature.cs" />
+    <Compile Include="Models\ReverseEngineer\BossFeature.cs" />
+    <Compile Include="Models\ReverseEngineer\SlitFeature.cs" />
+    <Compile Include="Models\ReverseEngineer\FeatureGraph.cs" />
+    <Compile Include="Models\ReverseEngineer\FeatureGraphPatterns.cs" />
+    <Compile Include="Models\ReverseEngineer\PhoneParameters.cs" />
+    <Compile Include="Services\ReverseEngineer\Generation\GenerationService.cs" />
+    <Compile Include="Services\ReverseEngineer\Generation\CurvedShellBuilder.cs" />
+    <Compile Include="Services\ReverseEngineer\Generation\FeatureHandle.cs" />
+    <Compile Include="Services\ReverseEngineer\ModelScale.cs" />
+    <Compile Include="Services\ReverseEngineer\FaceClassifier.cs" />
+    <Compile Include="Services\ReverseEngineer\AdjacencyBuilder.cs" />
+    <Compile Include="Services\ReverseEngineer\CylinderRoleClassifier.cs" />
+    <Compile Include="Services\ReverseEngineer\RadiusSnapper.cs" />
+    <Compile Include="Services\ReverseEngineer\FilletChainGrouper.cs" />
+    <Compile Include="Services\ReverseEngineer\HoleDetector.cs" />
+    <Compile Include="Services\ReverseEngineer\BossDetector.cs" />
+    <Compile Include="Services\ReverseEngineer\SlitDetector.cs" />
+    <Compile Include="Services\ReverseEngineer\PatternDetector.cs" />
+    <Compile Include="Services\ReverseEngineer\TestModelGenerator.cs" />
+    <Compile Include="Services\ReverseEngineer\SelfTestRunner.cs" />
+    <Compile Include="Services\ReverseEngineer\FeatureExtractor.cs" />
+    <Compile Include="Services\ReverseEngineer\FeatureGraphJsonWriter.cs" />
+    <Compile Include="Services\ReverseEngineer\ModificationService.cs" />
+    <Compile Include="Services\ReverseEngineer\ModificationHistory.cs" />
+    <Compile Include="Services\ReverseEngineer\LlmToolRegistry.cs" />
+    <Compile Include="Services\ReverseEngineer\LlmToolDispatcher.cs" />
+    <Compile Include="Services\ReverseEngineer\Mcp\ApiThreadMarshaller.cs" />
+    <Compile Include="Services\ReverseEngineer\Mcp\SessionContext.cs" />
+    <Compile Include="Services\ReverseEngineer\Mcp\McpToolAdapter.cs" />
+    <Compile Include="Services\ReverseEngineer\Mcp\JsonLite.cs" />
+    <Compile Include="Services\ReverseEngineer\Mcp\McpServer.cs" />
+    <Compile Include="Services\ReverseEngineer\LlmClient.cs" />
+    <Compile Include="Services\ReverseEngineer\AutoFilletService.cs" />
+    <Compile Include="Services\ReverseEngineer\FeatureGraphDiffer.cs" />
+    <Compile Include="Services\ReverseEngineer\PartBodyTraversal.cs" />
+    <Compile Include="Services\ReverseEngineer\StepImportService.cs" />
+    <Compile Include="Services\ReverseEngineer\RoundTripTestRunner.cs" />
+    <Compile Include="Services\ReverseEngineer\StepRoundTripRunner.cs" />
+    <Compile Include="Services\ReverseEngineer\FeatureVisualizer.cs" />
+    <Compile Include="Services\ReverseEngineer\RealModelPipeline.cs" />
+    <Compile Include="Services\ReverseEngineer\RealModelPipelineSelfTest.cs" />
+    <Compile Include="Commands\ReverseEngineer\ExtractFeaturesCommand.cs" />
+    <Compile Include="Commands\ReverseEngineer\RunRETestSuiteCommand.cs" />
+    <Compile Include="Commands\ReverseEngineer\VisualizeFeatureGraphCommand.cs" />
+    <Compile Include="Commands\ReverseEngineer\AskClaudeCommand.cs" />
+    <Compile Include="Commands\ReverseEngineer\GateMarshalTestCommand.cs" />
+    <Compile Include="Commands\ReverseEngineer\ChangeDimensionCommand.cs" />
+    <Compile Include="Commands\ReverseEngineer\ShowModificationHistoryCommand.cs" />
+    <Compile Include="Commands\ReverseEngineer\AnalyzeRealModelCommand.cs" />
+    <Compile Include="UI\Dialogs\ExtractFeaturesDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
+    <Compile Include="UI\Dialogs\RunRETestSuiteDialog.cs">
+      <SubType>Form</SubType>
+    </Compile>
   </ItemGroup>
 
   <ItemGroup>
     <None Include="MXDigitalTwinModeller.Manifest.xml">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </None>
+    <None Include="Libs\gmsh\gmsh.exe">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>Libs\gmsh\gmsh.exe</Link>
+    </None>
+    <None Include="Libs\gmsh\gmsh-4.15.dll">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>Libs\gmsh\gmsh-4.15.dll</Link>
     </None>
   </ItemGroup>
 
@@ -268,6 +359,8 @@
     <EmbeddedResource Include="Resources\Icons\Material_32.png" />
     <EmbeddedResource Include="Resources\Icons\Pipeline_32.png" />
     <EmbeddedResource Include="Resources\Icons\ConformalMesh_32.png" />
+    <EmbeddedResource Include="Resources\Icons\VoidCut_32.png" />
+    <EmbeddedResource Include="Resources\Icons\GmshMesher_32.png" />
   </ItemGroup>
 
   <ItemGroup>
@@ -276,12 +369,23 @@
 
   <Import Project="$(MSBuildBinPath)\Microsoft.CSharp.targets" />
 
-  <!-- Deploy Mechanical ACT Extension after build -->
+  <!--
+    ================================================================
+    Deploy Mechanical ACT Extension after build
+    ================================================================
+    BUILD_PIPELINE_PLAN.md Phase B 적용:
+    - calibration/ 전체 (Python + utils/ + EXE) 복사
+    - 누락 아이콘 3개 (tied_check, material_twin, kfile_export) 추가
+    - Shared DLL 을 SpaceClaim V252\ 폴더에도 복사
+    - Ribbon cache 자동 클리어 (별도 Target)
+  -->
   <Target Name="DeployMechanicalExtension" AfterTargets="Build">
     <PropertyGroup>
       <MechanicalExtDir>$(APPDATA)\ANSYS\v252\ACT\extensions\MXSimulator</MechanicalExtDir>
+      <MechanicalExtParent>$(APPDATA)\ANSYS\v252\ACT\extensions</MechanicalExtParent>
       <SharedDllProject>$(ProjectDir)Shared\MXDigitalTwinModeller.Core\MXDigitalTwinModeller.Core.csproj</SharedDllProject>
       <SharedDllSource>$(ProjectDir)bin\$(Configuration)\MXDigitalTwinModeller.Core.dll</SharedDllSource>
+      <SpaceClaimAddInDir>$(OutputPath)</SpaceClaimAddInDir>
     </PropertyGroup>
 
     <!-- Build Shared DLL first -->
@@ -290,27 +394,75 @@
              Properties="Configuration=$(Configuration);Platform=AnyCPU"
              Condition="Exists('$(SharedDllProject)')" />
 
-    <!-- Create target directory -->
+    <!-- Create target directories -->
     <MakeDir Directories="$(MechanicalExtDir)" Condition="!Exists('$(MechanicalExtDir)')" />
     <MakeDir Directories="$(MechanicalExtDir)\bin" Condition="!Exists('$(MechanicalExtDir)\bin')" />
     <MakeDir Directories="$(MechanicalExtDir)\images" Condition="!Exists('$(MechanicalExtDir)\images')" />
+    <MakeDir Directories="$(MechanicalExtDir)\postprocess" Condition="!Exists('$(MechanicalExtDir)\postprocess')" />
+    <MakeDir Directories="$(MechanicalExtDir)\calibration" Condition="!Exists('$(MechanicalExtDir)\calibration')" />
+    <MakeDir Directories="$(MechanicalExtDir)\calibration\utils" Condition="!Exists('$(MechanicalExtDir)\calibration\utils')" />
 
-    <!-- Copy extension files -->
-    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\extension.xml"
+    <!-- Copy MXSimulator.xml to extensions parent -->
+    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator.xml"
+          DestinationFiles="$(MechanicalExtParent)\MXSimulator.xml"
+          SkipUnchangedFiles="true" />
+
+    <!-- Copy main Python script + run_cap_vibration + venv setup -->
+    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\main.py;
+                       $(ProjectDir)Mechanical\MXSimulator\run_cap_vibration.py;
+                       $(ProjectDir)Mechanical\MXSimulator\setup_venv.bat;
+                       $(ProjectDir)Mechanical\MXSimulator\requirements.txt"
           DestinationFolder="$(MechanicalExtDir)"
           SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\main.py"
-          DestinationFolder="$(MechanicalExtDir)"
-          SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\README.md"
-          DestinationFolder="$(MechanicalExtDir)"
-          SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\IMPLEMENTATION_PLAN.md"
-          DestinationFolder="$(MechanicalExtDir)"
-          SkipUnchangedFiles="true" />
-    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\images\cap_vibration.png"
+
+    <!-- Copy all 8 icons (was 5; added tied_check, material_twin, kfile_export) -->
+    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\images\cap_vibration.png;
+                       $(ProjectDir)Mechanical\MXSimulator\images\modal_analysis.png;
+                       $(ProjectDir)Mechanical\MXSimulator\images\add_scenario.png;
+                       $(ProjectDir)Mechanical\MXSimulator\images\face_pair.png;
+                       $(ProjectDir)Mechanical\MXSimulator\images\post_process.png;
+                       $(ProjectDir)Mechanical\MXSimulator\images\tied_check.png;
+                       $(ProjectDir)Mechanical\MXSimulator\images\material_twin.png;
+                       $(ProjectDir)Mechanical\MXSimulator\images\kfile_export.png"
           DestinationFolder="$(MechanicalExtDir)\images"
           SkipUnchangedFiles="true" />
+
+    <!-- Copy postprocess (Python source + EXE if built) -->
+    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\postprocess\runner.py;
+                       $(ProjectDir)Mechanical\MXSimulator\postprocess\analyzer.py;
+                       $(ProjectDir)Mechanical\MXSimulator\postprocess\visualizer.py;
+                       $(ProjectDir)Mechanical\MXSimulator\postprocess\requirements.txt;
+                       $(ProjectDir)Mechanical\MXSimulator\postprocess\setup_venv.bat;
+                       $(ProjectDir)Mechanical\MXSimulator\postprocess\build_viewer.bat"
+          DestinationFolder="$(MechanicalExtDir)\postprocess"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\postprocess\MXPostViewer.exe"
+          DestinationFolder="$(MechanicalExtDir)\postprocess"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(ProjectDir)Mechanical\MXSimulator\postprocess\MXPostViewer.exe')" />
+    <Message Text="WARNING: MXPostViewer.exe not found - Post-Process viewer will use Python fallback"
+             Importance="high"
+             Condition="!Exists('$(ProjectDir)Mechanical\MXSimulator\postprocess\MXPostViewer.exe')" />
+
+    <!-- Copy calibration (Python module + utils + EXE if built) -->
+    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\calibration\__init__.py;
+                       $(ProjectDir)Mechanical\MXSimulator\calibration\runner.py;
+                       $(ProjectDir)Mechanical\MXSimulator\calibration\elastic_calibrator.py;
+                       $(ProjectDir)Mechanical\MXSimulator\calibration\run_elastic_calibration.py"
+          DestinationFolder="$(MechanicalExtDir)\calibration"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\calibration\utils\__init__.py;
+                       $(ProjectDir)Mechanical\MXSimulator\calibration\utils\csv_parser.py;
+                       $(ProjectDir)Mechanical\MXSimulator\calibration\utils\yaml_parser.py"
+          DestinationFolder="$(MechanicalExtDir)\calibration\utils"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\calibration\MaterialCalibrator.exe"
+          DestinationFolder="$(MechanicalExtDir)\calibration"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(ProjectDir)Mechanical\MXSimulator\calibration\MaterialCalibrator.exe')" />
+    <Message Text="WARNING: MaterialCalibrator.exe not found - Material Twin will use Python fallback"
+             Importance="high"
+             Condition="!Exists('$(ProjectDir)Mechanical\MXSimulator\calibration\MaterialCalibrator.exe')" />
 
     <!-- Copy Shared DLL to Mechanical extension bin folder -->
     <Copy SourceFiles="$(SharedDllSource)"
@@ -318,14 +470,66 @@
           SkipUnchangedFiles="true"
           Condition="Exists('$(SharedDllSource)')" />
 
+    <!-- Copy Shared DLL to SpaceClaim Add-In folder (V252\) — for SpaceClaim 측 참조 -->
+    <Copy SourceFiles="$(SharedDllSource)"
+          DestinationFolder="$(SpaceClaimAddInDir)"
+          SkipUnchangedFiles="true"
+          Condition="Exists('$(SharedDllSource)')" />
+
     <Message Text="Mechanical ACT Extension deployed to: $(MechanicalExtDir)" Importance="high" />
-    <Message Text="Shared DLL deployed: $(SharedDllSource) -&gt; $(MechanicalExtDir)\bin\" Importance="high" Condition="Exists('$(SharedDllSource)')" />
+    <Message Text="Shared DLL deployed: -&gt; $(MechanicalExtDir)\bin\ AND $(SpaceClaimAddInDir)" Importance="high" Condition="Exists('$(SharedDllSource)')" />
   </Target>
 
-  <!-- Build MSI installer after main build -->
-  <Target Name="BuildInstaller" AfterTargets="Build">
-    <Exec Command="wix build &quot;$(ProjectDir)Installer\MXDigitalTwinModeller.wxs&quot; -d BuildOutputDir=&quot;$(OutputPath.TrimEnd('\\'))&quot; -o &quot;$(ProjectDir)Installer\MXDigitalTwinModeller.msi&quot; -arch x64 --nologo"
-          IgnoreExitCode="false" />
-    <Message Text="MSI installer built: $(ProjectDir)Installer\MXDigitalTwinModeller.msi" Importance="high" />
+  <!--
+    ================================================================
+    Clear Workbench Ribbon Cache after deploy
+    ================================================================
+    캐시 stale 로 새 버튼/아이콘 인식 안 되는 문제 방지.
+    매 빌드마다 실행 (BUILD_PIPELINE_PLAN.md 결정 5.2).
+  -->
+  <Target Name="ClearWorkbenchRibbonCache" AfterTargets="DeployMechanicalExtension">
+    <PropertyGroup>
+      <RibbonCacheDir>$(APPDATA)\Ansys\v252\Applets\DSApplet\en-us</RibbonCacheDir>
+    </PropertyGroup>
+    <Delete Files="$(RibbonCacheDir)\ExternalActions.xml;
+                   $(RibbonCacheDir)\ribbonLayout.xml;
+                   $(RibbonCacheDir)\RibbonState.xml"
+            ContinueOnError="true" />
+    <Message Text="Workbench ribbon cache cleared: $(RibbonCacheDir)" Importance="high" />
+  </Target>
+
+  <!--
+    ================================================================
+    Build MSI installer after main build
+    ================================================================
+    PyInstaller EXE 미존재 시 wix build 실패 가능 →
+    EXE 존재 확인 후 분기 (BUILD_PIPELINE_PLAN.md Phase B-5).
+  -->
+  <Target Name="BuildInstaller" AfterTargets="ClearWorkbenchRibbonCache">
+    <PropertyGroup>
+      <CalibratorExeExists Condition="Exists('$(ProjectDir)Mechanical\MXSimulator\calibration\MaterialCalibrator.exe')">true</CalibratorExeExists>
+      <CalibratorExeExists Condition="!Exists('$(ProjectDir)Mechanical\MXSimulator\calibration\MaterialCalibrator.exe')">false</CalibratorExeExists>
+      <ViewerExeExists Condition="Exists('$(ProjectDir)Mechanical\MXSimulator\postprocess\MXPostViewer.exe')">true</ViewerExeExists>
+      <ViewerExeExists Condition="!Exists('$(ProjectDir)Mechanical\MXSimulator\postprocess\MXPostViewer.exe')">false</ViewerExeExists>
+      <CanBuildMsi>false</CanBuildMsi>
+      <CanBuildMsi Condition="'$(CalibratorExeExists)' == 'true' AND '$(ViewerExeExists)' == 'true'">true</CanBuildMsi>
+    </PropertyGroup>
+
+    <Message Text="MSI build skipped: PyInstaller EXE(s) missing. Run build.ps1 (or build_calibrator.bat / build_viewer.bat) to build them first."
+             Importance="high"
+             Condition="'$(CanBuildMsi)' != 'true'" />
+    <Message Text="  - MaterialCalibrator.exe: $(CalibratorExeExists)"
+             Importance="high"
+             Condition="'$(CanBuildMsi)' != 'true'" />
+    <Message Text="  - MXPostViewer.exe: $(ViewerExeExists)"
+             Importance="high"
+             Condition="'$(CanBuildMsi)' != 'true'" />
+
+    <Exec Command="wix build &quot;$(ProjectDir)Installer\MXDigitalTwinModeller.wxs&quot; -d BuildOutputDir=&quot;$(OutputPath.TrimEnd('\\'))&quot; -d ProjectDir=&quot;$(ProjectDir.TrimEnd('\\'))&quot; -d Configuration=$(Configuration) -ext WixToolset.UI.wixext -o &quot;$(ProjectDir)Installer\MXDigitalTwinModeller.msi&quot; -arch x64 --nologo"
+          IgnoreExitCode="false"
+          Condition="'$(CanBuildMsi)' == 'true'" />
+    <Message Text="MSI installer built: $(ProjectDir)Installer\MXDigitalTwinModeller.msi"
+             Importance="high"
+             Condition="'$(CanBuildMsi)' == 'true'" />
   </Target>
 </Project>

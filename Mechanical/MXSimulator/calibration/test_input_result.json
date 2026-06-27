@@ -1,0 +1,39 @@
+{
+  "success": true,
+  "calibration_type": "elastic",
+  "result": {
+    "E_modulus": 100000.0,
+    "poisson_ratio": 0.3,
+    "density": 7850.0,
+    "elastic_limit_stress": 200.0,
+    "r_squared": 1.0,
+    "num_points_used": 11,
+    "strain": [
+      0.0,
+      0.0002,
+      0.0004,
+      0.0006,
+      0.0008,
+      0.001,
+      0.0012,
+      0.0014000000000000002,
+      0.0016,
+      0.0018,
+      0.002
+    ],
+    "stress": [
+      0.0,
+      20.0,
+      40.0,
+      60.0,
+      80.0,
+      100.0,
+      120.0,
+      140.0,
+      160.0,
+      180.0,
+      200.0
+    ],
+    "suggested_material": "Unknown Material"
+  }
+}

@@ -185,9 +185,41 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Laminate
                 Ellipse newEllipse = Ellipse.Create(newFrame, ellipse.MajorRadius, ellipse.MinorRadius);
                 return CurveSegment.Create(newEllipse, curve.Bounds);
             }
+            else if (geometry is NurbsCurve nurbs)
+            {
+                // NurbsCurve: 제어점 평행이동 (수학적으로 정확)
+                var origCPs = nurbs.ControlPoints;
+                var newCPs = new ControlPoint[origCPs.Length];
+                for (int i = 0; i < origCPs.Length; i++)
+                    newCPs[i] = new ControlPoint(origCPs[i].Position + translation, origCPs[i].Weight);
+                NurbsCurve newNurbs = NurbsCurve.CreateFromControlPoints(nurbs.Data, newCPs);
+                return CurveSegment.Create(newNurbs, curve.Bounds);
+            }
             else
             {
-                // 기타 커브: 시작점/끝점 직선 근사 (Fallback)
+                // 기타 커브: 점 샘플링으로 형상 보존
+                try
+                {
+                    var points = new List<Point>();
+                    double tStart = curve.Bounds.Start;
+                    double tEnd = curve.Bounds.End;
+                    for (int i = 0; i <= 32; i++)
+                    {
+                        double t = tStart + (tEnd - tStart) * i / 32.0;
+                        points.Add(curve.Geometry.Evaluate(t).Point + translation);
+                    }
+                    NurbsCurve nc = NurbsCurve.CreateThroughPoints(false, points, 1e-6);
+                    if (nc != null)
+                    {
+                        var pBounds = nc.Parameterization.Bounds;
+                        double pStart = pBounds.Start ?? 0;
+                        double pEnd = pBounds.End ?? 1;
+                        return CurveSegment.Create(nc, Interval.Create(pStart, pEnd));
+                    }
+                }
+                catch { }
+
+                // 최후 Fallback: 직선 근사
                 Point startPt = curve.StartPoint + translation;
                 Point endPt = curve.EndPoint + translation;
                 return CurveSegment.Create(startPt, endPt);

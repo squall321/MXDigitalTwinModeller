@@ -79,6 +79,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
         private void InitializeLayout()
         {
+            SuspendLayout();
             Text = "Load Definition (하중 정의)";
             Width = 1100;
             Height = 790;
@@ -86,6 +87,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             MinimizeBox = false;
             MaximizeBox = false;
             FormBorderStyle = FormBorderStyle.FixedDialog;
+            AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
+            AutoScaleMode = AutoScaleMode.Font;
 
             var font = new Font("Segoe UI", 9f);
             var monoFont = new Font("Consolas", 9f);
@@ -386,6 +389,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                 lblList, lstLoads,
                 btnAdd, btnUpdate, btnDelete, btnClose
             });
+
+            ResumeLayout(false);
+            PerformLayout();
         }
 
         // ═══════════════════════════════════════
@@ -570,19 +576,31 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                     throw new ArgumentException("Target frequency must be positive.");
                 ld.PwmTargetFrequency = targetFreq;
 
-                int nHarmonics = dgvHarmonics.Rows.Count;
-                if (nHarmonics < 1) nHarmonics = 1;
+                int sourceCount = dgvHarmonics.Rows.Count;
+                if (sourceCount < 1)
+                    throw new ArgumentException("Add at least one source harmonic before optimizing.");
+
+                int nCorrections = Math.Max(sourceCount, 3);
 
                 btnOptimize.Enabled = false;
                 btnOptimize.Text = "...";
                 System.Windows.Forms.Application.DoEvents();
 
-                LoadService.OptimizePwmHarmonics(ld, nHarmonics);
+                LoadService.OptimizePwmHarmonics(ld, nCorrections);
 
-                // Update DataGridView with optimized harmonics
-                dgvHarmonics.Rows.Clear();
-                foreach (var h in ld.PwmHarmonics)
+                // Update DataGridView: update existing source rows + append correction rows
+                // Source rows: update amplitude/phase (frequency unchanged)
+                for (int i = 0; i < sourceCount && i < ld.PwmHarmonics.Count; i++)
                 {
+                    var h = ld.PwmHarmonics[i];
+                    dgvHarmonics.Rows[i].Cells["colFreq"].Value = h.Frequency.ToString("F2", CultureInfo.InvariantCulture);
+                    dgvHarmonics.Rows[i].Cells["colAmp"].Value = h.Amplitude.ToString("F2", CultureInfo.InvariantCulture);
+                    dgvHarmonics.Rows[i].Cells["colPhase"].Value = h.Phase.ToString("F1", CultureInfo.InvariantCulture);
+                }
+                // Correction rows: append new rows
+                for (int i = sourceCount; i < ld.PwmHarmonics.Count; i++)
+                {
+                    var h = ld.PwmHarmonics[i];
                     dgvHarmonics.Rows.Add(
                         h.Frequency.ToString("F2", CultureInfo.InvariantCulture),
                         h.Amplitude.ToString("F2", CultureInfo.InvariantCulture),

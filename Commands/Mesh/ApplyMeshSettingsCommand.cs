@@ -14,6 +14,7 @@ using SpaceClaim.Api.V252.Modeler;
 
 namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Mesh
 {
+    // @lat: [[mesh#Mesh 설정]]
     public class ApplyMeshSettingsCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.ApplyMeshSettings";

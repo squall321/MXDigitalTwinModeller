@@ -1,0 +1,10 @@
+bbox: vol=77619.0 faces=6  Z=[0.000,7.400] X=[-73.4,73.4] Y=[-35.8,35.8] mm
+pocket: success=True dV=-7857.7 (expect -7800.0) msg=None
+  hole@(-70.0,-33.0) success=True dV=-80.33 faces 11->12 axisMid(expect F)=True msg=
+  hole@(70.0,-33.0) success=True dV=-3.58 faces 12->13 axisMid(expect F)=True msg=
+  hole@(-70.0,33.0) success=True dV=-1.06 faces 13->14 axisMid(expect F)=True msg=
+  hole@(70.0,33.0) success=True dV=-0.68 faces 14->15 axisMid(expect F)=True msg=
+holes: 4/4 ok
+boss: success=True dV=289.4 (expect +169.6) msg=None
+ORACLE vol_measured=69965.0 vol_analytic=69616.7 delta=348.4 (0.50%) faces=18
+P0_PASS closed=True vol_ok=True ALL=True

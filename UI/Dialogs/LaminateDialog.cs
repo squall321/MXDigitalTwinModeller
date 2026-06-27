@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Core.UI;
@@ -30,6 +31,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
         private readonly SolidLaminateService solidService;
         private Part activePart;
         private List<DesignBody> previewBodies;
+        private Timer previewTimer;
 
         // 면 기반 모드 - 선택된 면
         private DesignFace selectedFace;
@@ -68,8 +70,21 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             activePart = part;
             previewBodies = new List<DesignBody>();
 
+            previewTimer = new Timer();
+            previewTimer.Interval = 300;
+            previewTimer.Tick += PreviewTimer_Tick;
+
             InitializeLayerGrid();
             UpdateTotalThickness();
+
+            // 파라미터 변경 시 자동 미리보기
+            numWidth.ValueChanged += (s, ev) => SchedulePreview();
+            numLength.ValueChanged += (s, ev) => SchedulePreview();
+            cmbStackDir.SelectedIndexChanged += (s, ev) => SchedulePreview();
+            cmbOffsetDir.SelectedIndexChanged += (s, ev) => SchedulePreview();
+            chkShareTopology.CheckedChanged += (s, ev) => SchedulePreview();
+            chkInterfaceNS.CheckedChanged += (s, ev) => SchedulePreview();
+            chkDeleteOriginal.CheckedChanged += (s, ev) => SchedulePreview();
 
             this.TopMost = true;
             this.FormClosing += LaminateDialog_FormClosing;
@@ -100,6 +115,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
             // 모드 전환 시 미리보기 정리
             CleanupPreview();
+            lblPreviewStatus.Text = "";
         }
 
         // =============================================
@@ -153,6 +169,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                 lblFaceInfo.Text = string.Format("법선: ({0:F2}, {1:F2}, {2:F2})",
                     normal.X, normal.Y, normal.Z);
                 lblFaceInfo.ForeColor = System.Drawing.Color.Black;
+                SchedulePreview();
             }
             catch (Exception ex)
             {
@@ -177,6 +194,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                 }
 
                 // 현재 선택된 객체에서 DesignBody 찾기
+                // (직접 바디, 면→부모 바디, 컴포넌트→내부 바디 모두 지원)
                 DesignBody body = null;
                 foreach (var obj in window.ActiveContext.Selection)
                 {
@@ -190,6 +208,26 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                         body = face.Parent as DesignBody;
                         if (body != null) break;
                     }
+
+                    // Component가 선택된 경우 내부 첫 번째 바디 사용
+                    var comp = obj as Component;
+                    if (comp != null)
+                    {
+                        var compPart = comp.Content as Part;
+                        if (compPart != null && compPart.Bodies.Count > 0)
+                        {
+                            foreach (var b in compPart.Bodies) { body = b; break; }
+                            if (body != null) break;
+                        }
+                    }
+                }
+
+                // 바디의 소속 Part로 activePart 갱신 (컴포넌트 내부 바디 지원)
+                if (body != null)
+                {
+                    var bodyPart = body.Parent as Part;
+                    if (bodyPart != null)
+                        activePart = bodyPart;
                 }
 
                 if (body == null)
@@ -197,7 +235,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                     ValidationHelper.ShowError(
                         "바디가 선택되지 않았습니다.\n\n" +
                         "SpaceClaim에서 솔리드 바디를 먼저 선택한 후\n" +
-                        "\"바디 선택 (Pick)\" 버튼을 다시 눌러주세요.",
+                        "\"바디 선택 (Pick)\" 버튼을 다시 눌러주세요.\n\n" +
+                        "컴포넌트 내부 바디도 선택 가능합니다.",
                         "바디 선택");
                     return;
                 }
@@ -223,6 +262,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                 Vector n = analysis.StackingNormal;
                 lblDetectedNormal.Text = string.Format("적층 방향: ({0:F2}, {1:F2}, {2:F2})",
                     n.X, n.Y, n.Z);
+                SchedulePreview();
             }
             catch (Exception ex)
             {
@@ -253,6 +293,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
             RefreshGrid();
             UpdateTotalThickness();
+            SchedulePreview();
         }
 
         // =============================================
@@ -297,6 +338,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             layerBindingList.Add(new LaminateLayerDefinition(name, 0.25));
             RefreshGrid();
             UpdateTotalThickness();
+            SchedulePreview();
 
             // 새로 추가된 행 선택
             if (dgvLayers.Rows.Count > 0)
@@ -318,6 +360,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                 layerBindingList.RemoveAt(idx);
                 RefreshGrid();
                 UpdateTotalThickness();
+                SchedulePreview();
             }
         }
 
@@ -361,6 +404,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
         {
             SyncGridToBindingList();
             UpdateTotalThickness();
+            SchedulePreview();
         }
 
         private void dgvLayers_CellValueChanged(object sender, DataGridViewCellEventArgs e)
@@ -532,18 +576,56 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
         }
 
         // =============================================
-        //  미리보기 / 생성 / 취소
+        //  자동 미리보기
         // =============================================
 
-        private void btnPreview_Click(object sender, EventArgs e)
+        private void SchedulePreview()
         {
-            if (!ValidateInputs()) return;
+            previewTimer.Stop();
+            previewTimer.Start();
+        }
 
+        private void PreviewTimer_Tick(object sender, EventArgs e)
+        {
+            previewTimer.Stop();
+            ExecuteAutoPreview();
+        }
+
+        private bool ValidateInputsSilent()
+        {
+            string errorMessage;
+            if (IsRectangularMode)
+            {
+                var p = ReadRectangularParams();
+                return p.Validate(out errorMessage);
+            }
+            else if (IsSolidMode)
+            {
+                if (selectedBody == null || solidAnalysis == null || !solidAnalysis.IsValid)
+                    return false;
+                var p = ReadSolidParams();
+                return p.Validate(out errorMessage);
+            }
+            else
+            {
+                if (selectedFace == null) return false;
+                var p = ReadSurfaceParams();
+                return p.Validate(out errorMessage);
+            }
+        }
+
+        private void ExecuteAutoPreview()
+        {
+            if (!ValidateInputsSilent())
+            {
+                CleanupPreview();
+                lblPreviewStatus.Text = "";
+                return;
+            }
             try
             {
                 CleanupPreview();
 
-                // WriteBlock 밖에서 UI 파라미터 읽기
                 bool isRect = IsRectangularMode;
                 bool isSolid = IsSolidMode;
                 RectangularLaminateParameters rectParams = isRect ? ReadRectangularParams() : null;
@@ -553,35 +635,28 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                 DesignBody body = selectedBody;
                 SolidAnalysisResult analysis = solidAnalysis;
 
-                // 미리보기에서는 원본 삭제하지 않음
                 if (solidParams != null)
                     solidParams.DeleteOriginalBody = false;
 
                 WriteBlock.ExecuteTask("Laminate Preview", () =>
                 {
                     List<DesignBody> bodies;
-
                     if (isRect)
-                    {
                         bodies = rectService.CreateRectangularLaminate(activePart, rectParams);
-                    }
                     else if (isSolid)
-                    {
                         bodies = solidService.CreateSolidLaminate(activePart, body, analysis, solidParams);
-                    }
                     else
-                    {
                         bodies = surfaceService.CreateSurfaceLaminate(activePart, face, surfParams);
-                    }
-
                     previewBodies.AddRange(bodies);
                 });
+                Window.ActiveWindow?.ZoomExtents();
+                lblPreviewStatus.ForeColor = Color.Green;
+                lblPreviewStatus.Text = "미리보기 적용됨";
             }
             catch (Exception ex)
             {
-                ValidationHelper.ShowError(
-                    string.Format("미리보기 생성 중 오류가 발생했습니다:\n\n{0}", ex.Message),
-                    "미리보기 오류");
+                lblPreviewStatus.ForeColor = Color.Red;
+                lblPreviewStatus.Text = ex.Message.Split('\n')[0];
             }
         }
 
@@ -679,6 +754,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
         private void LaminateDialog_FormClosing(object sender, FormClosingEventArgs e)
         {
+            previewTimer.Stop();
+            previewTimer.Dispose();
             if (DialogResult != DialogResult.OK)
             {
                 CleanupPreview();

@@ -14,6 +14,7 @@ using SpaceClaim.Api.V252.Modeler;
 
 namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Joint
 {
+    // @lat: [[specimens#Joint 시편]]
     public class CreateJointSpecimenCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.CreateJointSpecimen";

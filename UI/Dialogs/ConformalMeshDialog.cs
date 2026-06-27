@@ -57,11 +57,14 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
         private void InitializeLayout()
         {
+            SuspendLayout();
             Text = "Conformal Mesh from STEP";
             Size = new Size(780, 580);
             MinimumSize = new Size(640, 480);
             StartPosition = FormStartPosition.CenterScreen;
             FormBorderStyle = FormBorderStyle.Sizable;
+            AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
+            AutoScaleMode = AutoScaleMode.Font;
             Font = new Font("Segoe UI", 9F);
 
             int y = 10;
@@ -255,6 +258,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             };
             Controls.Add(txtLog);
             _logExpanded = false;
+
+            ResumeLayout(false);
+            PerformLayout();
         }
 
         private void ToggleLog()

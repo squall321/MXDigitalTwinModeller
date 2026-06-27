@@ -50,6 +50,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
         private void InitializeLayout()
         {
+            SuspendLayout();
             Text = "Material Properties (재료 물성) - mm/tonne/s";
             Width = 1060;
             Height = 680;
@@ -57,6 +58,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             MinimizeBox = false;
             MaximizeBox = false;
             FormBorderStyle = FormBorderStyle.FixedDialog;
+            AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
+            AutoScaleMode = AutoScaleMode.Font;
 
             // ═══════════════════════════════════════
             // 왼쪽: 물성 요약 테이블
@@ -343,6 +346,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                 btnApply, btnCopy, btnClose,
                 txtResult
             });
+
+            ResumeLayout(false);
+            PerformLayout();
         }
 
         private readonly List<DesignBody> _bodies = new List<DesignBody>();

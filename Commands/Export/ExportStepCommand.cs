@@ -13,6 +13,7 @@ using SpaceClaim.Api.V252.Extensibility;
 
 namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Export
 {
+    // @lat: [[mesh#STEP 내보내기]]
     public class ExportStepCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.ExportStep";

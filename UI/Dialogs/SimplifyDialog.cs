@@ -30,6 +30,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
         private void InitializeLayout()
         {
+            SuspendLayout();
             Text = "Simplify (바디 단순화)";
             Width = 580;
             Height = 520;
@@ -37,6 +38,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             MinimizeBox = false;
             MaximizeBox = false;
             FormBorderStyle = FormBorderStyle.FixedDialog;
+            AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
+            AutoScaleMode = AutoScaleMode.Font;
 
             // 룰 테이블 라벨
             var lblRules = new Label
@@ -142,7 +145,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             btnCopy = new Button
             {
                 Text = "복사",
-                Location = new Point(376, 205),
+                Location = new Point(360, 205),
                 Width = 80,
                 Height = 30,
                 Enabled = false
@@ -152,7 +155,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             btnClose = new Button
             {
                 Text = "닫기",
-                Location = new Point(460, 205),
+                Location = new Point(452, 205),
                 Width = 80,
                 Height = 30
             };
@@ -193,6 +196,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             Controls.Add(txtResult);
 
             CancelButton = btnClose;
+
+            ResumeLayout(false);
+            PerformLayout();
         }
 
         // ==========================================

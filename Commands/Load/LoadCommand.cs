@@ -11,6 +11,7 @@ using SpaceClaim.Api.V252.Extensibility;
 
 namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Load
 {
+    // @lat: [[mesh#하중 정의]]
     public class LoadCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.Load";

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Windows.Forms;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Core.UI;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.Fatigue;
@@ -20,6 +21,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
         private readonly FatigueSpecimenService service;
         private Part activePart;
         private List<DesignBody> previewBodies;
+        private Timer previewTimer;
         private bool suppressPresetEvent = false;
 
         public FatigueSpecimenDialog(Part part)
@@ -29,9 +31,40 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             activePart = part;
             previewBodies = new List<DesignBody>();
 
+            previewTimer = new Timer();
+            previewTimer.Interval = 300;
+            previewTimer.Tick += PreviewTimer_Tick;
+
             cmbPreset.Items.AddRange(FatigueSpecimenFactory.PresetLabels);
             cmbPreset.SelectedIndex = 0;
             cmbPreset.SelectedIndexChanged += cmbPreset_SelectedIndexChanged;
+
+            // 파라미터 변경 시 자동 미리보기
+            numGaugeLength.ValueChanged += (s, ev) => SchedulePreview();
+            numGaugeWidth.ValueChanged += (s, ev) => SchedulePreview();
+            numThickness.ValueChanged += (s, ev) => SchedulePreview();
+            numGaugeDiameter.ValueChanged += (s, ev) => SchedulePreview();
+            numGripWidth.ValueChanged += (s, ev) => SchedulePreview();
+            numGripLength.ValueChanged += (s, ev) => SchedulePreview();
+            numTotalLength.ValueChanged += (s, ev) => SchedulePreview();
+            numFilletRadius.ValueChanged += (s, ev) => SchedulePreview();
+            numHourglassRadius.ValueChanged += (s, ev) => SchedulePreview();
+            numCTWidth.ValueChanged += (s, ev) => SchedulePreview();
+            numCTThickness.ValueChanged += (s, ev) => SchedulePreview();
+            numInitialCrack.ValueChanged += (s, ev) => SchedulePreview();
+            numPinHoleDiameter.ValueChanged += (s, ev) => SchedulePreview();
+            numNotchWidth.ValueChanged += (s, ev) => SchedulePreview();
+            numMTWidth.ValueChanged += (s, ev) => SchedulePreview();
+            numMTLength.ValueChanged += (s, ev) => SchedulePreview();
+            numMTThickness.ValueChanged += (s, ev) => SchedulePreview();
+            numSlotHalfLength.ValueChanged += (s, ev) => SchedulePreview();
+            numSlotWidth.ValueChanged += (s, ev) => SchedulePreview();
+            numTubeOD.ValueChanged += (s, ev) => SchedulePreview();
+            numTubeID.ValueChanged += (s, ev) => SchedulePreview();
+            numTubeGaugeLength.ValueChanged += (s, ev) => SchedulePreview();
+            numTubeTotalLength.ValueChanged += (s, ev) => SchedulePreview();
+            numTubeGripOD.ValueChanged += (s, ev) => SchedulePreview();
+            chkCreateGrips.CheckedChanged += (s, ev) => SchedulePreview();
 
             this.TopMost = true;
             this.FormClosing += FatigueSpecimenDialog_FormClosing;
@@ -50,6 +83,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             ApplyParamsToUI(p);
             UpdateDescription();
             UpdateUIVisibility();
+            SchedulePreview();
         }
 
         private void UpdateDescription()
@@ -129,43 +163,49 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             grpMT.Visible = isMT;
             grpTube.Visible = isTube;
 
-            // 동적 레이아웃
-            const int basicHeight = 280;
-            const int specialHeight = 160;
-            const int optionHeight = 45;
+            // 동적 레이아웃 (DPI 스케일링 대응: 실제 스케일된 크기 사용)
+            int panelX = grpPreset.Location.X;
+            int panelW = grpPreset.Width;
 
             int nextY = grpPreset.Location.Y + grpPreset.Height + 6;
 
             if (showBasic)
             {
-                grpBasic.SetBounds(12, nextY, 440, basicHeight);
-                nextY += basicHeight + 6;
+                grpBasic.Location = new System.Drawing.Point(panelX, nextY);
+                grpBasic.Width = panelW;
+                nextY += grpBasic.Height + 6;
             }
             if (isCT)
             {
-                grpCT.SetBounds(12, nextY, 440, specialHeight);
-                nextY += specialHeight + 6;
+                grpCT.Location = new System.Drawing.Point(panelX, nextY);
+                grpCT.Width = panelW;
+                nextY += grpCT.Height + 6;
             }
             if (isMT)
             {
-                grpMT.SetBounds(12, nextY, 440, specialHeight);
-                nextY += specialHeight + 6;
+                grpMT.Location = new System.Drawing.Point(panelX, nextY);
+                grpMT.Width = panelW;
+                nextY += grpMT.Height + 6;
             }
             if (isTube)
             {
-                grpTube.SetBounds(12, nextY, 440, specialHeight);
-                nextY += specialHeight + 6;
+                grpTube.Location = new System.Drawing.Point(panelX, nextY);
+                grpTube.Width = panelW;
+                nextY += grpTube.Height + 6;
             }
 
-            grpOptions.SetBounds(12, nextY, 440, optionHeight);
-            nextY += optionHeight + 10;
+            grpOptions.Location = new System.Drawing.Point(panelX, nextY);
+            grpOptions.Width = panelW;
+            nextY += grpOptions.Height + 10;
 
-            btnPreview.Location = new System.Drawing.Point(140, nextY);
-            btnCreate.Location = new System.Drawing.Point(250, nextY);
-            btnCancel.Location = new System.Drawing.Point(360, nextY);
+            int btnGap = 10;
+            lblPreviewStatus.Location = new System.Drawing.Point(12, nextY);
+            int btnRow = nextY + 18;
+            btnCreate.Location = new System.Drawing.Point(250, btnRow);
+            btnCancel.Location = new System.Drawing.Point(btnCreate.Right + btnGap, btnRow);
 
             int borderHeight = this.Height - this.ClientSize.Height;
-            this.Height = nextY + 46 + borderHeight;
+            this.Height = btnRow + 46 + borderHeight;
         }
 
         private FatigueSpecimenParameters ReadParams()
@@ -211,13 +251,26 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             return p;
         }
 
-        private void btnPreview_Click(object sender, EventArgs e)
+        private void SchedulePreview()
+        {
+            previewTimer.Stop();
+            previewTimer.Start();
+        }
+
+        private void PreviewTimer_Tick(object sender, EventArgs e)
+        {
+            previewTimer.Stop();
+            ExecuteAutoPreview();
+        }
+
+        private void ExecuteAutoPreview()
         {
             var p = ReadParams();
             string error;
             if (!p.Validate(out error))
             {
-                ValidationHelper.ShowError(error, "입력 오류");
+                CleanupPreview();
+                lblPreviewStatus.Text = "";
                 return;
             }
             try
@@ -228,10 +281,14 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                     var bodies = service.CreateFatigueSpecimen(activePart, p);
                     previewBodies.AddRange(bodies);
                 });
+                Window.ActiveWindow?.ZoomExtents();
+                lblPreviewStatus.ForeColor = Color.Green;
+                lblPreviewStatus.Text = "미리보기 적용됨";
             }
             catch (Exception ex)
             {
-                ValidationHelper.ShowError($"미리보기 생성 중 오류:\n\n{ex.Message}", "오류");
+                lblPreviewStatus.ForeColor = Color.Red;
+                lblPreviewStatus.Text = ex.Message.Split('\n')[0];
             }
         }
 
@@ -286,6 +343,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
         private void FatigueSpecimenDialog_FormClosing(object sender, FormClosingEventArgs e)
         {
+            previewTimer.Stop();
+            previewTimer.Dispose();
             if (DialogResult != DialogResult.OK)
                 CleanupPreview();
         }

@@ -1,0 +1,11 @@
+generated: success=True holes_in_graph=4 handles=4
+  G1 handle S06.hole.0 anchor=(-60,-30) nomD=4.0 -> posId=H1 actualD=4.00
+  G1 handle S06.hole.1 anchor=(60,-30) nomD=5.0 -> posId=H2 actualD=5.00
+  G1 handle S06.hole.2 anchor=(-60,30) nomD=6.0 -> posId=H3 actualD=6.00
+  G1 handle S06.hole.3 anchor=(60,30) nomD=3.0 -> posId=H4 actualD=3.00
+after insert: holes_in_graph=5 (was 4)
+  G2 handle S06.hole.0 -> posId=H1(was H1, drifted=False) actualD=4.00(was 4.00) SAME=True
+  G2 handle S06.hole.1 -> posId=H2(was H2, drifted=False) actualD=5.00(was 5.00) SAME=True
+  G2 handle S06.hole.2 -> posId=H3(was H3, drifted=False) actualD=6.00(was 6.00) SAME=True
+  G2 handle S06.hole.3 -> posId=H4(was H4, drifted=False) actualD=3.00(was 3.00) SAME=True
+P3_PASS handle_stability=True (all original handles still hit their physical hole)

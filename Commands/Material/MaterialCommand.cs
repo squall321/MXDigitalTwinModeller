@@ -12,6 +12,7 @@ using SpaceClaim.Api.V252.Extensibility;
 
 namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Material
 {
+    // @lat: [[mesh#Material 정의]]
     public class MaterialCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.Material";

@@ -1,0 +1,7 @@
+# GATE-0 headless marshal probe
+apiThreadId=1
+[direct] ranOnThreadId=1 onApiThread=True insideWriteBlock=True bodyCreated=True err=none
+[create] completed=False ranOnThreadId=-1 onApiThread=False insideWriteBlock=False bodyCreated=False err=none
+[throw] completed=False ranOnThreadId=-1 onApiThread=False insideWriteBlock=False bodyCreated=False err=none
+VERDICT a(completed)=False b(apiThread)=False c(writeBlock)=False d(body)=False e(throwCaught)=False
+GATE0_PASS=False

@@ -1,0 +1,22 @@
+[A] success=True vol_meas=69753.1 vol_analytic=69640.0 delta=0.16% err=none
+    S00 bbox vol=77619
+    S04 pocket success=True vol=69842.3
+    S05 camera success=True vol=70125.1
+    S06 holes 4/4 vol=69753.1
+[B] success=True vol_meas=86808.6 vol_analytic=86695.5 delta=0.13% err=none
+    S00 bbox vol=96000
+    S04 pocket success=True vol=86928
+    S05 camera success=True vol=87210.7
+    S06 holes 4/4 vol=86808.6
+[C] success=True vol_meas=48108.0 vol_analytic=47994.9 delta=0.24% err=none
+    S00 bbox vol=54080
+    S04 pocket success=True vol=48152
+    S05 camera success=True vol=48434.7
+    S06 holes 4/4 vol=48108
+[A2] success=True vol_meas=69753.1 vol_analytic=69640.0 delta=0.16% err=none
+    S00 bbox vol=77619
+    S04 pocket success=True vol=69842.3
+    S05 camera success=True vol=70125.1
+    S06 holes 4/4 vol=69753.1
+DETERMINISM A vs A2: v1=69753.099 v4=69753.099 identical=True
+P1_PASS regenA=True regenB=True regenC=True determinism=True ALL=True

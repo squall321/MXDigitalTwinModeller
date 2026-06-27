@@ -17,6 +17,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.TensileTest
     /// <summary>
     /// ASTM 인장시험 시편 생성 커맨드
     /// </summary>
+    // @lat: [[specimens#ASTM/DMA 인장시편]]
     public class CreateASTMTensileSpecimenCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.CreateASTMTensileSpecimen";

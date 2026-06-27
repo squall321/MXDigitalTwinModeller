@@ -31,6 +31,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Core.UI
         private static System.Drawing.Image _simulationIcon;
         private static System.Drawing.Image _pipelineIcon;
         private static System.Drawing.Image _conformalMeshIcon;
+        private static System.Drawing.Image _voidCutIcon;
+        private static System.Drawing.Image _gmshMesherIcon;
 
         public static System.Drawing.Image TensileIcon =>
             _tensileIcon ?? (_tensileIcon = LoadIcon("Resources.Icons.Tensile_32.png"));
@@ -82,6 +84,12 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Core.UI
 
         public static System.Drawing.Image ConformalMeshIcon =>
             _conformalMeshIcon ?? (_conformalMeshIcon = LoadIcon("Resources.Icons.ConformalMesh_32.png"));
+
+        public static System.Drawing.Image VoidCutIcon =>
+            _voidCutIcon ?? (_voidCutIcon = LoadIcon("Resources.Icons.VoidCut_32.png"));
+
+        public static System.Drawing.Image GmshMesherIcon =>
+            _gmshMesherIcon ?? (_gmshMesherIcon = LoadIcon("Resources.Icons.GmshMesher_32.png") ?? ConformalMeshIcon);
 
         /// <summary>
         /// 임베디드 리소스에서 이미지 로드

@@ -16,6 +16,7 @@ using SpaceClaim.Api.V252.Extensibility;
 
 namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Mesh
 {
+    // @lat: [[mesh#Mesh 내보내기 (.k)]]
     public class ExportMeshCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.ExportMesh";

@@ -1,0 +1,54 @@
+{
+  "d": 60.000000000000206, 
+  "old_bore_filled": true, 
+  "before_oldaxis_contains": [
+    false, 
+    false, 
+    false, 
+    false, 
+    false
+  ], 
+  "cyl_before": 16, 
+  "cyl_after": 18, 
+  "driver_single_contains_old": true, 
+  "old_solid_samples_after": 5, 
+  "nHoles": 38, 
+  "after_oldaxis_contains": [
+    true, 
+    true, 
+    true, 
+    true, 
+    true
+  ], 
+  "helper_solid_over_total": "5/5", 
+  "move_hint": null, 
+  "helper_verdict": true, 
+  "dV_mm3": 4613205.1651707888, 
+  "vol_before": 651758489.95033467, 
+  "CONCLUSION": "OLD BORE FILLED (benign artifact, oracle false-IC)", 
+  "helper_raw_samples": [
+    true, 
+    true, 
+    true, 
+    true, 
+    true
+  ], 
+  "move_success": true, 
+  "model": "samplemodel2", 
+  "old": [
+    139.947307333887, 
+    184.193849463873, 
+    702.149003957299
+  ], 
+  "newp": [
+    159.947307333887, 
+    184.193849463873, 
+    702.149003957299
+  ], 
+  "vol_after": 656371695.11550546, 
+  "axis": [
+    0.50000000000000167, 
+    0.61237243569578648, 
+    0.61237243569580135
+  ]
+}

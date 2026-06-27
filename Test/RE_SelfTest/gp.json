@@ -1,0 +1,1 @@
+{"jsonrpc": "2.0", "id": 2, "result": {"content": [{"type": "text", "text": "{\"success\": true, \"error\": null, \"result\": {\"generated\": true, \"params\": \"Phone L=146.7 W=71.5 T=7.4 cornerR=3 pocket=on holes=0 camera=on\"}}"}], "isError": false}}

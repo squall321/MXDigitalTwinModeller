@@ -11,6 +11,7 @@ using SpaceClaim.Api.V252.Extensibility;
 
 namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Simulation
 {
+    // @lat: [[mesh#시뮬레이션 설정]]
     public class SimulationSetupCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.SimulationSetup";

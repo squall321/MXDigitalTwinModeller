@@ -12,6 +12,7 @@ using SpaceClaim.Api.V252.Extensibility;
 
 namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Simplify
 {
+    // @lat: [[mesh#Body Simplify]]
     public class SimplifyCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.Simplify";

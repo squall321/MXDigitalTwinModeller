@@ -12,6 +12,7 @@ using SpaceClaim.Api.V252.Extensibility;
 
 namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Contact
 {
+    // @lat: [[mesh#접촉면 검출]]
     public class DetectContactCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.DetectContact";

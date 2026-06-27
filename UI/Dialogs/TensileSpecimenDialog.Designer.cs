@@ -14,7 +14,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
         private System.Windows.Forms.Button btnCreate;
         private System.Windows.Forms.Button btnCancel;
         private System.Windows.Forms.Button btnLoadDefaults;
-        private System.Windows.Forms.Button btnPreview;
+        private System.Windows.Forms.Label lblPreviewStatus;
         private System.Windows.Forms.Label lblDescription;
         private System.Windows.Forms.GroupBox grpSpecimenType;
         private System.Windows.Forms.GroupBox grpDimensions;
@@ -71,7 +71,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             this.btnCreate = new System.Windows.Forms.Button();
             this.btnCancel = new System.Windows.Forms.Button();
             this.btnLoadDefaults = new System.Windows.Forms.Button();
-            this.btnPreview = new System.Windows.Forms.Button();
+            this.lblPreviewStatus = new System.Windows.Forms.Label();
             this.lblDescription = new System.Windows.Forms.Label();
             this.grpSpecimenType = new System.Windows.Forms.GroupBox();
             this.grpDimensions = new System.Windows.Forms.GroupBox();
@@ -557,14 +557,13 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             this.numTabThickness.TabIndex = 4;
             this.numTabThickness.Value = new decimal(new int[] { 15, 0, 0, 65536 });
 
-            // btnPreview
-            this.btnPreview.Location = new System.Drawing.Point(140, 596);
-            this.btnPreview.Name = "btnPreview";
-            this.btnPreview.Size = new System.Drawing.Size(100, 30);
-            this.btnPreview.TabIndex = 2;
-            this.btnPreview.Text = "미리보기";
-            this.btnPreview.UseVisualStyleBackColor = true;
-            this.btnPreview.Click += new System.EventHandler(this.btnPreview_Click);
+            // lblPreviewStatus
+            this.lblPreviewStatus.AutoSize = true;
+            this.lblPreviewStatus.Location = new System.Drawing.Point(12, 596);
+            this.lblPreviewStatus.Name = "lblPreviewStatus";
+            this.lblPreviewStatus.Size = new System.Drawing.Size(440, 12);
+            this.lblPreviewStatus.TabIndex = 2;
+            this.lblPreviewStatus.Text = "";
 
             // btnCreate
             this.btnCreate.Location = new System.Drawing.Point(250, 596);
@@ -590,7 +589,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             this.ClientSize = new System.Drawing.Size(474, 640);
             this.Controls.Add(this.btnCancel);
             this.Controls.Add(this.btnCreate);
-            this.Controls.Add(this.btnPreview);
+            this.Controls.Add(this.lblPreviewStatus);
             this.Controls.Add(this.grpTab);
             this.Controls.Add(this.grpHole);
             this.Controls.Add(this.grpNotch);

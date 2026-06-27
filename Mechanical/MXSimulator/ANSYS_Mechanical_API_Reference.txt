@@ -1,0 +1,1016 @@
+================================================================================
+ANSYS Mechanical ACT Extension - Python Scripting API Reference
+Version: ANSYS Student v252  |  Date: 2026-02-17
+출처: 설치 폴더 공식 XML 문서 직접 추출
+================================================================================
+
+[문서 위치]
+- 핵심 API 문서  : D:\Program Files\ANSYS Inc\ANSYS Student\v252\aisol\bin\winx64\Ansys.ACT.WB1.xml
+- 인터페이스     : D:\Program Files\ANSYS Inc\ANSYS Student\v252\Addins\ACT\bin\Win64\Ansys.ACT.Interfaces.xml
+- DataModel      : D:\Program Files\ANSYS Inc\ANSYS Student\v252\aisol\bin\winx64\Ansys.Mechanical.DataModel.xml
+- 공식 스니펫    : D:\Program Files\ANSYS Inc\ANSYS Student\v252\Addins\ACT\preferences\Snippets_Mechanical.xml  <-- 핵심!
+- Python 진입점  : D:\Program Files\ANSYS Inc\ANSYS Student\v252\Addins\ACT\apis\Mechanical.py
+- CHM 도움말     : D:\Program Files\ANSYS Inc\ANSYS Student\v252\scdm\SpaceClaim.Api.V252\API_Scripting_Class_Library.chm
+
+================================================================================
+1. 전역 변수 (ACT Extension 런타임 자동 제공)
+================================================================================
+
+  ExtAPI           - MechanicalExtensionAPI (Ansys.AAP.Mechanical.dll)
+  Model            - ExtAPI.DataModel.Project.Model  의 단축형
+  DataModel        - ExtAPI.DataModel
+  Tree             - Model Tree
+  Graphics         - 그래픽 컨텍스트
+
+  주요 접근 경로:
+    model = ExtAPI.DataModel.Project.Model
+    geometry = model.Geometry
+    mesh = model.Mesh
+    analyses = model.Analyses
+
+================================================================================
+2. CLR 참조 (Mechanical.py 기반 - 런타임에서 자동 로드됨)
+================================================================================
+
+  Ansys.ACT.Core
+  Ansys.ACT.Interfaces
+  Ansys.ACT.WB1
+  Ansys.Mechanical.Customization
+  Ansys.Mechanical.DataModel
+  Ansys.Mechanical.Interfaces
+
+================================================================================
+3. Model 클래스 - 주요 메서드
+================================================================================
+
+  [Analysis 생성]
+    model.AddStaticStructuralAnalysis()      - 정적 구조 해석
+    model.AddTransientStructuralAnalysis()   - 과도 구조 해석  ✅
+    model.AddModalAnalysis()                 - 모달 해석        ✅
+    model.AddHarmonicResponseAnalysis()      - 조화 응답 해석
+    model.AddRandomVibrationAnalysis()       - 랜덤 진동 해석
+    model.AddResponseSpectrumAnalysis()      - 응답 스펙트럼 해석
+    model.AddEigenvalueBucklingAnalysis()    - 좌굴 해석
+    model.AddCoupledFieldStatic()            - 연성 해석 (정적)
+    model.AddCoupledFieldTransient()         - 연성 해석 (과도)
+    model.AddSteadyStateThermalAnalysis()    - 정상 상태 열해석
+    model.AddTransientThermalAnalysis()      - 과도 열해석
+    model.AddExplicitDynamicsAnalysis()      - 명시적 동역학
+    model.AddTopologyOptimizationAnalysis()  - 위상 최적화
+    model.AddLSDynaAnalysis()                - LS-DYNA 해석
+    model.AddMotionAnalysis()                - 모션 해석
+    model.AddForcedResponseAnalysis()        - 강제 응답 해석
+
+  [Named Selection]
+    model.AddNamedSelection()                - NS 생성             ✅
+
+  [기타]
+    model.Solve(True, "My Core")             - 모든 해석 솔브
+    model.AddRemotePoint()                   - 원격 포인트 추가
+    model.AddConnections()                   - 접촉 그룹 추가
+    model.AddCoordinateSystems()             - 좌표계 추가
+    model.AddChart()                         - 차트 추가
+    model.ClearGeneratedData()               - 생성된 데이터 삭제
+    model.Environments                       - = model.Analyses (같은 것)
+    model.UpdateGeometryFromSource()         - 형상 업데이트
+
+================================================================================
+4. Analysis 클래스 - 경계조건/하중 추가 메서드
+================================================================================
+
+  analysis = model.Analyses[0]  또는  model.Analyses["Static Structural"]
+
+  [구조 하중]
+    analysis.AddForce()                      - 집중력               ✅
+    analysis.AddPressure()                   - 압력
+    analysis.AddRemoteForce()                - 원격 집중력
+    analysis.AddMoment()                     - 모멘트
+    analysis.AddLinePressure()               - 선하중
+    analysis.AddAcceleration()               - 가속도
+    analysis.AddRotationalVelocity()         - 회전 속도
+    analysis.AddRotationalAcceleration()     - 회전 가속도
+    analysis.AddBearingLoad()                - 베어링 하중
+    analysis.AddBoltPretension()             - 볼트 사전 인장력
+    analysis.AddBodyControl()                - 바디 제어
+    analysis.AddNodalForce()                 - 절점 힘
+    analysis.AddNodalPressure()              - 절점 압력
+    analysis.AddNodalDisplacement()          - 절점 변위
+    analysis.AddHydrostaticPressure()        - 정수압
+
+  [구조 경계조건]
+    analysis.AddFixedSupport()               - 고정 지지            ✅
+    analysis.AddDisplacement()               - 변위 지지
+    analysis.AddRemoteDisplacement()         - 원격 변위
+    analysis.AddFrictionlessSupport()        - 마찰 없는 지지
+    analysis.AddCompressionOnlySupport()     - 압축만 지지
+    analysis.AddCylindricalSupport()         - 원통 지지
+    analysis.AddElasticSupport()             - 탄성 지지
+    analysis.AddSimplySupported()            - 단순 지지
+    analysis.AddFixedRotation()              - 고정 회전
+    analysis.AddCoupling()                   - 결합
+    analysis.AddConstraintEquation()         - 구속 방정식
+
+  [열 하중/경계조건]
+    analysis.AddTemperature()                - 온도
+    analysis.AddConvection()                 - 대류
+    analysis.AddHeatFlow()                   - 열 유량
+    analysis.AddHeatFlux()                   - 열 플럭스
+    analysis.AddRadiation()                  - 복사
+    analysis.AddThermalCondition()           - 열 조건
+    analysis.AddPerfectlyInsulated()         - 완전 단열
+
+  [랜덤/스펙트럼]
+    analysis.AddPSDAcceleration()            - PSD 가속도
+    analysis.AddPSDDisplacement()            - PSD 변위
+    analysis.AddPSDVelocity()               - PSD 속도
+    analysis.AddRSAcceleration()             - RS 가속도
+    analysis.AddRSDisplacement()             - RS 변위
+
+  [제어/유틸]
+    analysis.AddCommandSnippet()             - APDL 명령어
+    analysis.AddInitialVelocity()            - 초기 속도 (과도)
+    analysis.Solve(True)                     - 솔브
+    analysis.Solve(True, "My Core")          - 솔브 (코어 지정)
+    analysis.ClearGeneratedData()            - 데이터 삭제
+    analysis.TransferDataFrom(analysis2)     - 데이터 전달
+    analysis.ImportLoad(analysis2)           - 하중 가져오기
+
+  [속성]
+    analysis.AnalysisSettings               - 해석 설정
+    analysis.Solution                        - 결과
+    analysis.AnalysisType                    - 해석 유형
+    analysis.PhysicsType                     - 물리 유형
+    analysis.EnvironmentTemperature          - 환경 온도
+
+================================================================================
+5. Force 클래스 (BoundaryConditions.Force)
+================================================================================
+
+  [공식 패턴 - Snippets_Mechanical.xml 기반]
+    force = analysis.AddForce()
+    force.Name = "Force_+Z"
+    force.Location = named_selection  또는  selection_info
+
+    # 방향 설정
+    force.DefineBy = Ansys.Mechanical.DataModel.Enums.LoadDefineBy.Components  # 성분별
+    # 또는
+    force.DefineBy = Ansys.Mechanical.DataModel.Enums.LoadDefineBy.Vector       # 벡터
+
+    # 시간-하중 타뷸러 데이터 (⭐ 핵심 패턴!)
+    # Inputs[0] = 시간, Output = 하중값
+    force.XComponent.Inputs[0].DiscreteValues = [Quantity("0 [s]"), Quantity("1 [s]")]
+    force.XComponent.Output.DiscreteValues = [Quantity("100 [N]"), Quantity("200 [N]")]
+    # Y축, Z축도 동일
+    force.YComponent.Inputs[0].DiscreteValues = [...]
+    force.YComponent.Output.DiscreteValues = [...]
+    force.ZComponent.Inputs[0].DiscreteValues = [...]
+    force.ZComponent.Output.DiscreteValues = [...]
+
+    # 벡터 방식일 때:
+    force.Magnitude.Inputs[0].DiscreteValues = [Quantity("0 [s]"), ...]
+    force.Magnitude.Output.DiscreteValues = [Quantity("100 [N]"), ...]
+    force.Direction = ...  # 방향 벡터
+
+  [속성 목록]
+    force.DefineBy           - 정의 방법 (Components/Vector)
+    force.XComponent         - X 성분
+    force.YComponent         - Y 성분
+    force.ZComponent         - Z 성분
+    force.Magnitude          - 크기 (벡터 방식)
+    force.Direction          - 방향
+    force.Location           - 적용 위치 (Named Selection)
+    force.CoordinateSystem   - 좌표계
+    force.DivideLoadByNodes  - 절점당 분배
+
+================================================================================
+6. Pressure 클래스 - 공식 예제 (Snippets_Mechanical.xml)
+================================================================================
+
+  ★ 이것이 공식 확인된 유일한 Python 스크립팅 예제!
+
+  pressure = Model.Analyses[0].AddPressure()
+  part1 = Model.Geometry.Children[0]        # 첫 번째 Part
+  body1 = part1.Children[0]                 # 첫 번째 Body
+  face1 = body1.GetGeoBody().Faces[0]       # 첫 번째 면 (GetGeoBody() 사용!)
+  selection = ExtAPI.SelectionManager.CreateSelectionInfo(SelectionTypeEnum.GeometryEntities)
+  selection.Entities = [face1]              # 리스트로 직접 대입! (Add() 아님)
+  pressure.Location = selection
+  pressure.Magnitude.Inputs[0].DiscreteValues = [Quantity("0 [s]"), Quantity("1 [s]")]
+  pressure.Magnitude.Output.DiscreteValues = [Quantity("10 [Pa]"), Quantity("20 [Pa]")]
+
+================================================================================
+7. SelectionManager API
+================================================================================
+
+  sel_mgr = ExtAPI.SelectionManager
+
+  # SelectionInfo 생성
+  selection = sel_mgr.CreateSelectionInfo(SelectionTypeEnum.GeometryEntities)
+  selection = sel_mgr.CreateSelectionInfo(SelectionTypeEnum.MeshNodes)
+  selection = sel_mgr.CreateSelectionInfo(SelectionTypeEnum.MeshElements)
+
+  # 엔티티 설정 (공식 패턴)
+  selection.Entities = [face1, face2, face3]    # ← 리스트로 직접 대입
+  selection.Ids = [id1, id2, id3]               # ID로도 가능
+  selection.Id = single_id                       # 단일 ID
+
+  # 선택 관리
+  sel_mgr.AddSelection(selection)               # 기존 선택에 추가
+  sel_mgr.NewSelection(selection)               # 선택 교체
+  sel_mgr.ClearSelection()                      # 선택 해제
+  sel_mgr.CurrentSelection                      # 현재 선택 정보
+
+  # SelectionTypeEnum 값들 (Ansys.ACT.Interfaces.Common)
+    GeometryEntities    - 형상 엔티티 (Face, Edge, Vertex, Body)
+    MeshNodes           - 메시 절점
+    MeshElements        - 메시 요소
+
+================================================================================
+8. Geometry API - 바디/면/엣지/꼭짓점
+================================================================================
+
+  [바디 가져오기]
+    # 방법 1: GetChildren (권장)
+    from Ansys.Mechanical.DataModel.Enums import DataModelObjectCategory
+    bodies = model.Geometry.GetChildren(DataModelObjectCategory.Body, True)
+
+    # 방법 2: Geometry.Children 순회
+    for part in model.Geometry.Children:
+        for body in part.Children:
+            pass
+
+    # 방법 3: GeoData (IGeoAssembly)
+    geo = ExtAPI.DataModel.GeoData
+    for part in geo.Parts:
+        for body in part.Bodies:
+            pass
+
+  [Body → GeoBody → Faces]
+    body = model.Geometry.Children[0].Children[0]   # ACT Body 객체
+    geo_body = body.GetGeoBody()                     # IBaseGeoBody 반환  ✅
+
+    # IBaseGeoBody 속성
+    geo_body.Faces       - 면 컬렉션 (IList of IBaseGeoFace)
+    geo_body.Edges       - 엣지 컬렉션
+    geo_body.Vertices    - 꼭짓점 컬렉션
+    geo_body.Centroid    - 무게중심
+    geo_body.Volume      - 부피
+    geo_body.Area        - 면적
+    geo_body.BodyType    - 바디 유형
+
+  [IBaseGeoFace 메서드 - 면 분석]
+    face = geo_body.Faces[i]
+
+    # ⚠️ 법선 계산 (GetFaceNormal 아님!)
+    normal = face.NormalAtParam(0.5, 0.5)            # u=0.5, v=0.5 (파라미터 중심)
+    normals = face.NormalsAtParams([u1,v1, u2,v2])   # 여러 점의 법선 한번에
+
+    # 점 좌표
+    point = face.PointAtParam(0.5, 0.5)              # 파라미터 → 3D 좌표
+    points = face.PointsAtParams([u1,v1, u2,v2])     # 여러 점
+
+    # 파라미터
+    params = face.ParamAtPoint([x, y, z])            # 3D 좌표 → 파라미터
+
+    # 속성
+    face.Area             - 면적
+    face.SurfaceType      - 면 유형 (Plane, Cylinder, Cone, Sphere, ...)
+    face.Centroid         - 면 무게중심
+    face.Bodies           - 이 면에 속한 바디들
+    face.Edges            - 이 면에 속한 엣지들
+    face.Vertices         - 이 면에 속한 꼭짓점들
+
+    # NormalAtParam 반환값 처리
+    normal = face.NormalAtParam(0.5, 0.5)
+    nx, ny, nz = normal[0], normal[1], normal[2]     # 인덱스 접근 (배열 형태)
+
+  [IBaseGeoEdge 속성]
+    edge.Length         - 길이
+    edge.CurveType      - 곡선 유형 (Line, Arc, ...)
+    edge.StartVertex    - 시작 꼭짓점
+    edge.EndVertex      - 끝 꼭짓점
+    edge.Centroid       - 무게중심
+    edge.Faces          - 인접한 면들
+    edge.Bodies         - 속한 바디들
+
+  [IBaseGeoVertex 속성]
+    vertex.X, vertex.Y, vertex.Z    - 좌표
+    vertex.Edges                    - 연결된 엣지들
+    vertex.Faces                    - 인접한 면들
+    vertex.Bodies                   - 속한 바디들
+
+  [IGeoAssembly (ExtAPI.DataModel.GeoData)]
+    geo.Name       - 어셈블리 이름
+    geo.Parts      - 파트 목록
+    geo.AllParts   - 모든 파트 (숨김 포함)
+    geo.Unit       - 단위
+    geo.Dimension  - 차원 (2D/3D)
+
+================================================================================
+9. Named Selection API
+================================================================================
+
+  [생성 및 기본 설정]
+    ns = model.AddNamedSelection()
+    ns.Name = "Contact_+Z"
+    ns.ScopingMethod = GeometryDefineByType.Worksheet
+    # 또는
+    ns.ScopingMethod = GeometryDefineByType.GeometryEntities
+
+    # 위치 설정
+    selection = ExtAPI.SelectionManager.CreateSelectionInfo(...)
+    selection.Entities = [face1, face2, ...]   # 공식 패턴
+    ns.Location = selection
+
+    # 생성 확정
+    ns.Generate()
+
+  [속성]
+    ns.Location              - 적용 위치
+    ns.ScopingMethod         - 범위 방식
+    ns.TotalSelection        - 총 선택 수
+    ns.Suppressed            - 억제 여부
+    ns.Visible               - 표시 여부
+    ns.SendToSolver          - 솔버 전달 여부
+    ns.Worksheet             - Worksheet 기반 설정
+    ns.GenerationCriteria    - 생성 기준
+
+  [NamedSelections 컨테이너 (model.NamedSelections)]
+    model.AddNamedSelection()                       - NS 추가  ✅
+    model.NamedSelections.AddNamedSelection()       - 컨테이너에서 추가
+    model.NamedSelections.GenerateAllNamedSelections() - 전체 생성
+    model.NamedSelections.GenerateOnRefresh         - 갱신시 자동 생성
+    model.NamedSelections.GenerateOnRemesh          - 리메시시 자동 생성
+
+================================================================================
+10. Mesh API
+================================================================================
+
+  mesh = model.Mesh
+
+  [전역 설정]
+    mesh.ElementSize = Quantity(2.0, "mm")     # 요소 크기  ✅
+    mesh.GenerateMesh()                         # 메시 생성  ✅
+    mesh.ClearGeneratedData()                   # 메시 삭제
+    mesh.PreviewSurfaceMesh()                   # 표면 메시 미리보기
+    mesh.Update()                               - 메시 업데이트
+
+  [메시 컨트롤 추가]
+    sizing = mesh.AddSizing()                   # 크기 제어  ✅
+    sizing.Location = body_or_ns
+    sizing.ElementSize = Quantity(1.0, "mm")
+
+    method = mesh.AddAutomaticMethod()          # 메시 방법
+    inflation = mesh.AddInflation()             # 인플레이션
+    refinement = mesh.AddRefinement()           # 세밀화
+    facemesh = mesh.AddFaceMeshing()            # 면 메시
+    contact_sizing = mesh.AddContactSizing()    # 접촉 크기
+    match_ctrl = mesh.AddMatchControl()         # 매칭 제어
+    pinch = mesh.AddPinch()                     # 핀치 제어
+    weld = mesh.AddWeld()                       # 용접
+    inflation = mesh.AddInflation()             # 인플레이션
+    gasket = mesh.AddGasket()                   # 가스켓
+    deviation = mesh.AddDeviation()             # 편차 제어
+    mesh_copy = mesh.AddMeshCopy()              # 메시 복사
+
+  [품질 진단]
+    mesh.ShowSweepableBodies()                  # 스위프 가능 바디 표시
+    mesh.ShowMappableBodies()                   # 맵핑 가능 바디 표시
+    mesh.ShowOverlappingFaces()                 # 겹치는 면 표시
+    mesh.ShowFeatureSuppressibleFaces()         # 억제 가능 특성 표시
+    mesh.CreatePinchControls()                  # 핀치 제어 자동 생성
+
+  [참고] GrowthRate는 Mesh 객체에 직접 속성 없음 → Sizing 컨트롤에서 설정
+
+================================================================================
+11. Modal Analysis Settings
+================================================================================
+
+  modal = model.AddModalAnalysis()
+  settings = modal.AnalysisSettings
+
+  [⚠️ 올바른 속성명 - WB1.xml 공식 확인]
+    settings.MaximumModesToFind = 20                          # 최대 모드 수  ✅
+    settings.ModalRangeMaximum = Quantity(1000.0, "Hz")       # 최대 주파수 (RangeMaximum 아님!)  ✅
+    settings.ModalRangeMinimum = Quantity(0.0, "Hz")          # 최소 주파수
+    settings.LimitSearchToRange = True                        # 주파수 범위 제한 활성화  ✅
+    settings.NumberOfModesToUse = 20                          # 사용할 모드 수
+    settings.KeepModalResults = True                          # 모달 결과 유지
+    settings.Damped = False                                   # 댐핑 포함 여부
+    settings.IncludeResidualVector = False                    # 잔류 벡터 포함
+    settings.ModeSignificanceLevel = 0.001                    # 모드 중요도 수준
+
+  [솔버 설정]
+    settings.SolverType                   - 솔버 유형
+    settings.WeakSprings                  - 약한 스프링
+
+================================================================================
+12. Transient Structural Analysis Settings
+================================================================================
+
+  transient = model.AddTransientStructuralAnalysis()
+  settings = transient.AnalysisSettings
+
+  [⚠️ 올바른 패턴 - per-step 메서드 사용 (WB1.xml 공식 확인)]
+    step_index = 1  # 첫 번째 스텝 (1부터 시작!)
+
+    settings.SetStepEndTime(step_index, Quantity(0.02, "sec"))       # 종료 시간  ✅
+    settings.SetInitialTimeStep(step_index, Quantity(0.0001, "sec")) # 초기 시간 스텝  ✅
+    settings.SetMinimumTimeStep(step_index, Quantity(0.0001, "sec")) # 최소 시간 스텝  ✅
+    settings.SetMaximumTimeStep(step_index, Quantity(0.0001, "sec")) # 최대 시간 스텝  ✅
+
+    settings.SetAutomaticTimeStepping(step_index, AutomaticTimeStepping.Off)
+    settings.SetDefineBy(step_index, TimeStepDefineByType.Time)
+    settings.SetCarryOverTimeStep(step_index, False)
+
+    # 값 읽기
+    end_time = settings.GetStepEndTime(step_index)
+    init_ts = settings.GetInitialTimeStep(step_index)
+
+  [전체 설정 (스텝 무관)]
+    settings.AutomaticTimeStepping = AutomaticTimeStepping.Off  # 또는 .On
+    settings.LargeDeflection = True
+    settings.SolverType                   - 솔버 유형
+
+  [댐핑]
+    settings.MassCoefficient              - 질량 계수 (알파/레일리)
+    settings.StiffnessCoefficient         - 강성 계수 (베타/레일리)
+    settings.DampingRatio                 - 댐핑비
+    settings.ConstantDampingRatio         - 일정 댐핑비
+
+  [출력 제어]
+    settings.Stress                        - 응력 출력
+    settings.Strain                        - 변형률 출력
+    settings.CalculateVelocity             - 속도 계산
+    settings.CalculateAcceleration         - 가속도 계산
+    settings.CalculateReactions            - 반력 계산
+
+  [Mode Superposition 설정]
+    # WB1.xml에서 SolutionMethod 속성 없음 → 수동 설정 필요!
+    # Mechanical GUI: Analysis Settings → Solution Method → Mode Superposition
+
+================================================================================
+13. ANSYSAnalysisSettings - Per-Step 메서드 전체 목록
+================================================================================
+
+  모든 메서드는 (step_index: UInt32, value) 형태.
+  step_index는 1부터 시작!
+
+  Get/Set 메서드:
+    GetStepEndTime(i)          / SetStepEndTime(i, Quantity)
+    GetAutomaticTimeStepping(i)/ SetAutomaticTimeStepping(i, AutomaticTimeStepping)
+    GetInitialTimeStep(i)      / SetInitialTimeStep(i, Quantity)
+    GetMinimumTimeStep(i)      / SetMinimumTimeStep(i, Quantity)
+    GetMaximumTimeStep(i)      / SetMaximumTimeStep(i, Quantity)
+    GetNumberOfSubSteps(i)     / SetNumberOfSubSteps(i, UInt32)
+    GetInitialSubsteps(i)      / SetInitialSubsteps(i, UInt32)
+    GetMinimumSubsteps(i)      / SetMinimumSubsteps(i, UInt32)
+    GetMaximumSubsteps(i)      / SetMaximumSubsteps(i, UInt32)
+    GetDefineBy(i)             / SetDefineBy(i, TimeStepDefineByType)
+    GetCarryOverTimeStep(i)    / SetCarryOverTimeStep(i, Boolean)
+    GetStepName(i)
+    GetTimeStep(i)
+    GetLineSearch(i)           / SetLineSearch(i, LineSearchType)
+    GetCreepEffects(i)         / SetCreepEffects(i, Creep)
+    GetCreepLimitRatio(i)      / SetCreepLimitRatio(i, Double)
+    GetStoreResultsAt(i)
+
+  수렴 기준 Get/Set (각 물리량):
+    Force, Moment, Displacement, Rotation,
+    Temperature, Heat, Voltage, Charge,
+    Energy, Current, EmagAMPS, EmagCSG
+    → Set{X}ConvergenceType/Tolerance/Value/MinimumReference(i, value)
+    → Get{X}ConvergenceType/Tolerance/Value/MinimumReference(i)
+
+================================================================================
+14. Quantity 사용법
+================================================================================
+
+  from Ansys.Core.Units import Quantity
+
+  # 생성 방법 (동일한 결과)
+  q1 = Quantity(1.0, "mm")          # (값, 단위)
+  q2 = Quantity("1 [mm]")           # 문자열 형식
+
+  # 자주 쓰는 단위
+  Quantity(2.0, "mm")               - 길이
+  Quantity(1000.0, "Hz")            - 주파수
+  Quantity(100.0, "N")              - 힘
+  Quantity(0.02, "sec")             - 시간
+  Quantity(0.0001, "sec")           - 시간 스텝
+  Quantity(10.0, "Pa")              - 압력
+  Quantity(200.0e9, "Pa")           - 영률
+  Quantity(0.3, "")                 - 무단위 (포아송비)
+
+  # 타뷸러 데이터용 문자열 형식
+  time_vals = [Quantity("0 [s]"), Quantity("0.01 [s]"), Quantity("0.02 [s]")]
+  force_vals = [Quantity("0 [N]"), Quantity("100 [N]"), Quantity("50 [N]")]
+
+================================================================================
+15. DataModelObjectCategory Enum (자주 쓰는 값)
+================================================================================
+
+  from Ansys.Mechanical.DataModel.Enums import DataModelObjectCategory
+
+    DataModelObjectCategory.Body               - 바디
+    DataModelObjectCategory.Face               - 면
+    DataModelObjectCategory.Edge               - 엣지
+    DataModelObjectCategory.Vertex             - 꼭짓점
+    DataModelObjectCategory.NamedSelection     - Named Selection
+    DataModelObjectCategory.Analysis           - 해석
+    DataModelObjectCategory.Mesh               - 메시
+    DataModelObjectCategory.CoordinateSystem   - 좌표계
+    DataModelObjectCategory.Contact            - 접촉
+
+================================================================================
+16. GeometryDefineByType Enum
+================================================================================
+
+  from Ansys.Mechanical.DataModel.Enums import GeometryDefineByType
+
+    GeometryDefineByType.Worksheet         - 워크시트 기반
+    GeometryDefineByType.GeometryEntities  - 형상 엔티티 직접
+
+================================================================================
+17. LoadDefineBy Enum
+================================================================================
+
+  from Ansys.Mechanical.DataModel.Enums import LoadDefineBy
+  # 또는
+  Ansys.Mechanical.DataModel.Enums.LoadDefineBy.Components
+  Ansys.Mechanical.DataModel.Enums.LoadDefineBy.Vector
+
+================================================================================
+18. Body (ACT) 객체 - 주요 속성/메서드
+================================================================================
+
+  body = model.Geometry.Children[0].Children[0]
+
+  [메서드]
+    body.GetGeoBody()                - IBaseGeoBody 반환  ✅
+    body.GenerateMesh()              - 이 바디만 메시 생성
+    body.ClearGeneratedData()        - 메시 삭제
+    body.ShowBody()                  - 화면에 표시
+    body.AddCommandSnippet()         - APDL 스니펫 추가
+
+  [속성]
+    body.Material                    - 재료 할당
+    body.Nodes                       - 절점 수
+    body.Elements                    - 요소 수
+    body.LengthX/Y/Z                 - 바운딩 박스 크기
+    body.Dimension                   - 차원 (3D/2D/1D)
+    body.GeometryType                - 형상 유형 (Solid/Surface/Line)
+    body.Transparency                - 투명도 (0.0~1.0)
+    body.Color                       - 색상 (BGR 비트필드)
+    body.Hidden                      - 숨김 여부
+    body.Suppressed                  - 억제 여부
+
+================================================================================
+19. Model 트리 탐색
+================================================================================
+
+  [DataModel 기반]
+    objs = DataModel.GetObjectsByName("Static Structural")
+    objs = DataModel.GetObjectsByType(DataModelObjectCategory.NamedSelection)
+    obj = DataModel.GetObjectById(object_id)
+
+  [Tree 기반]
+    first = Tree.FirstActiveObject
+    active = Tree.ActiveObjects
+    path = Tree.GetPathToFirstActiveObject()
+
+  [GetChildren 패턴]
+    all_bodies = model.Geometry.GetChildren(DataModelObjectCategory.Body, True)
+    # True = 재귀 탐색
+
+================================================================================
+20. 자주 발생하는 오류와 해결책
+================================================================================
+
+  [오류] 'face.GetFaceNormal' AttributeError
+  [해결] face.NormalAtParam(0.5, 0.5) 사용
+
+  [오류] 'selection.Entities.Add' 실패
+  [해결] selection.Entities = [face1, face2] 형태로 리스트 대입
+
+  [오류] 'AnalysisSettings.RangeMaximum' 없음
+  [해결] settings.ModalRangeMaximum 사용 (Modal 전용 속성명)
+
+  [오류] 'AnalysisSettings.StepEndTime' 없음
+  [해결] settings.SetStepEndTime(1, Quantity(0.02, "sec")) 사용
+         step_index는 1부터 시작!
+
+  [오류] Force tabular data가 적용 안 됨
+  [해결] Inputs[0] (시간)과 Output (값) 둘 다 설정해야 함:
+         force.XComponent.Inputs[0].DiscreteValues = time_list
+         force.XComponent.Output.DiscreteValues = force_list
+
+  [오류] AddGeometryImport AttributeError
+  [해결] 자동 STEP 임포트 API 없음 → 수동으로 File → Import 사용
+
+  [오류] TransientSolutionMethod.ModeSuperposition 없음
+  [해결] GUI에서 수동 설정: Analysis Settings → Solution Method
+
+================================================================================
+21. 확인된 최소 코드 패턴 (Complete Workflow)
+================================================================================
+
+  # 1. 모델 접근
+  model = ExtAPI.DataModel.Project.Model
+
+  # 2. 바디 가져오기
+  from Ansys.Mechanical.DataModel.Enums import DataModelObjectCategory
+  bodies = model.Geometry.GetChildren(DataModelObjectCategory.Body, True)
+
+  # 3. 면 법선 분석
+  for body in bodies:
+      geo = body.GetGeoBody()
+      if geo is None: continue
+      for face in geo.Faces:
+          normal = face.NormalAtParam(0.5, 0.5)
+          nx, ny, nz = normal[0], normal[1], normal[2]
+
+  # 4. Named Selection 생성
+  ns = model.AddNamedSelection()
+  ns.Name = "Contact_+Z"
+  selection = ExtAPI.SelectionManager.CreateSelectionInfo(
+      Ansys.ACT.Interfaces.Common.SelectionTypeEnum.GeometryEntities
+  )
+  selection.Entities = [face1, face2, face3]   # 리스트로 직접 대입
+  ns.Location = selection
+
+  # 5. Mesh 생성
+  from Ansys.Core.Units import Quantity
+  mesh = model.Mesh
+  mesh.ElementSize = Quantity(2.0, "mm")
+  mesh.GenerateMesh()
+
+  # 6. Modal Analysis 생성
+  modal = model.AddModalAnalysis()
+  modal.AnalysisSettings.MaximumModesToFind = 20
+  modal.AnalysisSettings.ModalRangeMaximum = Quantity(1000.0, "Hz")
+  modal.AnalysisSettings.LimitSearchToRange = True
+
+  # 7. Transient Analysis 생성
+  transient = model.AddTransientStructuralAnalysis()
+  s = transient.AnalysisSettings
+  s.SetStepEndTime(1, Quantity(0.02, "sec"))
+  s.SetInitialTimeStep(1, Quantity(0.0001, "sec"))
+  s.SetMinimumTimeStep(1, Quantity(0.0001, "sec"))
+  s.SetMaximumTimeStep(1, Quantity(0.0001, "sec"))
+
+  # 8. Force 적용 (tabular)
+  force = transient.AddForce()
+  force.Location = named_selection
+  force.ZComponent.Inputs[0].DiscreteValues = [Quantity("0 [s]"), Quantity("0.02 [s]")]
+  force.ZComponent.Output.DiscreteValues = [Quantity("0 [N]"), Quantity("100 [N]")]
+
+================================================================================
+22. 실제 BoltTools 코드에서 확인된 추가 API 패턴
+    출처: D:\Program Files\ANSYS Inc\ANSYS Student\v252\aisol\WBAddins\MechanicalExtensions\BoltTools\
+================================================================================
+
+  [SelectionInfo 생성 - 완전 확인됨]
+  ─────────────────────────────────────────────────────────────────
+  # CompFacesGeomRecognition.py, NamedSelectionsCreator.py에서 확인
+
+  FacesSelInfo = ExtAPI.SelectionManager.CreateSelectionInfo(SelectionTypeEnum.GeometryEntities)
+  FacesSelInfo.Entities = MyFaces   # ← 리스트 직접 대입 (재확인!)
+  NS.Location = FacesSelInfo
+
+  # Ids로도 설정 가능
+  SelInfo.Ids = [id1, id2, id3]
+
+  # GeomSelInfo 헬퍼 패턴 (GeneralUtilities/SelectionInfoHelper.py)
+  def GeomSelInfo(Entities=None, Ids=None):
+      SelInfo = ExtAPI.SelectionManager.CreateSelectionInfo(SelectionTypeEnum.GeometryEntities)
+      if Entities != None:
+          SelInfo.Entities = Entities
+      if Ids != None:
+          SelInfo.Ids = Ids
+      return SelInfo
+
+  [Named Selection 속성 - 확인됨]
+  ─────────────────────────────────────────────────────────────────
+  # NamedSelectionHelper.py에서 확인
+  NS = ExtAPI.DataModel.Project.Model.AddNamedSelection()
+  NS.Location = location_selection_info
+  NS.Name = "My Named Selection"
+  NS.SendToSolver = True    # ← 확인됨! Solver에 전달 여부
+
+  # NS의 Entities 접근 (NamedSelectionsCreator.py에서 확인)
+  BoltBodies = list(NS.Entities)  # ← NS.Entities → 엔티티 목록 반환
+
+  [DataModel 탐색 - 추가 확인됨]
+  ─────────────────────────────────────────────────────────────────
+  # CompFacesGeomRecognition.py에서 확인
+  ExtAPI.DataModel.GeoData.GeoEntityById(body_id)  # ID로 Geo 엔티티 조회
+  ExtAPI.DataModel.GetObjectById(folder_id)         # ID로 DataModel 객체 조회
+  ExtAPI.DataModel.Tree.ActiveObjects[0]            # 현재 활성 객체 목록
+
+  [Selection Manager 확장 - 확인됨]
+  ─────────────────────────────────────────────────────────────────
+  CurrentSel = ExtAPI.SelectionManager.CurrentSelection   # 현재 선택 상태 저장
+  ExtAPI.SelectionManager.ClearSelection()                # 선택 초기화 ✅
+
+  [Connections & Contact API - 확인됨]
+  ─────────────────────────────────────────────────────────────────
+  # CompFacesGeomRecognition.py에서 확인
+
+  ConGroup = ExtAPI.DataModel.Project.Model.Connections.AddConnectionGroup()
+
+  Contact = ConGroup.AddContactRegion()
+  Contact.Name = "Contact_Name"
+
+  # 타겟/소스 위치 설정
+  SelInfo = ExtAPI.SelectionManager.CreateSelectionInfo(SelectionTypeEnum.GeometryEntities)
+  SelInfo.Entities = target_faces
+  Contact.TargetLocation = SelInfo    # 타겟 면 설정
+
+  SelInfo2 = ExtAPI.SelectionManager.CreateSelectionInfo(SelectionTypeEnum.GeometryEntities)
+  SelInfo2.Entities = source_faces
+  Contact.SourceLocation = SelInfo2   # 소스 면 설정
+
+  [Transaction 컨텍스트 - 확인됨]
+  ─────────────────────────────────────────────────────────────────
+  # CompFacesGeomRecognition.py에서 확인 - 여러 작업 배치 처리 시 사용
+  with Transaction(True):
+      # 여러 DataModel 수정 작업
+      NS = ExtAPI.DataModel.Project.Model.AddNamedSelection()
+      NS.Location = sel_info
+      # ...
+
+  [메시지 출력 - 확인됨]
+  ─────────────────────────────────────────────────────────────────
+  # CompFacesGeomRecognition.py에서 확인
+  ExtAPI.Application.Messages.Add(
+      Ansys.Mechanical.Application.Message(
+          'Your warning message text here.',
+          MessageSeverityType.Warning    # 또는 .Error, .Info
+      )
+  )
+
+  [GeoFace 추가 속성 - 확인됨]
+  ─────────────────────────────────────────────────────────────────
+  face.Centroid       # 면 중심점 → 시퀀스/튜플 반환 (list(face.Centroid) 가능)
+  face.Points         # 면 꼭짓점 좌표 목록 (flat list, zip으로 3개씩 묶음)
+                      # 예: Points = zip(*(iter(face.Points),) * 3)  → (x,y,z) 튜플
+
+  [Object 활성화 - 확인됨]
+  ─────────────────────────────────────────────────────────────────
+  obj = ExtAPI.DataModel.Tree.ActiveObjects[0]
+  obj.Activate()      # 객체를 Tree에서 활성화
+
+================================================================================
+23. BoltTools에서 발견된 모듈 패턴 (ACT Extension 구조)
+================================================================================
+
+  [module_base.py 패턴]
+  - 각 모듈은 `from module_base import *`로 공통 전역 변수 임포트
+  - ExtAPI, Ansys, SelectionTypeEnum, MessageSeverityType, Transaction 등 포함
+  - 각 모듈은 `Initialize(ExtAPI, Ansys)` 함수로 전역 변수 초기화
+
+  [서브모듈 임포트]
+  from GeneralUtilities.SelectionInfoHelper import GeomSelInfo
+  from GeneralUtilities.AnsysVersionHelper import GetMajorVersion
+  from GeneralUtilities.MechVectors import VectorFromVals
+
+================================================================================
+24. PretensionHelper.py에서 확인된 고급 API 패턴
+    출처: D:\Program Files\ANSYS Inc\ANSYS Student\v252\aisol\WBAddins\MechanicalExtensions\BoltTools\PretensionHelper.py
+================================================================================
+
+  [Analysis 활성화 필수 패턴 - 중요!]
+  ─────────────────────────────────────────────────────────────────
+  # 하중 추가 전 반드시 해당 Analysis를 활성화해야 함!
+  Analysis.Activate()                        # ← 하중 추가 전 호출!
+  Pretension = Analysis.AddBoltPretension()  # 그 다음 하중 추가
+  # Force, Support 등 모든 하중에 동일하게 적용
+
+  [Analysis 타입 확인]
+  ─────────────────────────────────────────────────────────────────
+  analysis.AnalysisType                      # 타입 반환
+  str(analysis.AnalysisType) == 'Static'     # 문자열 비교 가능!
+
+  # AnalysisType 열거값:
+  AnalysisType.Static
+  AnalysisType.Transient
+  AnalysisType.ExplicitDynamics
+  AnalysisType.Modal
+  AnalysisType.HarmonicResponse
+  # → 문자열로 확인: str(analysis.AnalysisType)
+
+  [DataModel 쿼리 - 타입으로 조회]
+  ─────────────────────────────────────────────────────────────────
+  # 특정 타입의 모든 객체 가져오기 (확인됨!)
+  Pretensions = ExtAPI.DataModel.GetObjectsByType(DataModelObjectCategory.BoltPretension)
+  CoordSystems = ExtAPI.DataModel.GetObjectsByType(DataModelObjectCategory.CoordinateSystem)
+  # → DataModelObjectCategory 열거값 사용
+
+  # 현재 선택된 엔티티
+  Entities = ExtAPI.SelectionManager.CurrentSelection.Entities  # ← 확인됨!
+
+  # 현재 Tree에서 활성화된 객체들
+  ActiveObjs = ExtAPI.DataModel.Tree.ActiveObjects  # ← 확인됨!
+
+  [Location.Ids 및 Location.Entities 읽기]
+  ─────────────────────────────────────────────────────────────────
+  # Load 객체의 Location에서 ID 목록 읽기
+  Ids = PreTensionLoad.Location.Ids       # → ID 목록 반환
+  Ents = Pretension.Location.Entities     # → 엔티티 목록 반환
+
+  # SelInfo 의 SelectionType
+  SelInfo.SelectionType                   # → GeometryEntities 등
+
+  [Tabular Data 수정 패턴 (부분 수정)]
+  ─────────────────────────────────────────────────────────────────
+  # 전체 리스트를 읽고 특정 스텝만 수정 후 재대입하는 패턴!
+  Vals = list(LoadComponent.Output.DiscreteValues)    # 기존 값 읽기
+  Vals[stepIndex-1] = new_quantity                     # 특정 인덱스만 수정
+  LoadComponent.Output.DiscreteValues = Vals           # 전체 리스트 재대입
+
+  # DiscreteValueCount - 현재 설정된 값 개수
+  count = Pretension.Preload.Inputs[0].DiscreteValueCount
+  count = Pretension.Preload.Output.DiscreteValueCount
+
+  [Properties 경로 기반 접근 - ACT Extension용]
+  ─────────────────────────────────────────────────────────────────
+  # ACT Extension에서 Properties 딕셔너리 접근 (선언되지 않은 속성 접근)
+  obj.Properties['Scope/DefineBy'].Value = 'ID_GeometrySelection'
+  obj.Properties['Scope/DefineBy/GeometrySelection'].Value = sel_info
+  obj.Properties['DefinitionSolid/PreLoadStress/PreLoadStress'].Value  # tabular data obj
+  obj.Properties['DefinitionSolid/ShearStressFlag'].Value = True/False
+  obj.Properties['DefinitionBeamConnection/Magnitude'].Value = quantity
+  obj.Properties['DefinitionBeamConnection/EndTime'].Value = quantity
+  obj.Properties[0].InternalValue                                       # 인덱스 기반 접근
+
+  [Analysis.CreateLoadObject - LS-DYNA 전용]
+  ─────────────────────────────────────────────────────────────────
+  PretensionLSD = Analysis.CreateLoadObject('Bolt Pretension 2', 'LSDYNA')
+  # 일반 분석에서는 AddBoltPretension() 사용
+
+  [BoltPretension 전용 API]
+  ─────────────────────────────────────────────────────────────────
+  pretension.SetDefineBy(stepIndex, BoltLoadDefineBy.Load)   # stepIndex=1부터 시작
+  pretension.GetDefineBy(stepIndex)                           # 반환값: BoltLoadDefineBy enum
+  pretension.Preload                                          # Load 컴포넌트 (tabular)
+  pretension.Preadjustment                                    # Adjustment 컴포넌트
+  pretension.Increment                                        # Increment 컴포넌트
+  pretension.CoordinateSystem = cs_obj                        # CS 할당
+
+  # BoltLoadDefineBy 값:
+  BoltLoadDefineBy.Lock
+  BoltLoadDefineBy.Adjustment
+  BoltLoadDefineBy.Increment
+  BoltLoadDefineBy.Load
+  BoltLoadDefineBy.Open
+
+  [해석 결과 Probe API]
+  ─────────────────────────────────────────────────────────────────
+  Probe = Analysis.Solution.AddBoltPretensionProbe()
+  Probe.BoundaryConditionSelection = pretension_obj
+
+  [Pretension Parent 접근]
+  ─────────────────────────────────────────────────────────────────
+  Analysis = Pretension.Parent  # 하중의 부모 = Analysis
+
+  [InternalObject 하위 레벨 접근]
+  ─────────────────────────────────────────────────────────────────
+  # API로 노출되지 않은 속성에 접근할 때 InternalObject 사용
+  Load.InternalObject.GeometryDefineBy = 19    # int 값으로 설정
+  Load.InternalObject.BeamConnectionSelection = beam_id
+
+  [객체 타입 확인]
+  ─────────────────────────────────────────────────────────────────
+  PretensionType = Ansys.ACT.Automation.Mechanical.BoundaryConditions.BoltPretension
+  obj.GetType() == PretensionType   # → True/False 타입 비교
+
+================================================================================
+25. AnalysisSettings 완전한 Per-Step API 목록 (ANSYS 공식 내부 코드 기반)
+    출처: D:\Program Files\ANSYS Inc\ANSYS Student\v252\aisol\DesignSpace\DSPages\Python\controllers\ansys_analysis_settings.py
+    ⭐ ANSYS 내부 Analysis Settings UI 컨트롤러 - 공식 확인된 메서드 목록!
+================================================================================
+
+  [NumberOfSteps 및 직접 속성]
+  settings.NumberOfSteps        → int
+  settings.StepEndTime          → Quantity  (현재/마지막 스텝 종료 시간)
+  settings.InitialTimeStep      → Quantity
+  settings.MinimumTimeStep      → Quantity
+  settings.MaximumTimeStep      → Quantity
+  settings.Stress               → bool
+  settings.Strain               → bool
+  settings.NodalForces          → OutputControlsNodalForcesType
+  settings.ContactMiscellaneous → bool
+  settings.GeneralMiscellaneous → bool
+  settings.ObjectId             → int
+
+  [Per-Step Set 메서드] (stepNumber는 1부터 시작!)
+  settings.SetStepEndTime(stepNumber, Quantity(value))          ← 확인됨!
+  settings.SetAutomaticTimeStepping(stepNumber, AutomaticTimeStepping.On/Off/ProgramControlled)
+  settings.SetDefineBy(stepNumber, TimeStepDefineByType.Time)   ← 주의: BoltLoadDefineBy 아님!
+  settings.SetInitialTimeStep(stepNumber, Quantity(value))      ← 확인됨!
+  settings.SetMinimumTimeStep(stepNumber, Quantity(value))      ← 확인됨!
+  settings.SetMaximumTimeStep(stepNumber, Quantity(value))      ← 확인됨!
+  settings.SetInitialSubsteps(stepNumber, int_value)
+  settings.SetMinimumSubsteps(stepNumber, int_value)
+  settings.SetMaximumSubsteps(stepNumber, int_value)
+  settings.SetCarryOverTimeStep(stepNumber, bool_value)
+  settings.SetForceConvergenceType(stepNumber, ConvergenceToleranceType.On)
+  settings.SetForceConvergenceValue(stepNumber, Quantity(value))
+  settings.SetForceConvergenceTolerance(stepNumber, float_value)
+  settings.SetForceConvergenceMinimumReference(stepNumber, Quantity(value))
+  settings.SetMomentConvergenceType(stepNumber, ...)
+  settings.SetDisplacementConvergenceType(stepNumber, ...)
+  settings.SetRotationConvergenceType(stepNumber, ...)
+  settings.SetLineSearch(stepNumber, LineSearchType.On/Off/ProgramControlled)
+  settings.SetStabilization(stepNumber, StabilizationType.Off/Constant/Reduce)
+  settings.SetStabilizationMethod(stepNumber, StabilizationMethod.Energy/Damping)
+  settings.SetStabilizationDampingFactor(stepNumber, float_value)
+  settings.SetStabilizationEnergyDissipationRatio(stepNumber, float_value)
+  settings.SetStabilizationFirstSubstepOption(stepNumber, StabilizationFirstSubstepOption.No)
+  settings.SetStabilizationForceLimit(stepNumber, float_value)
+  settings.SetStoreResultsAt(stepNumber, TimePointsOptions.AllTimePoints)
+  settings.SetStoreResulsAtValue(stepNumber, value)   ⚠️ 오타("Resuls")지만 공식 메서드명!
+
+  [Per-Step Get 메서드]
+  settings.GetStepEndTime(stepNumber)                → Quantity
+  settings.GetAutomaticTimeStepping(stepNumber)      → AutomaticTimeStepping
+  settings.GetDefineBy(stepNumber)                   → TimeStepDefineByType
+  settings.GetInitialTimeStep(stepNumber)            → Quantity
+  settings.GetMinimumTimeStep(stepNumber)            → Quantity
+  settings.GetMaximumTimeStep(stepNumber)            → Quantity
+  settings.GetInitialSubsteps(stepNumber)            → int
+  settings.GetMinimumSubsteps(stepNumber)            → int
+  settings.GetMaximumSubsteps(stepNumber)            → int
+  settings.GetCarryOverTimeStep(stepNumber)          → bool
+  settings.GetForceConvergenceType(stepNumber)       → ConvergenceToleranceType
+  settings.GetForceConvergenceValue(stepNumber)      → Quantity
+  settings.GetForceConvergenceTolerance(stepNumber)  → float
+  settings.GetLineSearch(stepNumber)                 → LineSearchType
+  settings.GetStabilization(stepNumber)              → StabilizationType
+  settings.GetStoreResultsAt(stepNumber)             → TimePointsOptions
+
+  [확인된 Enums]
+  AutomaticTimeStepping:    .ProgramControlled, .On, .Off
+  ConvergenceToleranceType: .ProgramControlled, .On, .Remove
+  LineSearchType:           .ProgramControlled, .On, .Off
+  StabilizationType:        .Off, .Constant, .Reduce
+  StabilizationMethod:      .Energy, .Damping
+  StabilizationFirstSubstepOption: .No, .OnNonConvergence, .Yes
+  TimePointsOptions:        .AllTimePoints, .LastTimePoints, .EquallySpacedPoints, .SpecifiedRecurrenceRate
+  OutputControlsNodalForcesType: .No, .Yes
+  TimeStepDefineByType:     .Substeps, .Time
+
+================================================================================
+26. Worksheet 기반 Named Selection API
+    출처: D:\Program Files\ANSYS Inc\ANSYS Student\v252\aisol\WBAddins\MechanicalExtensions\BoltTools\WorksheetNamesSelectionCreator.py
+    ⭐ 방향/위치/타입 조건으로 면/엣지/노드를 자동 선택할 때 사용!
+================================================================================
+
+  [기본 패턴]
+  NS = model.AddNamedSelection()
+  NS.ScopingMethod = Enums.GeometryDefineByType.Worksheet   # Worksheet 모드!
+  NS.SendToSolver = False
+
+  WsRow = Ansys.ACT.Automation.Mechanical.NamedSelectionCriterion()
+  WsRow.Action     = Enums.SelectionActionType.Add          # Add, Filter, Convert
+  WsRow.EntityType = Enums.SelectionType.GeoFace            # 대상 엔티티 타입
+  WsRow.Criterion  = Enums.SelectionCriterionType.Type      # 기준
+  WsRow.Operator   = Enums.SelectionOperatorType.Equal      # Equal, RangeInclude
+  WsRow.Value      = 1                                      # Plane=1, Cylinder=2, Cone=4
+  WsRow.LowerBound = 0.0    # RangeInclude 하한
+  WsRow.UpperBound = 10.0   # RangeInclude 상한
+  WsRow.CoordinateSystem = cs_obj   # 좌표계 기준
+
+  NS.GenerationCriteria.Add(WsRow)  # ← .Add() 메서드로 행 추가!
+  NS.Generate()                      # ← 마지막에 반드시!
+
+  [SelectionActionType]
+  .Add     - 엔티티 추가
+  .Filter  - 현재 선택에서 조건 필터링
+  .Convert - 타입 변환 (GeoFace → MeshElementFace 등)
+
+  [SelectionType]
+  .GeoFace, .GeoEdge, .MeshNode, .MeshElement, .MeshElementFace
+
+  [SelectionCriterionType]
+  .Type              - 면 타입 (Plane/Cylinder/Cone)
+  .LocationZ         - Z 위치 범위 (좌표계 기준)
+  .LocationX         - X 위치 범위 (좌표계 기준)
+  .NamedSelection    - 기존 NS 기반 필터
+  .AllNodes          - 모든 노드
+
+  [SelectionOperatorType]
+  .Equal, .RangeInclude
+
+  [면 타입 Value 값]
+  1 = Plane (평면)
+  2 = Cylinder (원통면)
+  4 = Cone (원추면)
+
+  [Quantity 경로 확인]
+  Quantity = Ansys.Core.Units.Quantity   # ← WorksheetNamesSelectionCreator.py에서 확인됨
+
+================================================================================
+END OF REFERENCE
+================================================================================

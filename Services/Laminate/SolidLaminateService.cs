@@ -168,6 +168,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Laminate
 
         /// <summary>
         /// 솔리드 바디를 적층 레이어로 교체
+        /// Body.Copy() + Body.Intersect()로 원본 형상(호, 필렛, 구멍 등)을 완벽 보존
         /// </summary>
         public List<DesignBody> CreateSolidLaminate(Part part, DesignBody body,
             SolidAnalysisResult analysis, SolidLaminateParameters p)
@@ -177,10 +178,15 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Laminate
             if (analysis == null || !analysis.IsValid)
                 throw new InvalidOperationException("유효하지 않은 분석 결과입니다.");
 
-            // 경계 커브 추출 (원본 삭제 전에)
-            List<ITrimmedCurve> boundaryCurves = surfaceService.ExtractBoundaryCurves(analysis.BaseFace);
-            if (boundaryCurves.Count == 0)
-                throw new InvalidOperationException("기저면에서 경계 커브를 추출할 수 없습니다.");
+            // 원본 Shape 복사 (삭제 전에 보관)
+            Body originalShape = body.Shape.Copy();
+
+            // 바운딩 박스로 슬라브 크기 결정
+            var bbox = originalShape.GetBoundingBox(Matrix.Identity);
+            Vector diag = bbox.MaxCorner - bbox.MinCorner;
+            double halfExtent = Math.Max(Math.Max(
+                Math.Abs(diag.X), Math.Abs(diag.Y)), Math.Abs(diag.Z)) * 2;
+            if (halfExtent < 1.0) halfExtent = 1.0; // 최소 1m
 
             // 원본 바디 삭제
             if (p.DeleteOriginalBody)
@@ -188,7 +194,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Laminate
                 body.Delete();
             }
 
-            // isReversed 판단: stackingNormal과 basePlane의 DirZ가 반대이면 reversed
+            // isReversed 판단
             Vector baseDirZ = analysis.BasePlane.Frame.DirZ.UnitVector;
             double dotCheck = Vector.Dot(analysis.StackingNormal, baseDirZ);
             bool isReversed = dotCheck < 0;
@@ -202,12 +208,19 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Laminate
                 var layer = p.Layers[i];
                 double thicknessM = GeometryUtils.MmToMeters(layer.ThicknessMm);
 
-                DesignBody layerBody = surfaceService.CreateOffsetLayerBody(
-                    part, boundaryCurves, analysis.BasePlane,
-                    analysis.StackingNormal, isReversed,
-                    currentOffsetM, thicknessM, layer.Name);
+                // 1. 원본 바디 복사
+                Body layerBody = originalShape.Copy();
 
-                resultBodies.Add(layerBody);
+                // 2. 슬라브 생성 (레이어 영역만큼의 큰 직육면체)
+                Body slab = CreateSlabBody(analysis.BasePlane, analysis.StackingNormal,
+                    isReversed, currentOffsetM, thicknessM, halfExtent);
+
+                // 3. 교집합 = 원본과 슬라브가 겹치는 부분만 남김
+                layerBody.Intersect(new Body[] { slab });
+
+                // 4. DesignBody 생성
+                DesignBody designBody = BodyBuilder.CreateDesignBody(part, layer.Name, layerBody);
+                resultBodies.Add(designBody);
                 currentOffsetM += thicknessM;
             }
 
@@ -218,6 +231,48 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Laminate
             }
 
             return resultBodies;
+        }
+
+        /// <summary>
+        /// 레이어 영역에 해당하는 큰 직육면체(슬라브) 생성
+        /// </summary>
+        private Body CreateSlabBody(Plane basePlane, Vector stackNormal,
+            bool isReversed, double offsetM, double thicknessM, double halfExtent)
+        {
+            Point origin = basePlane.Frame.Origin + stackNormal * offsetM;
+
+            Direction dirX, dirY;
+            if (isReversed)
+            {
+                dirX = basePlane.Frame.DirY;
+                dirY = basePlane.Frame.DirX;
+            }
+            else
+            {
+                dirX = basePlane.Frame.DirX;
+                dirY = basePlane.Frame.DirY;
+            }
+
+            Vector dx = dirX.UnitVector * halfExtent;
+            Vector dy = dirY.UnitVector * halfExtent;
+
+            Point p0 = origin - dx - dy;
+            Point p1 = origin + dx - dy;
+            Point p2 = origin + dx + dy;
+            Point p3 = origin - dx + dy;
+
+            var curves = new List<ITrimmedCurve>
+            {
+                CurveSegment.Create(p0, p1),
+                CurveSegment.Create(p1, p2),
+                CurveSegment.Create(p2, p3),
+                CurveSegment.Create(p3, p0)
+            };
+
+            Frame slabFrame = Frame.Create(origin, dirX, dirY);
+            Plane slabPlane = Plane.Create(slabFrame);
+            Profile profile = new Profile(slabPlane, curves);
+            return Body.ExtrudeProfile(profile, thicknessM);
         }
 
         // =============================================

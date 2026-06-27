@@ -12,6 +12,7 @@ using SpaceClaim.Api.V252.Extensibility;
 
 namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.ConformalMesh
 {
+    // @lat: [[mesh#Conformal Mesh]]
     public class ConformalMeshCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.ConformalMesh";

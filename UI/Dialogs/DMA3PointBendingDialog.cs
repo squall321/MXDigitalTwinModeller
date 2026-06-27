@@ -235,6 +235,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                         }
                     }
                 });
+                Window.ActiveWindow?.ZoomExtents();
             }
             catch (Exception ex)
             {

@@ -1,0 +1,11 @@
+# encoding: utf-8
+# 2025 R2
+SetScriptVersion(Version="25.2.172")
+system1 = GetSystem(Name="SYS")
+system1.Delete()
+system2 = GetSystem(Name="Geom")
+system2.Delete()
+Save(Overwrite=True)
+Save(Overwrite=True)
+geometry1.Exit()
+Open(FilePath="D:/MXDigitalTwinModeller/Test/ASTM_E8_optimization/ASTM_E8_optimization.wbpj")

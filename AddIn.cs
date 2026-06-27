@@ -16,6 +16,10 @@ using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Load;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Simulation;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Pipeline;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.ConformalMesh;
+using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.VoidCut;
+using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.GmshMesher;
+using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.ReverseEngineer;
+using SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.TensileTest;
 
 #if V251
 using SpaceClaim.Api.V251.Extensibility;
@@ -69,6 +73,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller
             // 적층 모델 생성
             new CreateLaminateCommand(),
 
+            // 보이드 컷
+            new VoidCutCommand(),
+
             // 메쉬 설정 그룹
             new CommandCapsule("MXDigitalTwinModeller.MeshGroup", "Mesh"),
 
@@ -100,7 +107,40 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller
             new BatchPipelineCommand(),
 
             // Conformal Mesh
-            new ConformalMeshCommand()
+            new ConformalMeshCommand(),
+
+            // Gmsh Mesher 그룹
+            new CommandCapsule("MXDigitalTwinModeller.GmshMesherGroup", "DT Mesher"),
+
+            // Gmsh 외부 메셔
+            new GmshMesherCommand(),
+
+            // Reverse Engineering 그룹 (Stage 1: feature extraction)
+            new CommandCapsule("MXDigitalTwinModeller.ReverseEngineerGroup", "Reverse Eng"),
+
+            // Feature 추출 (Body → FeatureGraph JSON)
+            new ExtractFeaturesCommand(),
+
+            // Feature 시각화 (face 별 색상 — Hole/Boss/Fillet/Wall/Slit)
+            new VisualizeFeatureGraphCommand(),
+
+            // Ask Claude (LLM tool-use loop on the FeatureGraph)
+            new AskClaudeCommand(),
+
+            // GATE-0: MCP thread-marshalling probe (throwaway, MCP_SERVER_PLAN.md)
+            new GateMarshalTestCommand(),
+
+            // Change Dimension (pick a feature → edit D/H/R/T via ModificationService)
+            new ChangeDimensionCommand(),
+
+            // Show in-session ModificationService history (display-only, Cycle 33)
+            new ShowModificationHistoryCommand(),
+
+            // Analyze a real CAD file end-to-end (.stp/.step/.scdocx → JSON + report)
+            new AnalyzeRealModelCommand(),
+
+            // Self-test suite
+            new RunRETestSuiteCommand()
         };
 
         #region IExtensibility Members
@@ -150,6 +190,12 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller
                 }
 
                 System.Diagnostics.Debug.WriteLine($"Initialized {commandCapsules.Length} commands");
+
+                // MCP server (Approach C, MCP_SERVER_PLAN): in-process loopback HttpListener
+                // exposing the 20 mod tools so any MCP client can drive SC geometry. Best-effort:
+                // a server bind failure must NOT break Add-In load.
+                try { Services.ReverseEngineer.Mcp.McpServer.Instance.Start(); }
+                catch (Exception mex) { System.Diagnostics.Debug.WriteLine("MCP server start failed: " + mex.Message); }
             }
             catch (Exception ex)
             {
@@ -224,6 +270,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller
                     <button id=""MXDigitalTwinModeller.CreateLaminate""
                             size=""large""
                             command=""MXDigitalTwinModeller.CreateLaminate""/>
+                    <button id=""MXDigitalTwinModeller.VoidCut""
+                            size=""large""
+                            command=""MXDigitalTwinModeller.VoidCut""/>
                 </group>
                 <group id=""MXDigitalTwinModeller.MeshGroup"" command=""MXDigitalTwinModeller.MeshGroup"">
                     <button id=""MXDigitalTwinModeller.Material""
@@ -256,6 +305,37 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller
                     <button id=""MXDigitalTwinModeller.ConformalMesh""
                             size=""large""
                             command=""MXDigitalTwinModeller.ConformalMesh""/>
+                </group>
+                <group id=""MXDigitalTwinModeller.GmshMesherGroup"" command=""MXDigitalTwinModeller.GmshMesherGroup"">
+                    <button id=""MXDigitalTwinModeller.GmshMesher""
+                            size=""large""
+                            command=""MXDigitalTwinModeller.GmshMesher""/>
+                </group>
+                <group id=""MXDigitalTwinModeller.ReverseEngineerGroup"" command=""MXDigitalTwinModeller.ReverseEngineerGroup"">
+                    <button id=""MXDigitalTwinModeller.ExtractFeatures""
+                            size=""large""
+                            command=""MXDigitalTwinModeller.ExtractFeatures""/>
+                    <button id=""MXDigitalTwinModeller.VisualizeFeatureGraph""
+                            size=""large""
+                            command=""MXDigitalTwinModeller.VisualizeFeatureGraph""/>
+                    <button id=""MXDigitalTwinModeller.AskClaude""
+                            size=""large""
+                            command=""MXDigitalTwinModeller.AskClaude""/>
+                    <button id=""MXDigitalTwinModeller.GateMarshalTest""
+                            size=""large""
+                            command=""MXDigitalTwinModeller.GateMarshalTest""/>
+                    <button id=""MXDigitalTwinModeller.ChangeDimension""
+                            size=""large""
+                            command=""MXDigitalTwinModeller.ChangeDimension""/>
+                    <button id=""MXDigitalTwinModeller.ShowModificationHistory""
+                            size=""large""
+                            command=""MXDigitalTwinModeller.ShowModificationHistory""/>
+                    <button id=""MXDigitalTwinModeller.AnalyzeRealModel""
+                            size=""large""
+                            command=""MXDigitalTwinModeller.AnalyzeRealModel""/>
+                    <button id=""MXDigitalTwinModeller.RunRETestSuite""
+                            size=""large""
+                            command=""MXDigitalTwinModeller.RunRETestSuite""/>
                 </group>
             </tab>
         </tabs>

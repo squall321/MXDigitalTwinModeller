@@ -305,6 +305,7 @@ class NSDialog(Window):
         scroll.Content = main
         self.Content = scroll
 
+    # @lat: [[face-analysis#STEP Import + 면 분석]]
     def on_find(self, sender, e):
         try:
             self.log("=== Find Contact Faces ===")
@@ -394,6 +395,7 @@ class NSDialog(Window):
             self.face_panel.Children.Add(cb)
             self.face_checkboxes.append((cb, fd))
 
+    # @lat: [[face-analysis#방향별 Named Selection 생성]]
     def on_create_ns(self, sender, e):
         self.log("\n=== Create Named Selections ===")
         if not self.face_data_list:
@@ -471,6 +473,7 @@ class NSDialog(Window):
             import traceback
             self.log(traceback.format_exc())
 
+    # @lat: [[face-analysis#접촉 검출 (보조 기능)]]
     def _detect_contact(self, targets, all_bodies, tol_mm):
         tol_m = tol_mm / 1000.0
         target_ids = set(id(b) for b in targets)
@@ -561,6 +564,7 @@ class NSDialog(Window):
 # Dialog 2: Modal Analysis
 # ================================================================
 
+# @lat: [[scenarios#Modal Analysis]]
 class ModalDialog(Window):
     """
     Button 2 — Modal Analysis
@@ -686,6 +690,7 @@ class ModalDialog(Window):
 # Dialog 3: Add Scenario
 # ================================================================
 
+# @lat: [[scenarios#Cap Vibration Scenario]]
 class ScenarioDialog(Window):
     """
     Button 3 — Add Scenario
@@ -1255,6 +1260,7 @@ class FacePairDialog(Window):
         scroll.Content = main
         self.Content = scroll
 
+    # @lat: [[face-pair-ns#Face Pair 검출]]
     def on_find(self, sender, e):
         try:
             self.log("=== Find Contact Face Pairs ===")
@@ -1475,6 +1481,7 @@ class FacePairDialog(Window):
             self.pair_panel.Children.Add(row)
             self.pair_checkboxes.append((cb, pd))
 
+    # @lat: [[face-pair-ns#Include / Exclude 로직]]
     def on_create_ns(self, sender, e):
         self.log("\n=== Create Face Pair Named Selections ===")
         if not self.pair_data:
@@ -1496,6 +1503,7 @@ class FacePairDialog(Window):
         else:
             self._create_ns_per_pair(checked)
 
+    # @lat: [[face-pair-ns#NS 생성 — Merge Mode]]
     def _create_ns_merged(self, checked):
         """Merge mode: combine all A-faces into one NS, all B-faces into one NS."""
         prefix = self.merge_name_tb.Text.strip() or "Contact"
@@ -1572,6 +1580,7 @@ class FacePairDialog(Window):
             import traceback
             self.log(traceback.format_exc())
 
+    # @lat: [[face-pair-ns#NS 생성 — Per-Pair Mode]]
     def _create_ns_per_pair(self, checked):
         """Per-pair mode: FaceA_001/FaceB_001 per checked pair."""
         try:
@@ -1796,6 +1805,7 @@ class PostProcessDialog(Window):
 
     # ── helpers ──────────────────────────────────────────────────────────
 
+    # @lat: [[postprocess#Post-Process Dialog#분석 선택]]
     def _populate_analyses(self):
         """Find all analyses (prefer Transient) in the model."""
         self.analysis_cb.Items.Clear()
@@ -1826,6 +1836,7 @@ class PostProcessDialog(Window):
             return None
         return self._analyses[idx]
 
+    # @lat: [[postprocess#Post-Process Dialog#NS 패턴 필터]]
     def _get_ns_patterns(self):
         raw = self.ns_filter_tb.Text.strip()
         if not raw:
@@ -1848,6 +1859,7 @@ class PostProcessDialog(Window):
 
     # ── ① Add Results & Evaluate ─────────────────────────────────────────
 
+    # @lat: [[postprocess#Post-Process Dialog#결과 추가]]
     def on_add_results(self, sender, e):
         self.log("=" * 55)
         self.log("① Adding results & evaluating...")
@@ -1994,6 +2006,7 @@ class PostProcessDialog(Window):
 
     # ── ② Export CSV + Launch Viewer ─────────────────────────────────────
 
+    # @lat: [[postprocess#Post-Process Dialog#외부 뷰어 실행]]
     def on_export_launch(self, sender, e):
         self.log("=" * 55)
         self.log("② Exporting CSVs + launching viewer...")
@@ -2292,6 +2305,7 @@ class ExportKFileDialog(Window):
 
     # ── Export ────────────────────────────────────────────────────────────
 
+    # @lat: [[postprocess#K-File Export#진입점]]
     def on_export(self, sender, e):
         path = self.path_tb.Text.strip()
         if not path:
@@ -2422,6 +2436,7 @@ class ExportKFileDialog(Window):
 
     # ── *NODE writer ──────────────────────────────────────────────────────
 
+    # @lat: [[postprocess#K-File Export#메쉬 노드/엘리먼트]]
     def _write_nodes(self, lines, mesh_data, scale):
         """
         Write *NODE section. Returns (node_coords_m dict, count).
@@ -2652,6 +2667,7 @@ class ExportKFileDialog(Window):
 
     # ── *MAT_ELASTIC writer ───────────────────────────────────────────────
 
+    # @lat: [[postprocess#K-File Export#재료]]
     def _write_materials(self, lines, model, body_pid_map, use_mm,
                          mat_e_scale, mat_rho_scale):
         lines.append("$")
@@ -2708,6 +2724,7 @@ class ExportKFileDialog(Window):
 
     # ── *SET_NODE_TITLE writer ────────────────────────────────────────────
 
+    # @lat: [[postprocess#K-File Export#Named Selection]]
     def _write_named_selections(self, lines, mesh_data, model, node_coords_m, tol_m):
         """
         Write *SET_NODE_TITLE for each Named Selection.
@@ -3046,6 +3063,7 @@ class ExportKFileDialog(Window):
             n4 = nodes[3] if len(nodes) >= 4 else nodes[2]
             lines.append("{:10d}{:10d}{:10d}{:10d}".format(n1, n2, n3, n4))
 
+    # @lat: [[postprocess#K-File Export#접촉 / Segment Set]]
     def _write_contacts(self, lines, surface_faces, node_coords_m, mesh_data):
         """Read Contact Regions, write *SET_SEGMENT_TITLE + *CONTACT_* cards.
         Returns number of contact regions written.
@@ -3395,6 +3413,7 @@ class TiedContactCheckDialog(Window):
 
     # ── ① Create & Solve Modal ───────────────────────────────────────────
 
+    # @lat: [[tied-check#모달 실행 + RBM 검출]]
     def on_run_modal(self, sender, e):
         """Create Modal analysis and solve"""
         try:
@@ -3812,6 +3831,7 @@ class TiedContactCheckDialog(Window):
 
     # ── ② Create Contacts ─────────────────────────────────────────────────
 
+    # @lat: [[tied-check#Tied Contact 자동 생성]]
     def on_create_contacts(self, sender, e):
         """Create face-to-face contacts for checked bodies"""
         import time
@@ -4112,6 +4132,7 @@ class TiedContactCheckDialog(Window):
 
     # ── ③ Suppress ────────────────────────────────────────────────────────
 
+    # @lat: [[tied-check#Suppress / Restore]]
     def on_suppress(self, sender, e):
         """Suppress checked bodies"""
         self.log("\n" + "=" * 50)
@@ -4192,6 +4213,1071 @@ def show_tied_check_dialog(analysis):
     """Launch Tied Contact Check dialog."""
     dlg = TiedContactCheckDialog()
     dlg.Show()
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Material Twin Dialog - Phase 0 Infrastructure
+# ═════════════════════════════════════════════════════════════════════════════
+
+def show_material_twin_dialog(analysis):
+    """Launch Material Twin calibration dialog."""
+    try:
+        MaterialTwinDialog().ShowDialog()
+    except Exception as ex:
+        MessageBox.Show("Error:\n\n" + str(ex), "Error",
+            MessageBoxButton.OK, MessageBoxImage.Error)
+
+
+# @lat: [[material-calibrator#다이얼로그 흐름]]
+class MaterialTwinDialog(Window):
+    """
+    Material Twin - Experimental Data → Material Property Calibration
+
+    Phase 0: Basic infrastructure with specimen detection
+    - Workbench Parameters (priority)
+    - .specimen.json fallback (STEP import)
+    - Manual input
+    """
+
+    def __init__(self):
+        self.Title = "MX Material Twin - Tensile Test Calibration"
+        self.Width = 800
+        self.Height = 600
+
+        # Specimen metadata
+        self.specimen_info = None
+
+        # CSV data
+        self.csv_file_path = None
+        self.csv_data = None  # (displacement, force)
+
+        # Calibration results
+        self.calibration_result = None  # dict with E, nu, rho
+
+        # Main layout
+        main_panel = StackPanel()
+        main_panel.Margin = Thickness(10)
+
+        # Header
+        header = Label()
+        header.Content = "Tensile Test → Material Property Calibration"
+        header.FontSize = 16
+        header.FontWeight = System.Windows.FontWeights.Bold
+        header.Margin = Thickness(0, 0, 0, 10)
+        main_panel.Children.Add(header)
+
+        # Info text
+        info = Label()
+        info.Content = ("This wizard extracts material properties from test data:\n"
+                       "  • Elastic properties (E, ν) from tensile tests\n"
+                       "  • Plastic hardening from stress-strain curves\n"
+                       "  • Viscoelasticity (Prony series) from DMA data\n"
+                       "  • Hyperelastic + damping for rubber/tape materials")
+        info.Margin = Thickness(0, 0, 0, 15)
+        main_panel.Children.Add(info)
+
+        main_panel.Children.Add(Separator())
+
+        # Step 1: Specimen Detection
+        step1_label = Label()
+        step1_label.Content = "Step 1: Specimen Geometry Detection"
+        step1_label.FontSize = 14
+        step1_label.FontWeight = System.Windows.FontWeights.Bold
+        step1_label.Margin = Thickness(0, 15, 0, 5)
+        main_panel.Children.Add(step1_label)
+
+        self.specimen_status_label = Label()
+        self.specimen_status_label.Content = "Status: Not detected"
+        self.specimen_status_label.Foreground = Brushes.Gray
+        self.specimen_status_label.Margin = Thickness(0, 0, 0, 5)
+        main_panel.Children.Add(self.specimen_status_label)
+
+        detect_btn = Button()
+        detect_btn.Content = "Detect Specimen (Workbench Params / JSON / Manual)"
+        detect_btn.Width = 350
+        detect_btn.HorizontalAlignment = HorizontalAlignment.Left
+        detect_btn.Margin = Thickness(0, 0, 0, 10)
+        detect_btn.Click += self.on_detect_specimen
+        main_panel.Children.Add(detect_btn)
+
+        # Specimen details (initially hidden)
+        self.specimen_details = Label()
+        self.specimen_details.Margin = Thickness(20, 0, 0, 10)
+        self.specimen_details.Visibility = System.Windows.Visibility.Collapsed
+        main_panel.Children.Add(self.specimen_details)
+
+        main_panel.Children.Add(Separator())
+
+        # Step 2: CSV Data Input (Phase 1A)
+        step2_label = Label()
+        step2_label.Content = "Step 2: Tensile Test Data (CSV)"
+        step2_label.FontSize = 14
+        step2_label.FontWeight = System.Windows.FontWeights.Bold
+        step2_label.Margin = Thickness(0, 15, 0, 5)
+        main_panel.Children.Add(step2_label)
+
+        csv_info = Label()
+        csv_info.Content = "CSV format: 2 columns (displacement_mm, force_N)"
+        csv_info.Foreground = Brushes.DarkGray
+        csv_info.Margin = Thickness(0, 0, 0, 5)
+        main_panel.Children.Add(csv_info)
+
+        csv_panel = StackPanel()
+        csv_panel.Orientation = Orientation.Horizontal
+        csv_panel.Margin = Thickness(0, 0, 0, 10)
+
+        csv_btn = Button()
+        csv_btn.Content = "Select CSV File..."
+        csv_btn.Width = 150
+        csv_btn.Click += self.on_select_csv
+        csv_panel.Children.Add(csv_btn)
+
+        self.csv_path_label = Label()
+        self.csv_path_label.Content = "No file selected"
+        self.csv_path_label.Foreground = Brushes.Gray
+        self.csv_path_label.Margin = Thickness(10, 0, 0, 0)
+        csv_panel.Children.Add(self.csv_path_label)
+
+        main_panel.Children.Add(csv_panel)
+
+        # CSV data status
+        self.csv_status_label = Label()
+        self.csv_status_label.Margin = Thickness(20, 0, 0, 10)
+        self.csv_status_label.Visibility = System.Windows.Visibility.Collapsed
+        main_panel.Children.Add(self.csv_status_label)
+
+        main_panel.Children.Add(Separator())
+
+        # Step 3: Material Properties Input (Phase 1A)
+        step3_label = Label()
+        step3_label.Content = "Step 3: Additional Material Properties"
+        step3_label.FontSize = 14
+        step3_label.FontWeight = System.Windows.FontWeights.Bold
+        step3_label.Margin = Thickness(0, 15, 0, 5)
+        main_panel.Children.Add(step3_label)
+
+        props_info = Label()
+        props_info.Content = "Provide Poisson's ratio and density (or use defaults)"
+        props_info.Foreground = Brushes.DarkGray
+        props_info.Margin = Thickness(0, 0, 0, 10)
+        main_panel.Children.Add(props_info)
+
+        # Poisson's ratio
+        nu_panel = StackPanel()
+        nu_panel.Orientation = Orientation.Horizontal
+        nu_panel.Margin = Thickness(0, 0, 0, 5)
+
+        nu_label = Label()
+        nu_label.Content = "Poisson's Ratio (ν):"
+        nu_label.Width = 150
+        nu_panel.Children.Add(nu_label)
+
+        self.nu_textbox = TextBox()
+        self.nu_textbox.Text = "0.30"
+        self.nu_textbox.Width = 80
+        nu_panel.Children.Add(self.nu_textbox)
+
+        nu_hint = Label()
+        nu_hint.Content = "(default: 0.30 for steel, 0.33 for aluminum)"
+        nu_hint.Foreground = Brushes.Gray
+        nu_hint.Margin = Thickness(10, 0, 0, 0)
+        nu_panel.Children.Add(nu_hint)
+
+        main_panel.Children.Add(nu_panel)
+
+        # Density
+        rho_panel = StackPanel()
+        rho_panel.Orientation = Orientation.Horizontal
+        rho_panel.Margin = Thickness(0, 0, 0, 10)
+
+        rho_label = Label()
+        rho_label.Content = "Density (kg/m³):"
+        rho_label.Width = 150
+        rho_panel.Children.Add(rho_label)
+
+        self.rho_textbox = TextBox()
+        self.rho_textbox.Text = "7850"
+        self.rho_textbox.Width = 80
+        rho_panel.Children.Add(self.rho_textbox)
+
+        rho_hint = Label()
+        rho_hint.Content = "(default: 7850 for steel, 2700 for aluminum)"
+        rho_hint.Foreground = Brushes.Gray
+        rho_hint.Margin = Thickness(10, 0, 0, 0)
+        rho_panel.Children.Add(rho_hint)
+
+        main_panel.Children.Add(rho_panel)
+
+        main_panel.Children.Add(Separator())
+
+        # Step 4: Calibration (Phase 1A)
+        step4_label = Label()
+        step4_label.Content = "Step 4: Run Elastic Calibration"
+        step4_label.FontSize = 14
+        step4_label.FontWeight = System.Windows.FontWeights.Bold
+        step4_label.Margin = Thickness(0, 15, 0, 5)
+        main_panel.Children.Add(step4_label)
+
+        self.calibrate_btn = Button()
+        self.calibrate_btn.Content = "Calibrate Young's Modulus (E)"
+        self.calibrate_btn.Width = 250
+        self.calibrate_btn.HorizontalAlignment = HorizontalAlignment.Left
+        self.calibrate_btn.Margin = Thickness(0, 0, 0, 10)
+        self.calibrate_btn.Click += self.on_calibrate_elastic
+        self.calibrate_btn.IsEnabled = False
+        main_panel.Children.Add(self.calibrate_btn)
+
+        # Calibration results
+        self.calib_results_label = Label()
+        self.calib_results_label.Margin = Thickness(20, 0, 0, 10)
+        self.calib_results_label.Visibility = System.Windows.Visibility.Collapsed
+        main_panel.Children.Add(self.calib_results_label)
+
+        main_panel.Children.Add(Separator())
+
+        # Step 5: Engineering Data Generation (Phase 1A)
+        step5_label = Label()
+        step5_label.Content = "Step 5: Create Engineering Data"
+        step5_label.FontSize = 14
+        step5_label.FontWeight = System.Windows.FontWeights.Bold
+        step5_label.Margin = Thickness(0, 15, 0, 5)
+        main_panel.Children.Add(step5_label)
+
+        self.create_mat_btn = Button()
+        self.create_mat_btn.Content = "Create Material in Engineering Data"
+        self.create_mat_btn.Width = 300
+        self.create_mat_btn.HorizontalAlignment = HorizontalAlignment.Left
+        self.create_mat_btn.Margin = Thickness(0, 0, 0, 10)
+        self.create_mat_btn.Click += self.on_create_material
+        self.create_mat_btn.IsEnabled = False
+        main_panel.Children.Add(self.create_mat_btn)
+
+        # Material name input
+        mat_name_panel = StackPanel()
+        mat_name_panel.Orientation = Orientation.Horizontal
+        mat_name_panel.Margin = Thickness(20, 0, 0, 10)
+
+        mat_name_label = Label()
+        mat_name_label.Content = "Material Name:"
+        mat_name_label.Width = 120
+        mat_name_panel.Children.Add(mat_name_label)
+
+        self.mat_name_textbox = TextBox()
+        self.mat_name_textbox.Text = "Calibrated_Material"
+        self.mat_name_textbox.Width = 200
+        mat_name_panel.Children.Add(self.mat_name_textbox)
+
+        main_panel.Children.Add(mat_name_panel)
+
+        self.material_status_label = Label()
+        self.material_status_label.Margin = Thickness(20, 0, 0, 10)
+        self.material_status_label.Visibility = System.Windows.Visibility.Collapsed
+        main_panel.Children.Add(self.material_status_label)
+
+        main_panel.Children.Add(Separator())
+
+        # Bottom buttons
+        btn_panel = StackPanel()
+        btn_panel.Orientation = Orientation.Horizontal
+        btn_panel.HorizontalAlignment = HorizontalAlignment.Right
+        btn_panel.Margin = Thickness(0, 15, 0, 0)
+
+        close_btn = Button()
+        close_btn.Content = "Close"
+        close_btn.Width = 80
+        close_btn.Click += lambda s, e: self.Close()
+        btn_panel.Children.Add(close_btn)
+
+        main_panel.Children.Add(btn_panel)
+
+        # Scroll viewer
+        scroll = ScrollViewer()
+        scroll.VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        scroll.Content = main_panel
+
+        self.Content = scroll
+
+
+    def on_detect_specimen(self, sender, event):
+        """
+        Multi-source specimen detection (Phase 0 완료):
+        1. Workbench Parameters (P1_GaugeLength, P2_GaugeWidth, P3_Thickness)
+        2. specimen.yaml file (SpaceClaim 자동 생성, 우선 방식)
+        3. .specimen.json file (STEP import fallback)
+        4. Manual input dialog
+        """
+        try:
+            # Priority 1: Workbench Parameters (수동 생성)
+            info = self.detect_specimen_from_workbench()
+            if info:
+                self.specimen_info = info
+                self.show_specimen_detected("Workbench Parameters", info)
+                return
+
+            # Priority 2: specimen.yaml (SpaceClaim 자동 생성) - Phase 0 신규
+            info = self.detect_specimen_from_yaml()
+            if info:
+                self.specimen_info = info
+                self.show_specimen_detected("SpaceClaim YAML", info)
+                return
+
+            # Priority 3: JSON file (STEP export fallback)
+            info = self.detect_specimen_from_json()
+            if info:
+                self.specimen_info = info
+                self.show_specimen_detected("JSON File", info)
+                return
+
+            # Priority 4: Manual input
+            MessageBox.Show(
+                "Specimen not detected.\n\n"
+                "Checked:\n"
+                "- Workbench Parameters (P1_GaugeLength, etc.)\n"
+                "- specimen.yaml (SpaceClaim metadata)\n"
+                "- .specimen.json (STEP export)\n\n"
+                "Manual input UI will be implemented in Phase 1A.",
+                "Not Detected",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information
+            )
+
+        except Exception as ex:
+            MessageBox.Show("Detection error:\n\n" + str(ex), "Error",
+                MessageBoxButton.OK, MessageBoxImage.Error)
+
+
+    # @lat: [[material-calibrator#Specimen Detection 소스#Workbench Parameters]]
+    def detect_specimen_from_workbench(self):
+        """
+        Read specimen geometry from Workbench Parameters.
+
+        Expected parameters (created in SpaceClaim):
+        - P1_GaugeLength (mm)
+        - P2_GaugeWidth (mm)
+        - P3_Thickness (mm)
+        - P4_SpecimenType (string: "ASTM E8", "ASTM D638", etc.)
+        """
+        try:
+            params = ExtAPI.DataModel.Project.Model.Parameters
+            param_names = [p.Name for p in params]
+
+            if "P1_GaugeLength" in param_names:
+                gauge_length = params["P1_GaugeLength"].Value.Value  # Quantity -> double
+                gauge_width = params["P2_GaugeWidth"].Value.Value
+                thickness = params["P3_Thickness"].Value.Value
+                spec_type = params["P4_SpecimenType"].Expression.strip('"')
+
+                return {
+                    'GaugeLength': gauge_length,
+                    'GaugeWidth': gauge_width,
+                    'Thickness': thickness,
+                    'SpecimenType': spec_type,
+                    'CrossSectionArea': gauge_width * thickness
+                }
+        except Exception as ex:
+            # Parameters not found or error - fall through
+            pass
+
+        return None
+
+
+    # @lat: [[material-calibrator#Specimen Detection 소스#Specimen YAML]]
+    def detect_specimen_from_yaml(self):
+        """
+        Read specimen.yaml file from SpaceClaim geometry directory.
+
+        Phase 0: 우선 메타데이터 전달 방식
+        SpaceClaim에서 시편 생성 시 자동으로 specimen.yaml 생성
+        """
+        debug_info = []  # 디버깅 정보 수집
+
+        try:
+            # Geometry 컴포넌트의 소스 파일 경로 찾기
+            geometry = ExtAPI.DataModel.Project.Model.Geometry
+            if not geometry:
+                debug_info.append("[FAIL] No Geometry component found")
+                MessageBox.Show('\n'.join(debug_info), "Debug: YAML Detection Failed",
+                               MessageBoxButton.OK, MessageBoxImage.Warning)
+                return None
+
+            debug_info.append("[OK] Geometry component found")
+
+            # Geometry의 소스 파일 경로 (SpaceClaim .scdoc 파일)
+            source_file = None
+            try:
+                # Try multiple methods to get source file
+                if hasattr(geometry, 'Source'):
+                    source_file = geometry.Source
+                    debug_info.append("[OK] Got source via geometry.Source")
+                elif hasattr(geometry, 'SourceFile'):
+                    source_file = geometry.SourceFile
+                    debug_info.append("[OK] Got source via geometry.SourceFile")
+                else:
+                    debug_info.append("[WARN] No Source/SourceFile attribute")
+
+                # Try alternative: Children
+                if not source_file and hasattr(geometry, 'Children'):
+                    for child in geometry.Children:
+                        if hasattr(child, 'Source'):
+                            source_file = child.Source
+                            debug_info.append("[OK] Got source via child.Source")
+                            break
+            except Exception as ex:
+                debug_info.append("[ERROR] Getting source: " + str(ex))
+
+            debug_info.append("Source file: " + str(source_file))
+
+            if not source_file:
+                debug_info.append("[FAIL] Source file is None")
+                MessageBox.Show('\n'.join(debug_info), "Debug: YAML Detection Failed",
+                               MessageBoxButton.OK, MessageBoxImage.Warning)
+                return None
+
+            if not os.path.exists(source_file):
+                debug_info.append("[FAIL] Source file does not exist on disk")
+                MessageBox.Show('\n'.join(debug_info), "Debug: YAML Detection Failed",
+                               MessageBoxButton.OK, MessageBoxImage.Warning)
+                return None
+
+            debug_info.append("[OK] Source file exists")
+
+            # specimen.yaml 경로 (.scdoc과 같은 디렉토리)
+            source_dir = os.path.dirname(source_file)
+            yaml_path = os.path.join(source_dir, 'specimen.yaml')
+
+            debug_info.append("Source directory: " + source_dir)
+            debug_info.append("Looking for YAML: " + yaml_path)
+
+            # 디렉토리 내 파일 목록 확인
+            if os.path.exists(source_dir):
+                files_in_dir = os.listdir(source_dir)
+                debug_info.append("Files in directory: " + ', '.join(files_in_dir[:10]))
+            else:
+                debug_info.append("[ERROR] Source directory does not exist!")
+
+            # Fallback 1: pending temp file이 있으면 YAML 생성
+            if not os.path.exists(yaml_path):
+                debug_info.append("[WARN] specimen.yaml not found in geometry directory")
+                debug_info.append("[INFO] Trying pending fallback...")
+                self._generate_yaml_from_pending(source_dir, yaml_path)
+
+            # Fallback 2: 임시 폴더의 최근 YAML 사용 (Workbench 미저장 프로젝트용)
+            if not os.path.exists(yaml_path):
+                import tempfile
+                temp_yaml_path = os.path.join(tempfile.gettempdir(), 'mx_specimen_last.yaml')
+                debug_info.append("[INFO] Trying temp YAML fallback: " + temp_yaml_path)
+
+                if os.path.exists(temp_yaml_path):
+                    debug_info.append("[OK] Found temp YAML, using it!")
+                    yaml_path = temp_yaml_path  # Use temp YAML instead
+                else:
+                    debug_info.append("[WARN] Temp YAML also not found")
+
+            # YAML 파일이 여전히 없으면 None 리턴
+            if not os.path.exists(yaml_path):
+                debug_info.append("[FAIL] specimen.yaml NOT FOUND - tried all fallbacks")
+                debug_info.append("")
+                debug_info.append("=== Troubleshooting ===")
+                debug_info.append("1. Create specimen in SpaceClaim")
+                debug_info.append("2. Save Document (저장 대화창)")
+                debug_info.append("3. Save Workbench Project")
+                debug_info.append("4. Try detection again")
+
+                # 로그 저장
+                import tempfile
+                log_path = os.path.join(tempfile.gettempdir(), 'mx_specimen_detection.log')
+                try:
+                    with open(log_path, 'w') as f:
+                        f.write('\n'.join(debug_info))
+                except:
+                    pass
+
+                msg = '\n'.join(debug_info) + '\n\n=== Log: ' + log_path + ' ==='
+                MessageBox.Show(msg, "YAML Detection Failed",
+                               MessageBoxButton.OK, MessageBoxImage.Error)
+                return None
+
+            debug_info.append("[SUCCESS] specimen.yaml found!")
+            debug_info.append("Using YAML: " + yaml_path)
+
+            # YAML 파싱
+            import sys
+            calib_path = os.path.join(
+                os.path.dirname(__file__),
+                'calibration'
+            )
+            if calib_path not in sys.path:
+                sys.path.insert(0, calib_path)
+
+            from utils.yaml_parser import parse_yaml, get_specimen_info_from_yaml
+
+            yaml_data = parse_yaml(yaml_path)
+            if not yaml_data:
+                debug_info.append("[FAIL] YAML parsing returned empty data")
+                MessageBox.Show('\n'.join(debug_info), "Debug: YAML Parse Failed",
+                               MessageBoxButton.OK, MessageBoxImage.Error)
+                return None
+
+            debug_info.append("[OK] YAML parsed successfully")
+            debug_info.append("YAML keys: " + ', '.join(str(k) for k in yaml_data.keys()[:10]))
+
+            result = get_specimen_info_from_yaml(yaml_data)
+
+            # 로그 파일 저장 (복사 가능)
+            import tempfile
+            log_path = os.path.join(tempfile.gettempdir(), 'mx_specimen_detection.log')
+            try:
+                with open(log_path, 'w') as f:
+                    f.write('\n'.join(debug_info))
+            except:
+                pass
+
+            if result:
+                debug_info.append("[SUCCESS] Specimen detected!")
+                debug_info.append("Gauge: {}x{}x{} mm".format(
+                    result.get('GaugeLength', 0),
+                    result.get('GaugeWidth', 0),
+                    result.get('Thickness', 0)))
+                msg = '\n'.join(debug_info) + '\n\n=== Log: ' + log_path + ' ==='
+                MessageBox.Show(msg, "YAML Detection Success",
+                               MessageBoxButton.OK, MessageBoxImage.Information)
+            else:
+                msg = '\n'.join(debug_info) + '\n\n=== Log: ' + log_path + ' ==='
+                MessageBox.Show(msg, "YAML Detection - No Result",
+                               MessageBoxButton.OK, MessageBoxImage.Warning)
+
+            return result
+
+        except Exception as ex:
+            # YAML not found or parse error
+            import traceback
+            import tempfile
+            tb = traceback.format_exc()
+            debug_info.append("[EXCEPTION] " + str(ex))
+            debug_info.append(tb[:500])
+
+            # 로그 파일 저장
+            log_path = os.path.join(tempfile.gettempdir(), 'mx_specimen_detection.log')
+            try:
+                with open(log_path, 'w') as f:
+                    f.write('\n'.join(debug_info))
+            except:
+                pass
+
+            msg = '\n'.join(debug_info) + '\n\n=== Log: ' + log_path + ' ==='
+            MessageBox.Show(msg, "YAML Detection Exception",
+                           MessageBoxButton.OK, MessageBoxImage.Error)
+            print("[YAML Detection] Error: " + str(ex))
+            traceback.print_exc()
+
+        return None
+
+
+    def _generate_yaml_from_pending(self, source_dir, yaml_path):
+        """
+        Check for pending temp file and generate YAML if found.
+
+        Fallback workflow:
+        1. SpaceClaim: 시편 생성 (Document 저장 안됨) → temp file 생성
+        2. SpaceClaim: Document 저장
+        3. Mechanical: YAML 없으면 → temp file 확인 → YAML 생성
+
+        Args:
+            source_dir: Directory where YAML should be created (same as .scdoc)
+            yaml_path: Full path to specimen.yaml
+        """
+        try:
+            import json
+            import tempfile
+            from datetime import datetime
+
+            # Pending temp file 경로
+            temp_dir = tempfile.gettempdir()
+            pending_path = os.path.join(temp_dir, '.pending_specimen.json')
+
+            if not os.path.exists(pending_path):
+                return  # No pending file
+
+            # Pending JSON 읽기
+            with open(pending_path, 'r') as f:
+                params = json.load(f)
+
+            # YAML 생성
+            yaml_lines = []
+            yaml_lines.append('# MX Material Twin - Specimen Metadata')
+            yaml_lines.append('# Auto-generated from pending temp file: ' +
+                            datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+            yaml_lines.append('')
+
+            # Specimen type and geometry
+            yaml_lines.append('specimen_type: ' + params.get('SpecimenType', 'Unknown'))
+            yaml_lines.append('gauge_length_mm: ' + str(params.get('GaugeLength', 0)))
+            yaml_lines.append('gauge_width_mm: ' + str(params.get('GaugeWidth', 0)))
+            yaml_lines.append('thickness_mm: ' + str(params.get('Thickness', 0)))
+
+            # Additional dimensions
+            if params.get('GripLength', 0) > 0:
+                yaml_lines.append('grip_length_mm: ' + str(params.get('GripLength')))
+                yaml_lines.append('grip_width_mm: ' + str(params.get('GripWidth')))
+                yaml_lines.append('total_length_mm: ' + str(params.get('TotalLength')))
+
+            if params.get('FilletRadius', 0) > 0:
+                yaml_lines.append('fillet_radius_mm: ' + str(params.get('FilletRadius')))
+
+            if params.get('HoleDiameter', 0) > 0:
+                yaml_lines.append('hole_diameter_mm: ' + str(params.get('HoleDiameter')))
+
+            if params.get('NotchDepth', 0) > 0:
+                yaml_lines.append('notch_depth_mm: ' + str(params.get('NotchDepth')))
+                yaml_lines.append('notch_angle_deg: ' + str(params.get('NotchAngle')))
+                yaml_lines.append('notch_radius_mm: ' + str(params.get('NotchRadius')))
+
+            yaml_lines.append('')
+            yaml_lines.append('# Named Selections for boundary conditions')
+            yaml_lines.append('named_selections:')
+            yaml_lines.append('  - Specimen_LeftEnd')
+            yaml_lines.append('  - Specimen_RightEnd')
+
+            if params.get('GripLength', 0) > 0:
+                yaml_lines.append('  - Specimen_GaugeSection')
+
+            yaml_lines.append('')
+            yaml_lines.append('# Creation information')
+            yaml_lines.append('created_date: ' + datetime.utcnow().isoformat())
+            yaml_lines.append('spaceclaim_version: V252')
+            yaml_lines.append('source: pending_temp_file')
+
+            # YAML 파일 쓰기
+            with open(yaml_path, 'w') as f:
+                f.write('\n'.join(yaml_lines))
+
+            # Pending 파일 삭제
+            os.remove(pending_path)
+
+            print('[Material Twin] Generated specimen.yaml from pending temp file')
+            print('[Material Twin] Path: ' + yaml_path)
+
+        except Exception as ex:
+            print('[Material Twin] Failed to generate YAML from pending: ' + str(ex))
+            import traceback
+            traceback.print_exc()
+
+
+    # @lat: [[material-calibrator#Specimen Detection 소스#JSON Fallback]]
+    def detect_specimen_from_json(self):
+        """
+        Read .specimen.json file from project directory.
+
+        Fallback for STEP import workflow (optional).
+        """
+        try:
+            project_dir = ExtAPI.DataModel.Project.ProjectDirectory
+            if not project_dir:
+                return None
+
+            import json
+            json_files = [f for f in os.listdir(project_dir)
+                         if f.endswith('.specimen.json')]
+
+            if json_files:
+                json_path = os.path.join(project_dir, json_files[0])
+                with open(json_path, 'r') as f:
+                    data = json.load(f)
+
+                return {
+                    'GaugeLength': data.get('GaugeLength_mm'),
+                    'GaugeWidth': data.get('GaugeWidth_mm'),
+                    'Thickness': data.get('Thickness_mm'),
+                    'SpecimenType': data.get('SpecimenType', 'Unknown'),
+                    'CrossSectionArea': data.get('GaugeWidth_mm', 0) * data.get('Thickness_mm', 0)
+                }
+        except Exception as ex:
+            # JSON not found or parse error
+            pass
+
+        return None
+
+
+    def on_select_csv(self, sender, event):
+        """
+        Select CSV file containing tensile test data.
+
+        Phase 1A: CSV input (displacement_mm, force_N)
+        """
+        try:
+            dialog = OpenFileDialog()
+            dialog.Filter = "CSV Files (*.csv)|*.csv|Text Files (*.txt)|*.txt|All Files (*.*)|*.*"
+            dialog.Title = "Select Tensile Test Data"
+
+            if dialog.ShowDialog() == DialogResult.OK:
+                self.csv_file_path = dialog.FileName
+
+                # Parse CSV (IronPython-compatible, pure Python)
+                displacement, force = self.parse_csv_simple(self.csv_file_path)
+
+                if len(displacement) < 10:
+                    MessageBox.Show(
+                        "Insufficient data points: {}\n\nMinimum 10 points required.".format(len(displacement)),
+                        "Error",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Warning
+                    )
+                    return
+
+                self.csv_data = (displacement, force)
+
+                # Update UI
+                filename = os.path.basename(self.csv_file_path)
+                self.csv_path_label.Content = filename
+                self.csv_path_label.Foreground = Brushes.Black
+
+                self.csv_status_label.Content = "{} data points loaded".format(len(displacement))
+                self.csv_status_label.Foreground = Brushes.Green
+                self.csv_status_label.Visibility = System.Windows.Visibility.Visible
+
+                # Enable calibration if specimen is also detected
+                if self.specimen_info:
+                    self.calibrate_btn.IsEnabled = True
+
+        except Exception as ex:
+            import traceback
+            error_msg = "CSV parsing error:\n\n" + str(ex) + "\n\n" + traceback.format_exc()
+            MessageBox.Show(error_msg, "Error",
+                MessageBoxButton.OK, MessageBoxImage.Error)
+
+
+    def parse_csv_simple(self, file_path):
+        """
+        Simple CSV parser (IronPython-compatible, no scipy required).
+
+        Returns:
+            displacement (list of float), force (list of float)
+        """
+        displacement = []
+        force = []
+
+        with open(file_path, 'r') as f:
+            lines = f.readlines()
+
+            if len(lines) < 2:
+                raise ValueError("CSV file is empty or has no data rows")
+
+            # Skip header (first line)
+            for line in lines[1:]:
+                line = line.strip()
+                if not line:
+                    continue  # Skip empty lines
+
+                parts = line.split(',')
+                if len(parts) < 2:
+                    continue  # Skip invalid rows
+
+                try:
+                    disp = float(parts[0].strip())
+                    f_val = float(parts[1].strip())
+                    displacement.append(disp)
+                    force.append(f_val)
+                except ValueError:
+                    continue  # Skip rows with non-numeric data
+
+        return displacement, force
+
+
+    # @lat: [[material-calibrator#외부 Calibrator EXE#입출력 프로토콜]]
+    def on_calibrate_elastic(self, sender, event):
+        """
+        Run elastic calibration using venv Python.
+
+        Phase 1A: E calculation via linear regression
+        Pattern: Same as postprocess (System.Diagnostics.Process.Start + JSON files)
+        """
+        try:
+            if not self.specimen_info:
+                MessageBox.Show("Please detect specimen first.", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Warning)
+                return
+
+            if not self.csv_data:
+                MessageBox.Show("Please select CSV data first.", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Warning)
+                return
+
+            # Get parameters
+            gauge_length = self.specimen_info['GaugeLength']
+            cross_section_area = self.specimen_info['CrossSectionArea']
+
+            try:
+                nu = float(self.nu_textbox.Text)
+                rho = float(self.rho_textbox.Text)
+            except ValueError:
+                MessageBox.Show("Invalid Poisson's ratio or density value.", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Warning)
+                return
+
+            displacement, force = self.csv_data
+
+            # Find Python executable - check multiple locations
+            script_dir = os.path.dirname(__file__)
+
+            # Try 1: Deployed location venv
+            venv_python = os.path.join(script_dir, 'calibration_env', 'Scripts', 'python.exe')
+
+            # Try 2: Development location venv (if deployed location doesn't have it)
+            if not os.path.isfile(venv_python):
+                dev_venv = r"d:\MXDigitalTwinModeller\Mechanical\MXSimulator\calibration_env\Scripts\python.exe"
+                if os.path.isfile(dev_venv):
+                    venv_python = dev_venv
+
+            if not os.path.isfile(venv_python):
+                MessageBox.Show(
+                    "Python venv not found!\n\n"
+                    "Checked:\n"
+                    "  1. {}\n"
+                    "  2. d:\\MXDigitalTwinModeller\\...\\calibration_env\n\n"
+                    "Please run setup_venv.bat in either location.".format(
+                        os.path.join(script_dir, 'calibration_env', 'Scripts', 'python.exe')
+                    ),
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error
+                )
+                return
+
+            # Prepare input data (JSON file, not stdin)
+            import json
+            import tempfile
+
+            input_data = {
+                'calibration_type': 'elastic',  # Phase 1A
+                'displacement': list(displacement),
+                'force': list(force),
+                'gauge_length': gauge_length,
+                'cross_section_area': cross_section_area,
+                'poisson_ratio': nu,
+                'density': rho,
+                'max_elastic_strain': 0.002
+            }
+
+            # Write input JSON to temp file
+            temp_dir = tempfile.gettempdir()
+            input_path = os.path.join(temp_dir, 'material_calib_input.json')
+            output_path = os.path.join(temp_dir, 'material_calib_input_result.json')
+
+            # Clean old result file
+            if os.path.exists(output_path):
+                os.remove(output_path)
+
+            with open(input_path, 'w') as f:
+                json.dump(input_data, f, indent=2)
+
+            # Call calibrator (unified executable or python script)
+            # Priority 1: Standalone exe (통합 exe, 권장)
+            calib_exe = os.path.join(script_dir, 'calibration', 'MaterialCalibrator.exe')
+
+            if os.path.isfile(calib_exe):
+                # Use unified standalone exe
+                executable = calib_exe
+                args = '"{0}"'.format(input_path)
+            else:
+                # Fallback: venv python + unified runner
+                runner = os.path.join(script_dir, 'calibration', 'runner.py')
+                executable = venv_python
+                args = '"{0}" "{1}"'.format(runner, input_path)
+
+            # Launch process and wait (System.Diagnostics.Process.Start)
+            import System.Diagnostics
+            proc_info = System.Diagnostics.ProcessStartInfo()
+            proc_info.FileName = executable
+            proc_info.Arguments = args
+            proc_info.UseShellExecute = False
+            proc_info.CreateNoWindow = True
+
+            proc = System.Diagnostics.Process.Start(proc_info)
+            proc.WaitForExit()
+
+            # Check if result file was created
+            if not os.path.exists(output_path):
+                MessageBox.Show(
+                    "Calibration failed: no result file generated.\n\n"
+                    "Check logs or run diagnose_material_twin.py",
+                    "Error",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error
+                )
+                return
+
+            # Read result JSON
+            with open(output_path, 'r') as f:
+                output = json.load(f)
+
+            # Clean up temp files
+            try:
+                os.remove(input_path)
+                os.remove(output_path)
+            except:
+                pass
+
+            if not output.get('success'):
+                error_msg = "Calibration failed:\n\n" + output.get('error', 'Unknown error')
+                if 'traceback' in output:
+                    error_msg += "\n\n" + output['traceback']
+                MessageBox.Show(error_msg, "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Error)
+                return
+
+            result = output['result']
+            self.calibration_result = result
+
+            # Update UI
+            E = result['E_modulus']
+            r_sq = result['r_squared']
+            elastic_limit = result['elastic_limit_stress']
+            material_guess = result.get('suggested_material', 'Unknown')
+
+            results_text = (
+                "Young's Modulus (E): {:.0f} MPa\n"
+                "Poisson's Ratio (ν): {:.3f}\n"
+                "Density (ρ): {:.0f} kg/m³\n"
+                "R² (fit quality): {:.6f}\n"
+                "Elastic limit stress: {:.1f} MPa\n"
+                "Data points used: {}\n"
+                "Suggested material: {}"
+            ).format(
+                E, nu, rho, r_sq, elastic_limit,
+                result['num_points_used'], material_guess
+            )
+
+            self.calib_results_label.Content = results_text
+            self.calib_results_label.Foreground = Brushes.DarkBlue
+            self.calib_results_label.Visibility = System.Windows.Visibility.Visible
+
+            # Update material name suggestion
+            self.mat_name_textbox.Text = material_guess.replace(" ", "_")
+
+            # Enable material creation
+            self.create_mat_btn.IsEnabled = True
+
+            MessageBox.Show(
+                "Calibration complete!\n\n"
+                "Young's Modulus: {:.0f} MPa\n"
+                "R² = {:.6f}\n\n"
+                "You can now create this material in Engineering Data.".format(E, r_sq),
+                "Success",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information
+            )
+
+        except Exception as ex:
+            import traceback
+            error_msg = "Calibration error:\n\n" + str(ex) + "\n\n" + traceback.format_exc()
+            MessageBox.Show(error_msg, "Error",
+                MessageBoxButton.OK, MessageBoxImage.Error)
+
+
+    # @lat: [[material-calibrator#재료 등록]]
+    def on_create_material(self, sender, event):
+        """
+        Create material in Engineering Data with calibrated properties.
+
+        Phase 1A: AddMaterial() + Set E, ν, ρ
+        """
+        try:
+            if not self.calibration_result:
+                MessageBox.Show("Please run calibration first.", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Warning)
+                return
+
+            mat_name = self.mat_name_textbox.Text.strip()
+            if not mat_name:
+                MessageBox.Show("Please enter a material name.", "Error",
+                    MessageBoxButton.OK, MessageBoxImage.Warning)
+                return
+
+            # Get calibrated properties
+            E = self.calibration_result['E_modulus']
+            nu = self.calibration_result['poisson_ratio']
+            rho = self.calibration_result['density']
+
+            # Access Engineering Data
+            eng_data = ExtAPI.DataModel.Project.Model.Materials
+
+            # Check if material already exists
+            existing_names = [mat.Name for mat in eng_data.GetChildren[Ansys.ACT.Automation.Mechanical.Material](True)]
+            if mat_name in existing_names:
+                result = MessageBox.Show(
+                    "Material '{}' already exists.\n\nOverwrite?".format(mat_name),
+                    "Material Exists",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question
+                )
+                if result == MessageBoxResult.No:
+                    return
+
+                # Delete existing
+                for mat in eng_data.GetChildren[Ansys.ACT.Automation.Mechanical.Material](True):
+                    if mat.Name == mat_name:
+                        mat.Delete()
+                        break
+
+            # Create new material
+            new_material = eng_data.AddMaterial()
+            new_material.Name = mat_name
+
+            # Set properties (Isotropic Elasticity)
+            new_material.SetPropertyByName("Young's Modulus", Quantity(E, "MPa"))
+            new_material.SetPropertyByName("Poisson's Ratio", Quantity(nu, ""))
+
+            if rho is not None:
+                new_material.SetPropertyByName("Density", Quantity(rho, "kg m^-3"))
+
+            # Update UI
+            self.material_status_label.Content = "Material '{}' created successfully!".format(mat_name)
+            self.material_status_label.Foreground = Brushes.Green
+            self.material_status_label.Visibility = System.Windows.Visibility.Visible
+
+            MessageBox.Show(
+                "Material created in Engineering Data:\n\n"
+                "Name: {}\n"
+                "E = {:.0f} MPa\n"
+                "ν = {:.3f}\n"
+                "ρ = {:.0f} kg/m³".format(mat_name, E, nu, rho if rho else 0),
+                "Success",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information
+            )
+
+        except Exception as ex:
+            import traceback
+            error_msg = "Material creation error:\n\n" + str(ex) + "\n\n" + traceback.format_exc()
+            MessageBox.Show(error_msg, "Error",
+                MessageBoxButton.OK, MessageBoxImage.Error)
+
+
+    def show_specimen_detected(self, source, info):
+        """Update UI with detected specimen info."""
+        self.specimen_status_label.Content = "Status: Detected from {}".format(source)
+        self.specimen_status_label.Foreground = Brushes.Green
+
+        details_text = (
+            "Specimen Type: {}\n"
+            "Gauge Length: {:.2f} mm\n"
+            "Gauge Width: {:.2f} mm\n"
+            "Thickness: {:.2f} mm\n"
+            "Cross-Section Area: {:.2f} mm²"
+        ).format(
+            info['SpecimenType'],
+            info['GaugeLength'],
+            info['GaugeWidth'],
+            info['Thickness'],
+            info['CrossSectionArea']
+        )
+
+        self.specimen_details.Content = details_text
+        self.specimen_details.Visibility = System.Windows.Visibility.Visible
+
+        # Enable calibration if CSV is also loaded
+        if self.csv_data:
+            self.calibrate_btn.IsEnabled = True
 
 
 def Initialize():

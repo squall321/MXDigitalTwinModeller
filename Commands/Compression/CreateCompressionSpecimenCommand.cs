@@ -17,6 +17,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Compression
     /// <summary>
     /// 압축 시편 생성 커맨드
     /// </summary>
+    // @lat: [[specimens#압축 시편]]
     public class CreateCompressionSpecimenCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.CreateCompressionSpecimen";

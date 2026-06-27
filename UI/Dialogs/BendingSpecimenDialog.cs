@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Windows.Forms;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Core.UI;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.DMA;
@@ -26,6 +27,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
         private Part activePart;
         private DesignBody previewBody;
         private List<DesignBody> previewFixtures;
+        private Timer previewTimer;
 
         public DMA3PointBendingParameters Parameters3pt { get; private set; }
         public DMA4PointBendingParameters Parameters4pt { get; private set; }
@@ -69,6 +71,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             Parameters4pt = new DMA4PointBendingParameters();
             previewFixtures = new List<DesignBody>();
 
+            previewTimer = new Timer();
+            previewTimer.Interval = 300;
+            previewTimer.Tick += PreviewTimer_Tick;
+
             InitializeTestTypes();
             PopulateSpecimenTypes();
             UpdateUIForTestType();
@@ -81,16 +87,16 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             this.FormClosing += BendingSpecimenDialog_FormClosing;
 
             // 파라미터 변경 시 경고 업데이트
-            numLength.ValueChanged += (s, e) => UpdateWarnings();
-            numWidth.ValueChanged += (s, e) => UpdateWarnings();
-            numThickness.ValueChanged += (s, e) => { UpdateDescription(); UpdateWarnings(); };
-            numSpan.ValueChanged += (s, e) => { UpdateDescription(); UpdateWarnings(); };
-            numOuterSpan.ValueChanged += (s, e) => { UpdateDescription(); UpdateWarnings(); };
-            numInnerSpan.ValueChanged += (s, e) => { UpdateDescription(); UpdateWarnings(); };
-            numSupportDiameter.ValueChanged += (s, e) => UpdateWarnings();
-            numLoadingNoseDiameter.ValueChanged += (s, e) => UpdateWarnings();
-            numSupportHeight.ValueChanged += (s, e) => UpdateWarnings();
-            numLoadingNoseHeight.ValueChanged += (s, e) => UpdateWarnings();
+            numLength.ValueChanged += (s, e) => { UpdateWarnings(); SchedulePreview(); };
+            numWidth.ValueChanged += (s, e) => { UpdateWarnings(); SchedulePreview(); };
+            numThickness.ValueChanged += (s, e) => { UpdateDescription(); UpdateWarnings(); SchedulePreview(); };
+            numSpan.ValueChanged += (s, e) => { UpdateDescription(); UpdateWarnings(); SchedulePreview(); };
+            numOuterSpan.ValueChanged += (s, e) => { UpdateDescription(); UpdateWarnings(); SchedulePreview(); };
+            numInnerSpan.ValueChanged += (s, e) => { UpdateDescription(); UpdateWarnings(); SchedulePreview(); };
+            numSupportDiameter.ValueChanged += (s, e) => { UpdateWarnings(); SchedulePreview(); };
+            numLoadingNoseDiameter.ValueChanged += (s, e) => { UpdateWarnings(); SchedulePreview(); };
+            numSupportHeight.ValueChanged += (s, e) => { UpdateWarnings(); SchedulePreview(); };
+            numLoadingNoseHeight.ValueChanged += (s, e) => { UpdateWarnings(); SchedulePreview(); };
         }
 
         /// <summary>
@@ -464,21 +470,23 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             numLoadingNoseHeight.Location = new System.Drawing.Point(180, y - 3);
             y += yGap;
 
-            // grpDimensions 크기 조정
-            grpDimensions.Size = new System.Drawing.Size(440, y + 10);
+            // grpDimensions 크기 조정 (DPI 대응: 실제 스케일된 Width 유지)
+            grpDimensions.Height = y + 10;
 
             // 경고 레이블 위치
             int warningY = grpDimensions.Bottom + 6;
             lblWarning.Location = new System.Drawing.Point(12, warningY);
 
-            // 버튼 위치
+            // 버튼 위치 (DPI 스케일링 대응: 실제 버튼 크기 기준 상대 배치)
             int btnY = warningY + lblWarning.Height + 10;
-            btnPreview.Location = new System.Drawing.Point(140, btnY);
-            btnCreate.Location = new System.Drawing.Point(250, btnY);
-            btnCancel.Location = new System.Drawing.Point(360, btnY);
+            lblPreviewStatus.Location = new System.Drawing.Point(12, btnY);
+            int btnRow = btnY + 18;
+            int btnGap = 10;
+            btnCreate.Location = new System.Drawing.Point(250, btnRow);
+            btnCancel.Location = new System.Drawing.Point(btnCreate.Right + btnGap, btnRow);
 
             // 폼 크기
-            this.ClientSize = new System.Drawing.Size(474, btnY + 46);
+            this.ClientSize = new System.Drawing.Size(this.ClientSize.Width, btnRow + 46);
         }
 
         /// <summary>
@@ -588,12 +596,14 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                 lblWarning.Height = lblWarning.PreferredHeight;
             }
 
-            // 경고 크기 변경 후 버튼 위치 재조정
+            // 경고 크기 변경 후 버튼 위치 재조정 (DPI 스케일링 대응)
             int btnY = lblWarning.Bottom + 10;
-            btnPreview.Location = new System.Drawing.Point(140, btnY);
-            btnCreate.Location = new System.Drawing.Point(250, btnY);
-            btnCancel.Location = new System.Drawing.Point(360, btnY);
-            this.ClientSize = new System.Drawing.Size(474, btnY + 46);
+            int btnGap2 = 10;
+            lblPreviewStatus.Location = new System.Drawing.Point(12, btnY);
+            int btnRow = btnY + 18;
+            btnCreate.Location = new System.Drawing.Point(250, btnRow);
+            btnCancel.Location = new System.Drawing.Point(btnCreate.Right + btnGap2, btnRow);
+            this.ClientSize = new System.Drawing.Size(this.ClientSize.Width, btnRow + 46);
         }
 
         // =============================================
@@ -899,6 +909,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             PopulateSpecimenTypes();
             UpdateUIForTestType();
             LoadPresetParameters();
+            SchedulePreview();
         }
 
         private void cmbSpecimenType_SelectedIndexChanged(object sender, EventArgs e)
@@ -919,23 +930,45 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             if (key != "Custom")
             {
                 LoadPresetParameters();
+                SchedulePreview();
             }
             else
             {
                 // Custom 선택 시 설명만 업데이트
                 UpdateDescription();
+                SchedulePreview();
             }
         }
 
         private void btnLoadDefaults_Click(object sender, EventArgs e)
         {
             LoadPresetParameters();
+            SchedulePreview();
         }
 
-        private void btnPreview_Click(object sender, EventArgs e)
+        private void SchedulePreview()
         {
-            if (!ValidateInputs())
+            previewTimer.Stop();
+            previewTimer.Start();
+        }
+
+        private void PreviewTimer_Tick(object sender, EventArgs e)
+        {
+            previewTimer.Stop();
+            ExecuteAutoPreview();
+        }
+
+        private void ExecuteAutoPreview()
+        {
+            ReadParametersFromUI();
+            string errorMsg;
+            bool valid = Is3Point ? Parameters3pt.Validate(out errorMsg) : Parameters4pt.Validate(out errorMsg);
+            if (!valid)
+            {
+                CleanupPreview();
+                lblPreviewStatus.Text = "";
                 return;
+            }
 
             try
             {
@@ -954,18 +987,18 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                     foreach (var body in activePart.Bodies)
                     {
                         if (!existingBodies.Contains(body) && body != previewBody)
-                        {
                             previewFixtures.Add(body);
-                        }
                     }
                 });
+                Window.ActiveWindow?.ZoomExtents();
+
+                lblPreviewStatus.ForeColor = Color.Green;
+                lblPreviewStatus.Text = "미리보기 적용됨";
             }
             catch (Exception ex)
             {
-                ValidationHelper.ShowError(
-                    $"미리보기 생성 중 오류가 발생했습니다:\n\n{ex.Message}",
-                    "미리보기 오류"
-                );
+                lblPreviewStatus.ForeColor = Color.Red;
+                lblPreviewStatus.Text = ex.Message.Split('\n')[0];
             }
         }
 
@@ -1050,6 +1083,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
         /// </summary>
         private void BendingSpecimenDialog_FormClosing(object sender, FormClosingEventArgs e)
         {
+            previewTimer.Stop();
+            previewTimer.Dispose();
+
             if (DialogResult != DialogResult.OK)
             {
                 CleanupPreview();

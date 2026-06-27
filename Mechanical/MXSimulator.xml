@@ -31,6 +31,29 @@
           <onclick>show_scenario_dialog</onclick>
         </callbacks>
       </entry>
+      <entry name="PostProcess" caption="Post-Process" icon="post_process">
+        <callbacks>
+          <onclick>show_postprocess_dialog</onclick>
+        </callbacks>
+      </entry>
+      <entry name="ExportKFile" caption="Export K-File" icon="kfile_export">
+        <callbacks>
+          <onclick>show_export_kfile_dialog</onclick>
+        </callbacks>
+      </entry>
+      <separator />
+      <entry name="TiedCheck" caption="Tied Check" icon="tied_check">
+        <callbacks>
+          <onclick>show_tied_check_dialog</onclick>
+        </callbacks>
+      </entry>
+    </toolbar>
+    <toolbar name="MXMaterialTwin" caption="MX Material Twin Simulation">
+      <entry name="TensileTest" caption="Tensile Test" icon="material_twin">
+        <callbacks>
+          <onclick>show_material_twin_dialog</onclick>
+        </callbacks>
+      </entry>
     </toolbar>
   </interface>
 </extension>

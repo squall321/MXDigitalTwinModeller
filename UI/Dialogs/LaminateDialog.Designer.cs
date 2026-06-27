@@ -55,7 +55,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
         private System.Windows.Forms.CheckBox chkDeleteOriginal;
 
         // 버튼
-        private System.Windows.Forms.Button btnPreview;
+        private System.Windows.Forms.Label lblPreviewStatus;
         private System.Windows.Forms.Button btnCreate;
         private System.Windows.Forms.Button btnCancel;
 
@@ -114,7 +114,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             this.chkInterfaceNS = new System.Windows.Forms.CheckBox();
             this.chkDeleteOriginal = new System.Windows.Forms.CheckBox();
 
-            this.btnPreview = new System.Windows.Forms.Button();
+            this.lblPreviewStatus = new System.Windows.Forms.Label();
             this.btnCreate = new System.Windows.Forms.Button();
             this.btnCancel = new System.Windows.Forms.Button();
 
@@ -483,15 +483,14 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             // ==========================================
             int btnY = 530;
 
-            this.btnPreview.Location = new System.Drawing.Point(150, btnY);
-            this.btnPreview.Name = "btnPreview";
-            this.btnPreview.Size = new System.Drawing.Size(100, 30);
-            this.btnPreview.TabIndex = 12;
-            this.btnPreview.Text = "미리보기";
-            this.btnPreview.UseVisualStyleBackColor = true;
-            this.btnPreview.Click += new System.EventHandler(this.btnPreview_Click);
+            this.lblPreviewStatus.AutoSize = true;
+            this.lblPreviewStatus.Location = new System.Drawing.Point(12, btnY);
+            this.lblPreviewStatus.Name = "lblPreviewStatus";
+            this.lblPreviewStatus.Size = new System.Drawing.Size(440, 12);
+            this.lblPreviewStatus.TabIndex = 12;
+            this.lblPreviewStatus.Text = "";
 
-            this.btnCreate.Location = new System.Drawing.Point(260, btnY);
+            this.btnCreate.Location = new System.Drawing.Point(260, btnY + 18);
             this.btnCreate.Name = "btnCreate";
             this.btnCreate.Size = new System.Drawing.Size(100, 30);
             this.btnCreate.TabIndex = 13;
@@ -499,7 +498,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             this.btnCreate.UseVisualStyleBackColor = true;
             this.btnCreate.Click += new System.EventHandler(this.btnCreate_Click);
 
-            this.btnCancel.Location = new System.Drawing.Point(370, btnY);
+            this.btnCancel.Location = new System.Drawing.Point(370, btnY + 18);
             this.btnCancel.Name = "btnCancel";
             this.btnCancel.Size = new System.Drawing.Size(100, 30);
             this.btnCancel.TabIndex = 14;
@@ -519,7 +518,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             this.Controls.Add(this.grpSolid);
             this.Controls.Add(this.grpLayers);
             this.Controls.Add(this.grpOptions);
-            this.Controls.Add(this.btnPreview);
+            this.Controls.Add(this.lblPreviewStatus);
             this.Controls.Add(this.btnCreate);
             this.Controls.Add(this.btnCancel);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Windows.Forms;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Core.UI;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.TensileTest;
@@ -25,6 +26,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
         private Part activePart;
         private DesignBody previewBody;
         private List<DesignBody> previewFixtures; // 그립 장비 추적
+        private Timer previewTimer;
 
         public TensileSpecimenParameters Parameters { get; private set; }
 
@@ -37,8 +39,31 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             Parameters = new TensileSpecimenParameters();
             previewFixtures = new List<DesignBody>();
 
+            previewTimer = new Timer();
+            previewTimer.Interval = 300;
+            previewTimer.Tick += PreviewTimer_Tick;
+
             InitializeSpecimenTypes();
             LoadDefaultParameters();
+
+            // 파라미터 변경 시 자동 미리보기
+            numGaugeLength.ValueChanged += (s, ev) => SchedulePreview();
+            numGaugeWidth.ValueChanged += (s, ev) => SchedulePreview();
+            numThickness.ValueChanged += (s, ev) => SchedulePreview();
+            numGripWidth.ValueChanged += (s, ev) => SchedulePreview();
+            numTotalLength.ValueChanged += (s, ev) => SchedulePreview();
+            numFilletRadius.ValueChanged += (s, ev) => SchedulePreview();
+            numGripLength.ValueChanged += (s, ev) => SchedulePreview();
+            numNotchDepth.ValueChanged += (s, ev) => SchedulePreview();
+            numNotchAngle.ValueChanged += (s, ev) => SchedulePreview();
+            numNotchRadius.ValueChanged += (s, ev) => SchedulePreview();
+            numHoleDiameter.ValueChanged += (s, ev) => SchedulePreview();
+            numHoleMajorAxis.ValueChanged += (s, ev) => SchedulePreview();
+            numHoleMinorAxis.ValueChanged += (s, ev) => SchedulePreview();
+            numTabLength.ValueChanged += (s, ev) => SchedulePreview();
+            numTabThickness.ValueChanged += (s, ev) => SchedulePreview();
+            chkDoubleNotch.CheckedChanged += (s, ev) => SchedulePreview();
+            chkRectangular.CheckedChanged += (s, ev) => SchedulePreview();
 
             // 대화창이 항상 맨 앞에 표시
             this.TopMost = true;
@@ -230,45 +255,49 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                              st == ASTMSpecimenType.IPC_TM650_Tensile ||
                              st == ASTMSpecimenType.IPC_TM650_PTHPull;
 
-            // 패널 높이 상수 (Designer 기준)
-            const int notchPanelHeight = 170;
-            const int holePanelHeight = 170;
-            const int tabPanelHeight = 130;
-
             // 먼저 모든 옵션 패널 숨기기
             grpNotch.Visible = false;
             grpHole.Visible = false;
             grpTab.Visible = false;
 
             // 동적 Y 위치 계산 및 패널 배치 후 표시
+            // DPI 스케일링 대응: 실제 스케일링된 Width/Height 사용
             int nextY = grpDimensions.Location.Y + grpDimensions.Height + 6;
+            int panelX = grpDimensions.Location.X;
+            int panelW = grpDimensions.Width;
+
             if (isNotchType)
             {
-                grpNotch.SetBounds(12, nextY, 440, notchPanelHeight);
+                grpNotch.Location = new System.Drawing.Point(panelX, nextY);
+                grpNotch.Width = panelW;
                 grpNotch.Visible = true;
-                nextY += notchPanelHeight + 6;
+                nextY += grpNotch.Height + 6;
             }
             if (isHoleType)
             {
-                grpHole.SetBounds(12, nextY, 440, holePanelHeight);
+                grpHole.Location = new System.Drawing.Point(panelX, nextY);
+                grpHole.Width = panelW;
                 grpHole.Visible = true;
-                nextY += holePanelHeight + 6;
+                nextY += grpHole.Height + 6;
             }
             if (isTabType)
             {
-                grpTab.SetBounds(12, nextY, 440, tabPanelHeight);
+                grpTab.Location = new System.Drawing.Point(panelX, nextY);
+                grpTab.Width = panelW;
                 grpTab.Visible = true;
-                nextY += tabPanelHeight + 6;
+                nextY += grpTab.Height + 6;
             }
 
-            // 버튼 위치 조정
+            // 버튼 위치 조정 (DPI 스케일링 대응: 실제 버튼 크기 기준 상대 배치)
             int btnY = nextY + 10;
-            btnPreview.Location = new System.Drawing.Point(140, btnY);
-            btnCreate.Location = new System.Drawing.Point(250, btnY);
-            btnCancel.Location = new System.Drawing.Point(360, btnY);
+            int btnGap = 10;
+            lblPreviewStatus.Location = new System.Drawing.Point(12, btnY);
+            int btnRow = btnY + 18;
+            btnCreate.Location = new System.Drawing.Point(250, btnRow);
+            btnCancel.Location = new System.Drawing.Point(btnCreate.Right + btnGap, btnRow);
 
             // 폼 크기 조정 (ClientSize 대신 Size 직접 계산)
-            int newClientHeight = btnY + 46;
+            int newClientHeight = btnRow + 46;
             int borderHeight = this.Height - this.ClientSize.Height;
             this.Height = newClientHeight + borderHeight;
             this.Invalidate(true);
@@ -432,11 +461,13 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             {
                 BindParametersToUI();
             }
+            SchedulePreview();
         }
 
         private void btnLoadDefaults_Click(object sender, EventArgs e)
         {
             LoadDefaultParameters();
+            SchedulePreview();
         }
 
         private void chkEllipticalHole_CheckedChanged(object sender, EventArgs e)
@@ -449,42 +480,54 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             numHoleMinorAxis.Visible = isEllip;
         }
 
-        private void btnPreview_Click(object sender, EventArgs e)
+        private void SchedulePreview()
         {
-            if (!ValidateInputs())
-                return;
+            previewTimer.Stop();
+            previewTimer.Start();
+        }
 
+        private void PreviewTimer_Tick(object sender, EventArgs e)
+        {
+            previewTimer.Stop();
+            ExecuteAutoPreview();
+        }
+
+        private bool ValidateInputsSilent()
+        {
+            ReadParametersFromUI();
+            return Parameters.Validate(out string _);
+        }
+
+        private void ExecuteAutoPreview()
+        {
+            if (!ValidateInputsSilent())
+            {
+                CleanupPreview();
+                lblPreviewStatus.Text = "";
+                return;
+            }
             try
             {
-                // 기존 미리보기 삭제
                 CleanupPreview();
-
-                // 새로운 미리보기 생성 (WriteBlock 내에서 실행)
                 WriteBlock.ExecuteTask("ASTM Preview", () =>
                 {
-                    // 현재 존재하는 Body들을 기록
                     var existingBodies = new HashSet<DesignBody>(activePart.Bodies);
-
-                    // 시편 생성 (시편 + 그립 장비 4개)
                     previewBody = modelingService.CreateTensileSpecimen(activePart, Parameters);
-
-                    // 새로 생성된 Body 중 시편이 아닌 것들(그립 장비)을 추적
                     previewFixtures.Clear();
                     foreach (var body in activePart.Bodies)
                     {
                         if (!existingBodies.Contains(body) && body != previewBody)
-                        {
                             previewFixtures.Add(body);
-                        }
                     }
                 });
+                Window.ActiveWindow?.ZoomExtents();
+                lblPreviewStatus.ForeColor = Color.Green;
+                lblPreviewStatus.Text = "미리보기 적용됨";
             }
             catch (Exception ex)
             {
-                ValidationHelper.ShowError(
-                    $"미리보기 생성 중 오류가 발생했습니다:\n\n{ex.Message}",
-                    "미리보기 오류"
-                );
+                lblPreviewStatus.ForeColor = Color.Red;
+                lblPreviewStatus.Text = ex.Message.Split('\n')[0];
             }
         }
 
@@ -570,9 +613,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
         /// </summary>
         private void TensileSpecimenDialog_FormClosing(object sender, FormClosingEventArgs e)
         {
+            previewTimer.Stop();
+            previewTimer.Dispose();
             if (DialogResult != DialogResult.OK)
             {
-                // OK가 아닌 경우(취소 등)만 미리보기 삭제
                 CleanupPreview();
             }
         }

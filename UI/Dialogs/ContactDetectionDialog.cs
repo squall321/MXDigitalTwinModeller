@@ -61,6 +61,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
 
         private void InitializeLayout()
         {
+            SuspendLayout();
             Text = "Contact Detection Manager (접촉면 관리)";
             Width = 920;
             Height = 560;
@@ -68,6 +69,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             MinimizeBox = false;
             FormBorderStyle = FormBorderStyle.Sizable;
             MinimumSize = new Size(800, 480);
+            AutoScaleDimensions = new System.Drawing.SizeF(7F, 12F);
+            AutoScaleMode = AutoScaleMode.Font;
 
             // ═══ Row 1: 키워드 A/B + 허용거리 ═══
             var lblKwA = new Label { Text = "키워드 A:", Location = new Point(12, 15), AutoSize = true };
@@ -287,6 +290,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             });
 
             CancelButton = btnClose;
+
+            ResumeLayout(false);
+            PerformLayout();
         }
 
         // ─── 모드 힌트 업데이트 ───

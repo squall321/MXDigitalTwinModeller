@@ -12,6 +12,7 @@ using SpaceClaim.Api.V252.Extensibility;
 
 namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Pipeline
 {
+    // @lat: [[pipeline#BatchPipeline 커맨드]]
     public class BatchPipelineCommand : BaseCommandCapsule
     {
         public const string CommandName = "MXDigitalTwinModeller.BatchPipeline";

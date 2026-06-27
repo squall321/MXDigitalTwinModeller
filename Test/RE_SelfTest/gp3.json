@@ -1,0 +1,1 @@
+{"jsonrpc": "2.0", "id": 4, "result": {"content": [{"type": "text", "text": "{\"success\": true, \"error\": null, \"result\": {\"camera_height_mm\": 3, \"regenerated\": true}}"}], "isError": false}}
