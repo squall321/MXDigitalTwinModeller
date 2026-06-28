@@ -277,6 +277,7 @@
     <Compile Include="Models\ReverseEngineer\PhoneParameters.cs" />
     <Compile Include="Services\ReverseEngineer\Generation\GenerationService.cs" />
     <Compile Include="Services\ReverseEngineer\Generation\CurvedShellBuilder.cs" />
+    <Compile Include="Services\ReverseEngineer\Generation\CurvedEnvelopeBuilder.cs" />
     <Compile Include="Services\ReverseEngineer\Generation\FeatureHandle.cs" />
     <Compile Include="Services\ReverseEngineer\Generation\ValidationService.cs" />
     <Compile Include="Services\ReverseEngineer\ModelScale.cs" />

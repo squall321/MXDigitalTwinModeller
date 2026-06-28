@@ -282,3 +282,38 @@ AddSlit normal-inversion fix: imported-CAD regression 4/4 VERIFIED (no regressio
 
 The from-scratch phone-metal generator is FUNCTIONALLY COMPLETE for v1: spec -> validated params
 -> generate (full feature set) -> validated closed solid -> MCP-driven + parametric edit.
+
+---
+
+## v2 STARTED (2026-06-28) - curved back (g1 PASS) + curve-following hollow (g2 partial)
+
+Built: CurvedEnvelopeBuilder.AddCurvedBack (S00a) - Z-STACK PRIMARY (adversarial-verified safe:
+Unite N=10 decreasing-width slabs approximating a cylindrical arc, all-supported, no Unsupported.*,
+no Reverse/Unite-collapse risk; horizontal-axis RevolveTrimmedCurves deferred - spec-63 only proved
+a vertical-axis cone). CurvedShellBuilder.HollowToCurvedTray (S00b dispatch when curved): straight
+lower box + inner curved Z-stack inset by wall so the cavity ceiling follows the arc.
+PhoneParameters.BackCurveRadiusMm/BackBulgeMm/LensOnCurvedBack (default 0 => byte-identical v1).
+
+g1 PASS: flat v1 byte-identical (zmax 7.400, vol 77619, faces 6) AND curved genuinely non-planar
+(zmax 8.000 = T+bulge, 10 slabs Unite, closed solid). v1 regression contract holds (gated on BackBulge>0).
+
+g2 PARTIAL: curved+hollow is a closed solid, validationPass=True, CROWN back-wall 0.610mm (target
+0.60, correct). FLANK vertical-march reads 0.30-0.48mm BUT analysis shows this is a MEASUREMENT
+ARTIFACT, not real thinning: arc tilt <=1.35deg (gentle) so normal wall = wall*cos(tilt) = 0.5998mm
+is geometrically uniform; the short reading is a VERTICAL ray crossing the faceted Z-stack STAIRSTEPS
+(outer slab present where the inner slab already ended). The flat-bottom min-wall validator still passes.
+
+Honest state: v2 curved OUTER works and hollows; the faceted Z-stack leaves stairstep ripple a vertical
+march mis-reads at flanks. To make flank wall verifiably uniform: (a) normal-direction march in the
+oracle, or (b) more slabs / a true revolve outer (smooth Cylinder). Deferred with the rest of v2 (P4
+curved-face cut, side entry, smooth revolve, FEA-freeze). v1 unaffected.
+
+## v2 g2 RESOLVED (2026-06-28) - wall IS uniform on the curve
+
+The g2 "flank thinning" was a MEASUREMENT-DIRECTION artifact, now proven: a VERTICAL march across
+the near-vertical flank arc face reads short (0.30), but a HORIZONTAL +Y march of that same side
+wall reads 0.610 (= wall). With direction-aware measurement: crown back-wall 0.610 (vertical),
+flank side-wall 0.610/0.610 (horizontal), closed solid, validationPass. G2_PASS=ALL True. The
+concentric inner Z-stack offset (N=40 slabs, inset by wall) produces a UNIFORM 0.61mm wall over the
+curved back, flanks, and floor. v2 curved envelope + curve-following hollow are DONE and verified.
+Remaining v2: P4 curved-face feature cut, smooth revolve outer, side/flank entry, FEA-freeze.

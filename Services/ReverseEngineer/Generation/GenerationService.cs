@@ -68,12 +68,28 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                 r.StageLog.Add("S00 bbox vol=" + VolMm3(body).ToString("0.#"));
                 if (stopAtStage == "S00") { Finish(r, body, p); return r; }
 
+                // S00a — v2 CURVED BACK (gated). When BackBulgeMm<=0 the slab is untouched, so v1
+                // output stays byte-identical. Runs before the hollow so S00b walls the curved form.
+                if (p.BackBulgeMm > 0)
+                {
+                    var rc = CurvedEnvelopeBuilder.AddCurvedBack(body, p);
+                    r.StageLog.Add("S00a curvedBack success=" + rc.Success + " path=" + rc.Path +
+                        " slabs=" + rc.Slabs + " dV=" + rc.AddedVolMm3.ToString("0.#") +
+                        " vol=" + VolMm3(body).ToString("0.#"));
+                    if (!rc.Success) { r.Error = "S00a curved back failed: " + rc.Error; r.Body = body; return r; }
+                }
+                if (stopAtStage == "S00a") { Finish(r, body, p); return r; }
+
                 // S00b — HOLLOW into a uniform-wall tray (P2). Runs BEFORE the discrete features
                 // so S04-S06 cut into the already-thin walls (the P0 magnitude/min-wall guard then
                 // validates breach-through-thin-wall). Disabled when HollowWall<=0 (solid mode).
                 if (p.HollowWallMm > 0)
                 {
-                    var rs = CurvedShellBuilder.HollowToTray(body, p, p.HollowWallMm);
+                    // v2: when the back is curved, hollow with the curve-following cavity so the wall
+                    // stays uniform under the arc; else the v1 straight-box cavity.
+                    var rs = (p.BackBulgeMm > 0)
+                        ? CurvedShellBuilder.HollowToCurvedTray(body, p, p.HollowWallMm)
+                        : CurvedShellBuilder.HollowToTray(body, p, p.HollowWallMm);
                     r.StageLog.Add("S00b hollow success=" + rs.Success + " wall=" + rs.WallMm +
                         " cornersR=" + rs.CornersRounded + "/" + (rs.CornersRounded + rs.CornersFailed) +
                         " vol=" + VolMm3(body).ToString("0.#"));

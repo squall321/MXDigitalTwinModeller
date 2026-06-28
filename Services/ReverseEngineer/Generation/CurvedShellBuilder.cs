@@ -97,6 +97,88 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
             }
         }
 
+        /// <summary>
+        /// v2 hollow for a CURVED-back body (FROM_SCRATCH_ROADMAP.md). The v1 straight-box cavity
+        /// leaves a NON-uniform wall under a curved back (flat ceiling vs convex outer => wall grows
+        /// by ~bulge at the flanks). Fix: the cavity CEILING must FOLLOW the outer curve offset
+        /// inward by `wall`. Cavity = a straight lower box (floor at z=wall, inner footprint =
+        /// outer-2*wall) UNITED with an inner curved-back Z-stack mirroring S00a's arc but shrunk
+        /// inward by `wall` (each inner slab narrower by 2*wall and lowered by `wall`). Subtracting
+        /// it leaves a constant `wall` over the curve, flanks, and floor.
+        /// </summary>
+        public static ShellResult HollowToCurvedTray(DesignBody body, PhoneParameters p, double wallMm)
+        {
+            var r = new ShellResult { WallMm = wallMm };
+            try
+            {
+                double L = p.LengthMm, W = p.WidthMm, T = p.ThicknessMm, bulge = p.BackBulgeMm;
+                if (wallMm <= 0 || 2 * wallMm >= Math.Min(L, W) || wallMm >= T)
+                { r.Error = "wall out of range for envelope"; return r; }
+
+                RoundVerticalCorners(body, T, p.CornerRadiusMm, r);
+
+                Part part = body.Parent as Part;
+                double innerW = GeometryUtils.MmToMeters(L - 2 * wallMm);
+                double innerL = GeometryUtils.MmToMeters(W - 2 * wallMm);
+                double floorZm = GeometryUtils.MmToMeters(wallMm);
+
+                // (a) straight lower cavity box: floor (z=wall) up to the slab top (z=T), inner
+                //     footprint inset by wall. Hollows the prismatic part below the curved cap.
+                double lowH = GeometryUtils.MmToMeters(T - wallMm);
+                var fr0 = Frame.Create(Point.Create(0, 0, floorZm), Direction.DirX, Direction.DirY);
+                Profile p0 = new RectangleProfile(Plane.Create(fr0), innerW, innerL, PointUV.Create(0, 0), 0.0);
+                Body lower = Body.ExtrudeProfile(p0, lowH);
+                SubtractBody(body, part, lower, "_curved_cav_lower");
+
+                // (b) inner curved-back cavity Z-stack: mirror S00a's arc slabs inset by wall in width
+                //     AND lowered by wall in height, so the cavity ceiling tracks the outer arc offset
+                //     inward by `wall` => uniform wall over the curve.
+                const int N = 40;
+                double hSlab = bulge / N;
+                double halfW = W / 2.0;
+                for (int i = 0; i < N; i++)
+                {
+                    double zMid = (i + 0.5) * hSlab;
+                    double frac = 1.0 - zMid / bulge;
+                    if (frac <= 0) continue;
+                    double yiOuter = halfW * Math.Sqrt(frac);
+                    double yiInner = yiOuter - wallMm;            // inset by wall
+                    if (yiInner <= 0.05) continue;
+                    const double ov = 0.02;
+                    double baseZ = (T - wallMm) + i * hSlab - ov; // ceiling = outer slab top - wall
+                    double slabH = hSlab + ov;
+                    var fr = Frame.Create(Point.Create(0, 0, GeometryUtils.MmToMeters(baseZ)),
+                                          Direction.DirX, Direction.DirY);
+                    Profile pf = new RectangleProfile(Plane.Create(fr),
+                        GeometryUtils.MmToMeters(L - 2 * wallMm), GeometryUtils.MmToMeters(2.0 * yiInner),
+                        PointUV.Create(0, 0), 0.0);
+                    Body islab = Body.ExtrudeProfile(pf, GeometryUtils.MmToMeters(slabH));
+                    SubtractBody(body, part, islab, "_curved_cav_arc");
+                }
+
+                r.Success = true;
+                return r;
+            }
+            catch (Exception ex)
+            {
+                r.Error = "HollowToCurvedTray failed: " + ex.Message;
+                return r;
+            }
+        }
+
+        /// <summary>Subtract a cutter body from the target, wrapping it in a DesignBody so both
+        /// operands are design-body-owned (the RT4/RT5 idiom), then delete the cutter.</summary>
+        private static void SubtractBody(DesignBody body, Part part, Body cutter, string name)
+        {
+            if (part != null)
+            {
+                DesignBody cutDb = DesignBody.Create(part, name, cutter);
+                body.Shape.Subtract(new[] { cutDb.Shape });
+                try { cutDb.Delete(); } catch { }
+            }
+            else body.Shape.Subtract(new[] { cutter });
+        }
+
         private static void RoundVerticalCorners(DesignBody body, double thicknessMm, double cornerRmm, ShellResult r)
         {
             if (cornerRmm <= 0) return;

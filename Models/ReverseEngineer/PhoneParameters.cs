@@ -31,6 +31,11 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.ReverseEngineer
         // --- hollow shell (S00b, P2): wall thickness of the tray; <=0 = solid (no hollow) ---
         public double HollowWallMm = 0.6;
 
+        // --- v2 curved back (S00a, P2/P4). DEFAULT 0 => FLAT v1 tray, byte-identical to current output. ---
+        public double BackCurveRadiusMm = 0.0;   // cylindrical-section back radius; 0 = flat (v1). Axis || length X.
+        public double BackBulgeMm = 0.0;         // convex sag at the back crown over W/2; 0 = flat (v1).
+        public bool LensOnCurvedBack = false;    // S06: route lens holes through AddHoleOnFace (curved) vs planar.
+
         // --- display pocket (S04): a shallow step-down on the top face ---
         public DisplayPocket Pocket = new DisplayPocket();
 
@@ -139,6 +144,22 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.ReverseEngineer
                     Math.Abs(h.YMm) + h.DiameterMm / 2 > WidthMm / 2)
                     errors.Add(string.Format("hole at ({0:0.#},{1:0.#}) extends outside the plan", h.XMm, h.YMm));
             }
+
+            // v2 curved back consistency (only when requested; 0/0 = flat v1 adds zero errors)
+            if (BackBulgeMm < 0 || BackCurveRadiusMm < 0)
+                errors.Add("back curve radius/bulge must be >= 0");
+            if (BackBulgeMm > 0)
+            {
+                if (BackBulgeMm >= ThicknessMm - MinWallMm)
+                    errors.Add("back bulge must leave >= min_wall after hollowing");
+                // gentle-curvature guard (the straight-cutter validity bound): require R >> feature size
+                double rEff = (BackCurveRadiusMm > 0) ? BackCurveRadiusMm
+                    : ((WidthMm / 2.0) * (WidthMm / 2.0) / (2.0 * BackBulgeMm) + BackBulgeMm / 2.0);
+                if (rEff < WidthMm)   // R smaller than the phone is a deep draw, not a gentle back
+                    errors.Add("back curve too tight (R < W); v2 supports GENTLE curvature only");
+            }
+            if (LensOnCurvedBack && !(BackCurveRadiusMm > 0 || BackBulgeMm > 0))
+                errors.Add("lens_on_curved_back requires a curved back");
 
             return errors.Count == 0;
         }
