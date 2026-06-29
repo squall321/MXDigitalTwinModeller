@@ -35,6 +35,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.ReverseEngineer
         public double BackCurveRadiusMm = 0.0;   // cylindrical-section back radius; 0 = flat (v1). Axis || length X.
         public double BackBulgeMm = 0.0;         // convex sag at the back crown over W/2; 0 = flat (v1).
         public bool LensOnCurvedBack = false;    // S06: route lens holes through AddHoleOnFace (curved) vs planar.
+        public bool PortsOnFlank = false;        // S07: route ports with OnFace=="flank" through AddSlitOnFace
+                                                 // (true side entry along the local flank normal) vs the v1 top recess.
+                                                 // Default false => v1 byte-identical. Works on straight OR curved flanks.
 
         // --- display pocket (S04): a shallow step-down on the top face ---
         public DisplayPocket Pocket = new DisplayPocket();

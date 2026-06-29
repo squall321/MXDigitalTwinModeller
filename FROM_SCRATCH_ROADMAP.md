@@ -369,3 +369,41 @@ curved-face targeting). v2 remaining (lower priority): AddSlitOnFace/AddPocketOn
 oriented variants (USB-C through a curved flank, grille on a curved back), FEA-freeze STEP hop,
 LLM SpecParser. The AddHoleOnFace pattern (ProjectPoint normal + normal-Z frame) generalizes
 directly to those - they are now mechanical, not risk-bearing.
+
+## P4 oriented variants DONE (2026-06-30) - Slit/Pocket/Boss OnFace + S07 flank routing
+
+The "mechanical, not risk-bearing" remainder is now built and gated. KEY INSIGHT that made these
+thin: the planar AddSlit/AddPocket already take a `normalAxis` and AddBoss takes `axisDir` — all
+three ALREADY extrude along an arbitrary normal with the P0-fixed breach/embed logic. The ONLY
+thing they lacked was a curved face's local normal. So the work was NOT three new monolithic
+cutters but ONE shared resolver + three thin delegators:
+
+**Built (ModificationService):**
+- `ResolveFaceNormal(body, seedMm, out contactMm, out outwardNormal)` — the face-scan + ProjectPoint
+  + IsReversed logic, extracted from AddHoleOnFace (which now calls it — proven no-regression by g6).
+  Read-only geometry query, safe outside a WriteBlock.
+- `AddSlitOnFace(body, seed, w, l, depth, orientationSeed=null)` → ResolveFaceNormal → AddSlit(normalAxis=n).
+  orientationSeed gives the in-plane long axis (InPlaneLongAxis projects seed→orient off n).
+- `AddPocketOnFace(body, seed, w, l, depth)` → AddPocket(normalAxis=n).
+- `AddBossOnFace(body, seed, dia, height)` → AddBoss(axisDir=n).
+
+**Wired (GenerationService S07):** a port with `OnFace=="flank"` AND `p.PortsOnFlank` enters SIDEWAYS
+via AddSlitOnFace — seed just outside the flank in ±Y at the port's Z, long axis +X (along the edge),
+works on a straight OR curved flank. New `PhoneParameters.PortsOnFlank` flag (default false → v1
+top-recess byte-identical). StageLog shows `(flank=N)`.
+
+**Gates (headless ANSYS-Student):**
+- **g6 unit** (`g6_oriented_faces.py`): on the curved Z-stack back, all four resolve+cut/raise: hole
+  dV=-4.24 (regression of the refactored AddHoleOnFace — matches g4 exactly), slit dV=-9.60, pocket
+  dV=-21.60, boss dV=**+41.01** (Unite adds). G6_PASS ALL=True. Sign correct on every op (P0
+  normal/embed fix inherited through the delegation).
+- **g7 integration** (`g7_flank_port.py`): full Generate() with PortsOnFlank + a flank USB-C port.
+  S07 = `ports 1/1 (flank=1)`, vol 12208.3→12192.1 (slot cut through the side), validationPass=True,
+  minWall=0.620, issues=none. G7_PASS ALL=True.
+
+Pitfall logged: the FIRST run after each rebuild can exceed a 240s gate deadline (fresh-DLL JIT
+load) and write NO result file — not a failure, just slow cold-start. Bumped gate deadlines to 300s.
+
+v2 remaining: FEA-freeze STEP hop, LLM SpecParser. The geometry/feature library is now complete for
+curved phone-metal — flat + curved envelope, planar + oriented features, all from one spec, all
+kernel-truth gated.

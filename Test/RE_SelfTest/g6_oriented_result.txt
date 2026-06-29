@@ -1,0 +1,6 @@
+gen: success=True vol=12208.3 stages=4
+hole    success=True dV=-4.241 hint=entered along face normal (0,0,1)
+slit    success=True dV=-9.600 hint=entered along face normal (0,0,1)
+pocket  success=True dV=-21.600 hint=entered along face normal (0,0,1)
+boss    success=True dV=+41.008 hint=entered along face normal (0,0,1)
+G6_PASS hole=True slit=True pocket=True boss=True ALL=True

@@ -1,0 +1,8 @@
+pipeline: success=True vol=12192.1 validationPass=True minWall=0.620
+   S00 bbox vol=77619
+   S00a curvedBack success=True path=zstackB slabs=40 dV=4197.1 vol=81816
+   S00b hollow success=True wall=0.6 cornersR=4/4 vol=12208.3
+   S06 holes 0/0 vol=12208.3
+   S07 ports 1/1 (flank=1) vol=12192.1
+   validationIssues=none
+G7_PASS pipelineOk=True flankRouted=True portCut=True ALL=True

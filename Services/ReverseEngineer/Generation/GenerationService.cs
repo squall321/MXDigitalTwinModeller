@@ -159,19 +159,41 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                     " vol=" + VolMm3(body).ToString("0.#"));
                 if (stopAtStage == "S06") { Finish(r, body, p); return r; }
 
-                // S07 — ports (rectangular slots). v1: cut on the top face as a shallow recess
-                // (true side/flank entry needs the P4 oriented-face overloads, deferred).
-                int portOk = 0;
+                // S07 — ports (rectangular slots). v1: shallow recess on the TOP face. P4: a port
+                // with OnFace=="flank" (and PortsOnFlank enabled) enters SIDEWAYS through the local
+                // flank normal via AddSlitOnFace — true USB-C/speaker side entry, on a straight OR
+                // curved flank. Default routes to the v1 top recess (byte-identical).
+                bool portsFlank = p.PortsOnFlank;
+                int portOk = 0, portFlankN = 0;
                 foreach (var port in p.Ports)
                 {
-                    var rpo = ModificationService.AddSlit(
-                        body, MmPos(port.XMm, port.YMm, p.ThicknessMm),
-                        port.WidthMm, port.HeightMm, Math.Max(0.5, port.HeightMm),
-                        new double[] { 0, 0, 1 });
-                    if (rpo.Success) portOk++;
+                    bool useFlank = portsFlank && port.OnFace == "flank";
+                    if (useFlank)
+                    {
+                        // seed just OUTSIDE the flank in ±Y (whichever side the port sits on); long
+                        // axis follows the phone length (+X) so the slot runs along the edge.
+                        double ySign = port.YMm >= 0 ? 1.0 : -1.0;
+                        double seedY = ySign * (p.WidthMm / 2.0 + 0.05);
+                        double zPort = port.ZMm > 0 ? port.ZMm : p.ThicknessMm / 2.0;
+                        var rpo = ModificationService.AddSlitOnFace(
+                            body, new double[] { port.XMm, seedY, zPort },
+                            port.HeightMm, port.WidthMm, Math.Max(1.0, p.HollowWallMm + 0.5),
+                            new double[] { port.XMm + 5.0, seedY, zPort });   // orient long axis +X
+                        if (rpo.Success) { portOk++; portFlankN++; }
+                    }
+                    else
+                    {
+                        var rpo = ModificationService.AddSlit(
+                            body, MmPos(port.XMm, port.YMm, p.ThicknessMm),
+                            port.WidthMm, port.HeightMm, Math.Max(0.5, port.HeightMm),
+                            new double[] { 0, 0, 1 });
+                        if (rpo.Success) portOk++;
+                    }
                 }
                 if (p.Ports.Count > 0)
-                    r.StageLog.Add("S07 ports " + portOk + "/" + p.Ports.Count + " vol=" + VolMm3(body).ToString("0.#"));
+                    r.StageLog.Add("S07 ports " + portOk + "/" + p.Ports.Count +
+                        (portFlankN > 0 ? " (flank=" + portFlankN + ")" : "") +
+                        " vol=" + VolMm3(body).ToString("0.#"));
                 if (stopAtStage == "S07") { Finish(r, body, p); return r; }
 
                 // S08 — speaker grille (hole-pattern grid on the top face).

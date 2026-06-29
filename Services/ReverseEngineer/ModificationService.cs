@@ -1011,43 +1011,19 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             double rM = GeometryUtils.MmToMeters(diameterMm / 2.0);
             double depthM = GeometryUtils.MmToMeters(depthMm);
             double marginM = 0.0005;
-            Point seed = Point.Create(
-                GeometryUtils.MmToMeters(seedMm[0]), GeometryUtils.MmToMeters(seedMm[1]), GeometryUtils.MmToMeters(seedMm[2]));
 
-            // 1) pick the face whose projection of the seed is nearest the seed.
-            DesignFace bestFace = null; double bestD2 = double.MaxValue;
-            Point bestPt = seed; double[] bestN = null;
-            try
-            {
-                foreach (var df in designBody.Faces)
-                {
-                    try
-                    {
-                        var ev = df.Shape.Geometry.ProjectPoint(seed);
-                        if (ev == null) continue;
-                        Point pp = ev.Point;
-                        double dx = pp.X - seed.X, dy = pp.Y - seed.Y, dz = pp.Z - seed.Z;
-                        double d2 = dx * dx + dy * dy + dz * dz;
-                        if (d2 < bestD2)
-                        {
-                            bestD2 = d2; bestFace = df; bestPt = pp;
-                            var dir = ev.Normal;
-                            double sgn = df.Shape.IsReversed ? -1.0 : 1.0;
-                            bestN = new[] { dir.X * sgn, dir.Y * sgn, dir.Z * sgn };
-                        }
-                    }
-                    catch { }
-                }
-            }
-            catch (Exception ex) { result.ErrorMessage = "face scan failed: " + ex.Message; return result; }
-
-            if (bestFace == null || bestN == null) { result.ErrorMessage = "no projectable face near seed"; return result; }
+            // 1) resolve the contact point + outward normal of the nearest face (shared P4 helper).
+            double[] contactMm, nrm;
+            if (!ResolveFaceNormal(designBody, seedMm, out contactMm, out nrm))
+            { result.ErrorMessage = "no projectable face near seed"; return result; }
+            Point bestPt = Point.Create(
+                GeometryUtils.MmToMeters(contactMm[0]), GeometryUtils.MmToMeters(contactMm[1]),
+                GeometryUtils.MmToMeters(contactMm[2]));
 
             // 2) build the cutter in a frame whose Z = the outward face normal; base below the
             //    face by depth along -n, extrude (depth+margin) along +n so it breaches.
             try
             {
-                var nrm = NormalizeVec3(bestN);
                 var nDir = Direction.Create(nrm[0], nrm[1], nrm[2]);
                 Point basePt = Point.Create(
                     bestPt.X - nrm[0] * depthM, bestPt.Y - nrm[1] * depthM, bestPt.Z - nrm[2] * depthM);
@@ -1078,6 +1054,97 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                 return result;
             }
             catch (Exception ex) { result.ErrorMessage = "AddHoleOnFace cut failed: " + ex.Message; return result; }
+        }
+
+        // -------------------------------------------------------------------
+        // AddSlitOnFace / AddPocketOnFace / AddBossOnFace (P4 oriented variants)
+        // -------------------------------------------------------------------
+        // These are THIN wrappers: resolve the local outward normal + contact point at a 3D seed
+        // (ResolveFaceNormal) and delegate to the existing planar Add* with that normal. The planar
+        // tools already extrude along an arbitrary normal with the P0-fixed breach/embed logic, so
+        // there is NOTHING to re-derive — the only thing they lacked was a curved face's local
+        // normal. orientationSeedMm (slit/pocket) gives the in-plane LONG-axis direction: its
+        // component projected off the normal becomes longAxis (e.g. a USB-C slit's long edge along
+        // the phone length even on a curved flank). Pass null for an auto in-plane axis.
+
+        /// <summary>
+        /// Rectangular slit cut along the LOCAL face normal at a curved seed (USB-C / speaker slot
+        /// through a curved flank). Resolves the normal via ResolveFaceNormal, derives an in-plane
+        /// long axis from orientationSeedMm (or auto), and delegates to AddSlit(normalAxis=n).
+        /// </summary>
+        public static ModificationResult AddSlitOnFace(
+            DesignBody designBody, double[] seedMm, double widthMm, double lengthMm, double depthMm,
+            double[] orientationSeedMm = null)
+        {
+            var result = new ModificationResult { Operation = "AddSlitOnFace", ModifiedBody = designBody };
+            double[] contactMm, n;
+            if (!ResolveFaceNormal(designBody, seedMm, out contactMm, out n))
+            { result.ErrorMessage = "no projectable face near seed"; return result; }
+            double[] longAxis = InPlaneLongAxis(n, orientationSeedMm, contactMm);
+            var r = AddSlit(designBody, contactMm, widthMm, lengthMm, depthMm, longAxis, n);
+            r.Operation = "AddSlitOnFace";
+            r.HintMessage = NormalHint(n);
+            return r;
+        }
+
+        /// <summary>
+        /// Rectangular pocket recessed along the LOCAL face normal at a curved seed (a recessed
+        /// logo/antenna window on a curved back). Delegates to AddPocket(normalAxis=n).
+        /// </summary>
+        public static ModificationResult AddPocketOnFace(
+            DesignBody designBody, double[] seedMm, double widthMm, double lengthMm, double depthMm)
+        {
+            var result = new ModificationResult { Operation = "AddPocketOnFace", ModifiedBody = designBody };
+            double[] contactMm, n;
+            if (!ResolveFaceNormal(designBody, seedMm, out contactMm, out n))
+            { result.ErrorMessage = "no projectable face near seed"; return result; }
+            var r = AddPocket(designBody, contactMm, widthMm, lengthMm, depthMm, n);
+            r.Operation = "AddPocketOnFace";
+            r.HintMessage = NormalHint(n);
+            return r;
+        }
+
+        /// <summary>
+        /// Cylindrical boss raised along the LOCAL face normal at a curved seed (a camera-ring boss
+        /// standing proud of a curved back). Delegates to AddBoss(axisDir=n).
+        /// </summary>
+        public static ModificationResult AddBossOnFace(
+            DesignBody designBody, double[] seedMm, double diameterMm, double heightMm)
+        {
+            var result = new ModificationResult { Operation = "AddBossOnFace", ModifiedBody = designBody };
+            double[] contactMm, n;
+            if (!ResolveFaceNormal(designBody, seedMm, out contactMm, out n))
+            { result.ErrorMessage = "no projectable face near seed"; return result; }
+            var r = AddBoss(designBody, contactMm, diameterMm, heightMm, n);
+            r.Operation = "AddBossOnFace";
+            r.HintMessage = NormalHint(n);
+            return r;
+        }
+
+        /// <summary>In-plane long axis for a face feature: project the seed→orient direction onto
+        /// the plane perpendicular to n. If orientationSeedMm is null or degenerate (parallel to n),
+        /// fall back to n.ArbitraryPerpendicular so the caller always gets a valid in-plane axis.</summary>
+        private static double[] InPlaneLongAxis(double[] n, double[] orientationSeedMm, double[] contactMm)
+        {
+            if (orientationSeedMm != null && orientationSeedMm.Length >= 3 && contactMm != null)
+            {
+                double[] dir = {
+                    orientationSeedMm[0] - contactMm[0],
+                    orientationSeedMm[1] - contactMm[1],
+                    orientationSeedMm[2] - contactMm[2] };
+                double d = Dot3(dir, n);
+                double[] inPlane = { dir[0] - d * n[0], dir[1] - d * n[1], dir[2] - d * n[2] };
+                var u = NormalizeVec3(inPlane);
+                if (u != null) return u;
+            }
+            var nDir = Direction.Create(n[0], n[1], n[2]).ArbitraryPerpendicular;
+            return new[] { nDir.X, nDir.Y, nDir.Z };
+        }
+
+        private static string NormalHint(double[] n)
+        {
+            return "entered along face normal (" +
+                n[0].ToString("0.##") + "," + n[1].ToString("0.##") + "," + n[2].ToString("0.##") + ")";
         }
 
         // -------------------------------------------------------------------
@@ -4374,6 +4441,57 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             double m = Math.Sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
             if (m < 1e-12) return null;
             return new[] { v[0] / m, v[1] / m, v[2] / m };
+        }
+
+        /// <summary>
+        /// P4 shared face resolver: given a 3D seed (mm), pick the body face whose ProjectPoint of
+        /// the seed lands nearest the seed and return its CONTACT POINT (mm) and OUTWARD unit normal.
+        /// This is the one piece the planar Add* tools lack — they already extrude along any normal
+        /// (AddSlit/AddPocket normalAxis, AddBoss axisDir, all P0-fixed), they just couldn't find a
+        /// curved face's local normal. Normal = ProjectPoint(seed).Normal sign-flipped by
+        /// Shape.IsReversed (the verified AdjacencyBuilder.cs:262 idiom — NOT GetFaceNormal, NOT
+        /// Evaluate(u,v).Normal). Returns false if no face is projectable. NOTE: ProjectPoint is a
+        /// read-only geometry query, safe to call OUTSIDE a WriteBlock (the mutation stays in Add*).
+        /// </summary>
+        private static bool ResolveFaceNormal(
+            DesignBody designBody, double[] seedMm, out double[] contactMm, out double[] outwardNormal)
+        {
+            contactMm = null; outwardNormal = null;
+            if (designBody == null || seedMm == null || seedMm.Length < 3) return false;
+            Point seed = Point.Create(
+                GeometryUtils.MmToMeters(seedMm[0]), GeometryUtils.MmToMeters(seedMm[1]),
+                GeometryUtils.MmToMeters(seedMm[2]));
+            double bestD2 = double.MaxValue;
+            try
+            {
+                foreach (var df in designBody.Faces)
+                {
+                    try
+                    {
+                        var ev = df.Shape.Geometry.ProjectPoint(seed);
+                        if (ev == null) continue;
+                        Point pp = ev.Point;
+                        double dx = pp.X - seed.X, dy = pp.Y - seed.Y, dz = pp.Z - seed.Z;
+                        double d2 = dx * dx + dy * dy + dz * dz;
+                        if (d2 < bestD2)
+                        {
+                            bestD2 = d2;
+                            double sgn = df.Shape.IsReversed ? -1.0 : 1.0;
+                            var dir = ev.Normal;
+                            outwardNormal = NormalizeVec3(new[] { dir.X * sgn, dir.Y * sgn, dir.Z * sgn });
+                            contactMm = new[]
+                            {
+                                GeometryUtils.MetersToMm(pp.X),
+                                GeometryUtils.MetersToMm(pp.Y),
+                                GeometryUtils.MetersToMm(pp.Z),
+                            };
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch { return false; }
+            return contactMm != null && outwardNormal != null;
         }
 
         private static double[] Cross3(double[] a, double[] b)
