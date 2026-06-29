@@ -1,0 +1,5 @@
+params: W=71.5 bulge=0.60 -> R=1065.4 mm
+revolve: returned body=True
+Reverse/Unite THREW: ArgumentException
+RESULT cylFaces=0 zmax=7.400 vol=77619.0
+G3_PASS smoothCylFace(0>=1)=False curvedZmax(7.40>7.70)=False ALL=False

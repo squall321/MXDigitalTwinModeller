@@ -988,6 +988,99 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
         }
 
         // -------------------------------------------------------------------
+        // AddHoleOnFace (P4 curved-face targeting)
+        // -------------------------------------------------------------------
+        /// <summary>
+        /// Drill a hole that ENTERS along the LOCAL face normal at a 3D seed point - for features
+        /// on a CURVED face (lens hole on a curved back, USB-C through a curved flank) that the
+        /// planar AddHole (FindPlanarFaceAtZ) cannot target. Picks the body face nearest the seed,
+        /// evaluates its outward normal via Geometry.ProjectPoint(seed).Normal (the verified idiom,
+        /// AdjacencyBuilder.cs:262 - NOT GetFaceNormal), builds the cutter frame with Z = that
+        /// normal, and drives it from below the face up through it. Inherits the P0 cutter logic
+        /// (base at P - n*depth, extrude depth+margin) so it breaches cleanly.
+        /// seedMm = a point ON or just outside the target face; diameterMm/depthMm in mm.
+        /// </summary>
+        public static ModificationResult AddHoleOnFace(
+            DesignBody designBody, double[] seedMm, double diameterMm, double depthMm)
+        {
+            var result = new ModificationResult { Operation = "AddHoleOnFace", ModifiedBody = designBody };
+            if (designBody == null) { result.ErrorMessage = "designBody is null"; return result; }
+            if (seedMm == null || seedMm.Length < 3) { result.ErrorMessage = "seedMm must be length 3"; return result; }
+            if (diameterMm <= 0 || depthMm <= 0) { result.ErrorMessage = "diameter/depth must be > 0"; return result; }
+
+            double rM = GeometryUtils.MmToMeters(diameterMm / 2.0);
+            double depthM = GeometryUtils.MmToMeters(depthMm);
+            double marginM = 0.0005;
+            Point seed = Point.Create(
+                GeometryUtils.MmToMeters(seedMm[0]), GeometryUtils.MmToMeters(seedMm[1]), GeometryUtils.MmToMeters(seedMm[2]));
+
+            // 1) pick the face whose projection of the seed is nearest the seed.
+            DesignFace bestFace = null; double bestD2 = double.MaxValue;
+            Point bestPt = seed; double[] bestN = null;
+            try
+            {
+                foreach (var df in designBody.Faces)
+                {
+                    try
+                    {
+                        var ev = df.Shape.Geometry.ProjectPoint(seed);
+                        if (ev == null) continue;
+                        Point pp = ev.Point;
+                        double dx = pp.X - seed.X, dy = pp.Y - seed.Y, dz = pp.Z - seed.Z;
+                        double d2 = dx * dx + dy * dy + dz * dz;
+                        if (d2 < bestD2)
+                        {
+                            bestD2 = d2; bestFace = df; bestPt = pp;
+                            var dir = ev.Normal;
+                            double sgn = df.Shape.IsReversed ? -1.0 : 1.0;
+                            bestN = new[] { dir.X * sgn, dir.Y * sgn, dir.Z * sgn };
+                        }
+                    }
+                    catch { }
+                }
+            }
+            catch (Exception ex) { result.ErrorMessage = "face scan failed: " + ex.Message; return result; }
+
+            if (bestFace == null || bestN == null) { result.ErrorMessage = "no projectable face near seed"; return result; }
+
+            // 2) build the cutter in a frame whose Z = the outward face normal; base below the
+            //    face by depth along -n, extrude (depth+margin) along +n so it breaches.
+            try
+            {
+                var nrm = NormalizeVec3(bestN);
+                var nDir = Direction.Create(nrm[0], nrm[1], nrm[2]);
+                Point basePt = Point.Create(
+                    bestPt.X - nrm[0] * depthM, bestPt.Y - nrm[1] * depthM, bestPt.Z - nrm[2] * depthM);
+                Direction dx2 = nDir.ArbitraryPerpendicular;
+                Direction dy2 = Direction.Cross(nDir, dx2);
+                Frame frame = Frame.Create(basePt, dx2, dy2);   // Frame.DirZ = dx2 x dy2 = +n
+                Plane basePlane = Plane.Create(frame);
+                Profile profile = new CircleProfile(basePlane, rM, PointUV.Create(0, 0), 0.0);
+                Body cutter = Body.ExtrudeProfile(profile, depthM + marginM);
+
+                var edgesBefore = CaptureEdges(designBody);
+                WriteBlock.ExecuteTask("AddHoleOnFace", () =>
+                {
+                    Part part = designBody.Parent as Part;
+                    if (part != null)
+                    {
+                        DesignBody cutterDb = DesignBody.Create(part, "_holeonface_cutter", cutter);
+                        designBody.Shape.Subtract(new[] { cutterDb.Shape });
+                        try { cutterDb.Delete(); } catch { }
+                    }
+                    else designBody.Shape.Subtract(new[] { cutter });
+                });
+                var edgesAfter = CaptureEdges(designBody);
+                result.NewlyCreatedEdges = DiffEdges(edgesBefore, edgesAfter);
+                result.Success = true;
+                result.HintMessage = "entered along face normal (" +
+                    nrm[0].ToString("0.##") + "," + nrm[1].ToString("0.##") + "," + nrm[2].ToString("0.##") + ")";
+                return result;
+            }
+            catch (Exception ex) { result.ErrorMessage = "AddHoleOnFace cut failed: " + ex.Message; return result; }
+        }
+
+        // -------------------------------------------------------------------
         // AddBoss
         // -------------------------------------------------------------------
         /// <summary>

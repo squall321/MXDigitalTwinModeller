@@ -1,0 +1,8 @@
+FLAT(v1): success=True vol=77619.0 faces=6 zmax=7.400
+   S00 bbox vol=77619
+   S06 holes 0/0 vol=77619
+CURVED(v2): success=True vol=81825.4 faces=46 zmax=8.000
+   S00 bbox vol=77619
+   S00a curvedBack success=True path=zstackB slabs=10 dV=4206.4 vol=81825.4
+   S06 holes 0/0 vol=81825.4
+G1_PASS v1Flat=True curvedNonPlanar(zmax 8.00 > 7.70)=True ALL=True

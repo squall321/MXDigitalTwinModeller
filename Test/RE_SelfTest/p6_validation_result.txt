@@ -1,0 +1,3 @@
+VALID phone: success=True validationPass=True minWall=0.620 issues=none
+BAD spec (bump 8.0 > T 7.4): success=False err=invalid spec: camera bump_height must be < total_thickness
+P6_PASS validPhonePasses=True badSpecRejected=True ALL=True

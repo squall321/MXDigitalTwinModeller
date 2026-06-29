@@ -65,6 +65,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.ReverseEngineer
             public double DiameterMm = 4.0;
             public bool Through = true;
             public double DepthMm = 0.0;        // ignored when Through
+            // P4: when true AND the back is curved, this hole is drilled along the LOCAL face
+            // normal at (XMm,YMm) on the curved back via AddHoleOnFace (a lens hole following
+            // the crown), instead of the planar straight-down AddHole. Ignored on a flat back.
+            public bool OnCurvedBack = false;
         }
 
         public class CameraIsland

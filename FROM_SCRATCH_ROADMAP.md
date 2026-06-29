@@ -317,3 +317,55 @@ flank side-wall 0.610/0.610 (horizontal), closed solid, validationPass. G2_PASS=
 concentric inner Z-stack offset (N=40 slabs, inset by wall) produces a UNIFORM 0.61mm wall over the
 curved back, flanks, and floor. v2 curved envelope + curve-following hollow are DONE and verified.
 Remaining v2: P4 curved-face feature cut, smooth revolve outer, side/flank entry, FEA-freeze.
+
+## v2 g3 smooth-revolve: TESTED, REJECTED (2026-06-29) - Z-stack confirmed as the curved path
+
+Probed the adversarial "biggest unknown": does RevolveTrimmedCurves work with a HORIZONTAL DirX
+axis + near-flat large-R (1065mm) arc wedge (spec-63 only proved DirZ + cone)? Result: revolve
+RETURNS a body (DirX axis binds), BUT that body is INVALID - arc.IsClosed throws ArgumentException,
+the Unite fails, slab unchanged (cylFaces=0, zmax=7.4). This is the degenerate-flat-wedge kernel
+limit the adversarial review flagged: a 360deg revolve of an almost-flat R=1065mm wedge self-
+intersects/degenerates.
+
+Decision: smooth single-Cylinder-face revolve is NOT available for the gentle back. The faceted
+Z-STACK (g1/g2 PASS) is the confirmed curved-envelope path. P4 will pick the target face by
+ProjectPoint(seed).Normal (works on the Z-stack's planar slab faces - seed lands on the nearest
+slab face, returns its outward normal). (Note: SC can inject null bytes into property/exception
+strings -> IronPython EncoderFallbackException; sanitize log lines before WriteAllText.)
+
+## P4 PASSED (2026-06-30) - curved-face targeting (AddHoleOnFace) built + wired into S06
+
+The deferred P4 risk is now RETIRED. Curved-face feature cutting works on the Z-stack envelope,
+proven at unit AND integration level.
+
+**Built:** `ModificationService.AddHoleOnFace(designBody, seedMm[3], diameterMm, depthMm)`. Drills a
+hole that ENTERS along the LOCAL face normal at a 3D seed point - the thing planar AddHole (which
+only finds z=const planes via FindPlanarFaceAtZ) structurally cannot do. Algorithm:
+  1. Scan body faces, pick the one whose `Shape.Geometry.ProjectPoint(seed)` lands nearest the seed.
+  2. Outward normal = that projection's `.Normal`, sign-flipped by `Shape.IsReversed` (the verified
+     AdjacencyBuilder.cs:262 idiom - NOT GetFaceNormal, NOT Evaluate(u,v).Normal).
+  3. Build the cutter frame with Z = that normal (`ArbitraryPerpendicular` + `Direction.Cross` +
+     `Frame.Create`), base at `seedProj - n*depth`, extrude `depth+margin` along +n.
+  4. Subtract (DesignBody-wrapped, RT4/RT5 idiom). Inherits the P0 cutter-direction fix for free -
+     only n changed from (0,0,1) to the local normal, so the breach logic is the same proven path.
+
+**Wired:** GenerationService **S06** now dispatches per-hole: `HoleSpec.OnCurvedBack==true` AND
+`p.LensOnCurvedBack` AND `p.BackBulgeMm>0` -> AddHoleOnFace (seed just outside the crown at
+`CrownZAt(p,x,y) = T + bulge*(1-(y/(W/2))^2)`); else the planar straight-down AddHole. New per-hole
+`HoleSpec.OnCurvedBack` flag (default false -> v1 byte-identical). StageLog shows `(curved=N)`.
+
+**Gates (headless ANSYS-Student):**
+- **g4 unit** (`g4_face_cut.py`): on a curved Z-stack back, CASE A crown (y=0) -> dV=-4.24, normal
+  (0,0,1) [flat top slab, enters down]; CASE B flank (+Y side wall) -> dV=-1.89, normal **(0,1,0)**
+  [enters SIDEWAYS through a near-vertical face - the proof planar AddHole could never target it].
+  G4_PASS crownVertical=True flankRemoved=True flankHoriz=1.00.
+- **g5 integration** (`g5_lens_pipeline.py`): full Generate() with LensOnCurvedBack + a lens hole
+  (OnCurvedBack) + a plain corner hole. S06 = `holes 2/2 (curved=1)`, validationPass=True,
+  minWall=0.620 (lens depth 1.0 stops short of breaching the 0.6 wall, as designed), issues=none.
+  G5_PASS pipelineOk=True curvedRouted=True bothHoles=True.
+
+**Status:** ALL 4 program risks now retired (P0 composition, P2 curved-shell, P3 ID drift, P4
+curved-face targeting). v2 remaining (lower priority): AddSlitOnFace/AddPocketOnFace/AddBossOnFace
+oriented variants (USB-C through a curved flank, grille on a curved back), FEA-freeze STEP hop,
+LLM SpecParser. The AddHoleOnFace pattern (ProjectPoint normal + normal-Z frame) generalizes
+directly to those - they are now mechanical, not risk-bearing.

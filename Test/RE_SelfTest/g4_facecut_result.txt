@@ -1,0 +1,4 @@
+gen: success=True vol=12208.3 stages=4
+CASE A crown: success=True dV=-4.241 n=[0.0, 0.0, 1.0] hint=entered along face normal (0,0,1)
+CASE B flank: success=True dV=-1.885 n=[0.0, 1.0, 0.0] hint=entered along face normal (0,1,0)
+G4_PASS crownVertical=True flankRemoved=True flankHoriz(1.00>0.2)=True ALL=True

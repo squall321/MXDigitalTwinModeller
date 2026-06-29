@@ -124,20 +124,39 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                 }
                 if (stopAtStage == "S05") { Finish(r, body, p); return r; }
 
-                // S06 — corner / mounting holes (through).
-                int hOk = 0, hOrd = 0;
+                // S06 — corner / mounting holes (through). P4: a hole flagged OnCurvedBack on a
+                // curved-back body is drilled along the LOCAL crown normal via AddHoleOnFace (a lens
+                // hole following the arc); all others stay planar straight-down AddHole.
+                bool curvedBack = p.BackBulgeMm > 0 && p.LensOnCurvedBack;
+                int hOk = 0, hOrd = 0, hCurved = 0;
                 foreach (var h in p.Holes)
                 {
-                    var rh = ModificationService.AddHole(
-                        body, MmPos(h.XMm, h.YMm, p.ThicknessMm),
-                        h.DiameterMm, h.Through, h.DepthMm, new double[] { 0, 0, 1 }, false);
-                    if (rh.Success) hOk++;
+                    bool useFace = curvedBack && h.OnCurvedBack;
+                    double topZ = useFace ? CrownZAt(p, h.XMm, h.YMm) : p.ThicknessMm;
+                    if (useFace)
+                    {
+                        // seed just OUTSIDE the curved back at the crown height so the nearest face is
+                        // the back; AddHoleOnFace finds its outward normal and drills inward.
+                        var rh = ModificationService.AddHoleOnFace(
+                            body, new double[] { h.XMm, h.YMm, topZ + 0.05 },
+                            h.DiameterMm, h.Through ? p.ThicknessMm : (h.DepthMm > 0 ? h.DepthMm : 1.0));
+                        if (rh.Success) { hOk++; hCurved++; }
+                    }
+                    else
+                    {
+                        var rh = ModificationService.AddHole(
+                            body, MmPos(h.XMm, h.YMm, p.ThicknessMm),
+                            h.DiameterMm, h.Through, h.DepthMm, new double[] { 0, 0, 1 }, false);
+                        if (rh.Success) hOk++;
+                    }
                     // P3: handle per hole, keyed by its intended (x,y,topZ)+diameter.
                     r.Handles.Add(new FeatureHandle("S06", "hole", hOrd++,
-                        new double[] { h.XMm, h.YMm, p.ThicknessMm },
+                        new double[] { h.XMm, h.YMm, topZ },
                         new double[] { 0, 0, 1 }, h.DiameterMm));
                 }
-                r.StageLog.Add("S06 holes " + hOk + "/" + p.Holes.Count + " vol=" + VolMm3(body).ToString("0.#"));
+                r.StageLog.Add("S06 holes " + hOk + "/" + p.Holes.Count +
+                    (hCurved > 0 ? " (curved=" + hCurved + ")" : "") +
+                    " vol=" + VolMm3(body).ToString("0.#"));
                 if (stopAtStage == "S06") { Finish(r, body, p); return r; }
 
                 // S07 — ports (rectangular slots). v1: cut on the top face as a shallow recess
@@ -222,6 +241,18 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
         private static double VolMm3(DesignBody b)
         {
             try { return b.Shape.Volume * 1e9; } catch { return 0; }
+        }
+
+        /// <summary>Outer crown height (mm) of the curved back at (x,y): the same arc S00a/the
+        /// hollow use, z = T + bulge*(1-(y/(W/2))^2), Y-symmetric and X-independent. On a flat
+        /// back (bulge<=0) this is just T.</summary>
+        private static double CrownZAt(PhoneParameters p, double xMm, double yMm)
+        {
+            if (p.BackBulgeMm <= 0) return p.ThicknessMm;
+            double halfW = p.WidthMm / 2.0;
+            double frac = 1.0 - (yMm / halfW) * (yMm / halfW);
+            if (frac < 0) frac = 0;
+            return p.ThicknessMm + p.BackBulgeMm * frac;
         }
 
         private static void Finish(GenResult r, DesignBody body, PhoneParameters p)

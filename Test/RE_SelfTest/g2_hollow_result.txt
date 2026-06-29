@@ -1,0 +1,12 @@
+curved+hollow: success=True vol=12208.3 validationPass=True minWall=0.620
+   S00 bbox vol=77619
+   S00a curvedBack success=True path=zstackB slabs=40 dV=4197.1 vol=81816
+   S00b hollow success=True wall=0.6 cornersR=4/4 vol=12208.3
+   S06 holes 0/0 vol=12208.3
+   validationIssues=none
+   back-wall(vert) @ y=0: 0.610 mm (target 0.60)
+   back-wall(vert) @ y=15: 0.500 mm (target 0.60)
+   back-wall(vert) @ y=25: 0.300 mm (target 0.60)
+   back-wall(vert) @ y=30: 0.180 mm (target 0.60)
+   side-wall(horiz) @ z=3.7: 0.610  @ z=7.0: 0.610 (target 0.60)
+G2_PASS closed=True crownBack=0.610 sideWall=0.610/0.610 uniform=True ALL=True

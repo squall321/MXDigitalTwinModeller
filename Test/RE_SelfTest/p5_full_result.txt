@@ -1,0 +1,32 @@
+[A] success=True err=none vol=7999.2 handles=3
+    S00 bbox vol=77619
+    S00b hollow success=True wall=0.6 cornersR=4/4 vol=8011.4
+    S04 pocket success=True vol=8011.4
+    S05 camera success=True vol=8011.4
+    S06 holes 2/2 vol=8002.9
+    S07 ports 1/1 vol=8002
+    S08 grille success=True (1x6) vol=7999.2
+    S09 buttons 2/2 vol=7999.2
+    closed=True noStageFail=True
+[B] success=True err=none vol=9207.0 handles=3
+    S00 bbox vol=96000
+    S00b hollow success=True wall=0.6 cornersR=4/4 vol=9219.2
+    S04 pocket success=True vol=9219.2
+    S05 camera success=True vol=9219.2
+    S06 holes 2/2 vol=9210.7
+    S07 ports 1/1 vol=9209.8
+    S08 grille success=True (1x6) vol=9207
+    S09 buttons 2/2 vol=9207
+    closed=True noStageFail=True
+[A2] success=True err=none vol=7999.2 handles=3
+    S00 bbox vol=77619
+    S00b hollow success=True wall=0.6 cornersR=4/4 vol=8011.4
+    S04 pocket success=True vol=8011.4
+    S05 camera success=True vol=8011.4
+    S06 holes 2/2 vol=8002.9
+    S07 ports 1/1 vol=8002
+    S08 grille success=True (1x6) vol=7999.2
+    S09 buttons 2/2 vol=7999.2
+    closed=True noStageFail=True
+DETERMINISM v1=7999.202 v3=7999.202 identical=True
+P5_PASS A=True B=True determinism=True ALL=True
