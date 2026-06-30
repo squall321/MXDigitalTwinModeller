@@ -29,7 +29,10 @@
             <Directory Id="SpaceClaimDir" Name="SpaceClaim">
                 <Directory Id="AddInsDir" Name="AddIns">
                     <Directory Id="MXDir" Name="MXDigitalTwinModeller">
-                        <Directory Id="INSTALLFOLDER" Name="V252" />
+                        <Directory Id="INSTALLFOLDER" Name="V252">
+                            <!-- Claude Desktop MCP stdio bridge (ships beside the Add-In DLL). -->
+                            <Directory Id="McpBridgeDir" Name="mcp_bridge" />
+                        </Directory>
                     </Directory>
                 </Directory>
             </Directory>
@@ -68,6 +71,33 @@
             <Component Id="ManifestXml" Guid="*">
                 <File Id="MXDigitalTwinModeller.Manifest.xml"
                       Source="$(BuildOutputDir)\MXDigitalTwinModeller.Manifest.xml"
+                      KeyPath="yes" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- ================================================================ -->
+        <!-- Claude Desktop MCP bridge (stdio<->loopback HTTP) + 1-click setup -->
+        <!-- ================================================================ -->
+
+        <ComponentGroup Id="McpBridgeComponents" Directory="McpBridgeDir">
+            <Component Id="McpBridgePy" Guid="*">
+                <File Id="mxdtm_mcp_bridge.py"
+                      Source="$(ProjectDir)\tools\mcp_bridge\mxdtm_mcp_bridge.py"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="McpRegisterPy" Guid="*">
+                <File Id="register_claude_desktop.py"
+                      Source="$(ProjectDir)\tools\mcp_bridge\register_claude_desktop.py"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="McpRegisterBat" Guid="*">
+                <File Id="register_claude_desktop.bat"
+                      Source="$(ProjectDir)\tools\mcp_bridge\register_claude_desktop.bat"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="McpBridgeReadme" Guid="*">
+                <File Id="mcp_bridge_README.md" Name="README.md"
+                      Source="$(ProjectDir)\tools\mcp_bridge\README.md"
                       KeyPath="yes" />
             </Component>
         </ComponentGroup>
@@ -271,6 +301,7 @@
         <Feature Id="SpaceClaimFeature" Title="SpaceClaim Add-In" Level="1"
                  Description="SpaceClaim Add-In for composite specimen modeling">
             <ComponentGroupRef Id="SpaceClaimComponents" />
+            <ComponentGroupRef Id="McpBridgeComponents" />
         </Feature>
 
         <Feature Id="MechanicalFeature" Title="Mechanical ACT Extension" Level="1"

@@ -576,3 +576,25 @@ found: H999"` and step 3 did NOT run (dV=-3.02, no boss volume); T4 nesting → 
 is an LLM/MCP tool (29 total): planar add_*, curved add_*_on_face, change/move/rotate/mirror/remove,
 generate_phone[_from_spec] with stop_at_stage, batch apply_operations, + 2 query tools. Nothing in
 ModificationService/GenerationService is unreachable from the tool layer anymore.
+
+## One-click deployment: MSI bundles the Claude Desktop bridge (2026-07-01)
+
+The WiX MSI now ships the stdio bridge + a one-click registrar, so an end user installs and connects
+their own Claude Desktop without hand-editing JSON.
+
+- **register_claude_desktop.py** (`tools/mcp_bridge/`) — safely MERGES an `mxdtm-spaceclaim` server
+  into `%APPDATA%\Claude\claude_desktop_config.json`: preserves every existing server + top-level
+  setting, backs up to `*.mxdtm-bak` first, auto-fills the installed bridge path + the running Python
+  interpreter. Idempotent; `--remove` deletes only our entry. stdlib-only.
+- **register_claude_desktop.bat** — double-click launcher (prefers the `py` launcher, then `python`).
+- **WiX (`Installer/MXDigitalTwinModeller.wxs`)** — new `McpBridgeDir` (= `...\V252\mcp_bridge\`),
+  `McpBridgeComponents` (the 4 bridge files), referenced from `SpaceClaimFeature` so it installs
+  with the Add-In. `wix build` (6.0.2) OK → 195MB MSI; verified all 4 bridge files are embedded in
+  the File table.
+- README.md leads with the one-click flow; manual JSON-edit kept as the alternative.
+
+Registrar verified locally against a seeded config: merge kept `some-other-server` + `theme:dark` and
+added `mxdtm-spaceclaim`; re-run idempotent (no dup); `--remove` dropped only our entry.
+
+User flow now: install MSI → double-click `register_claude_desktop.bat` → restart Claude Desktop →
+open SpaceClaim → "make me a curved phone with a USB-C port" in natural language.

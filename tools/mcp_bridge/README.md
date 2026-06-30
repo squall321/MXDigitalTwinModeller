@@ -33,20 +33,34 @@ Claude Desktop ──stdio──▶ mxdtm_mcp_bridge.py ──HTTP──▶ 127.
 2. **Python 3.8+** on PATH (stdlib only — no `pip install` needed).
 3. **Claude Desktop** (or another stdio MCP client).
 
-## Setup (Claude Desktop)
+## Setup — one click (recommended)
 
-Edit Claude Desktop's config file:
+The MSI installs this folder next to the Add-In at
+`C:\ProgramData\SpaceClaim\AddIns\MXDigitalTwinModeller\V252\mcp_bridge\`.
 
-- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+**Double-click `register_claude_desktop.bat`.** It safely merges an
+`mxdtm-spaceclaim` server into your Claude Desktop config — your existing
+servers and settings are preserved, and a backup
+(`claude_desktop_config.json.mxdtm-bak`) is made first. It auto-fills the bridge
+path and the Python interpreter, so you don't edit any JSON by hand.
 
-Add this server entry (adjust the script path to where you installed it):
+Then **fully restart Claude Desktop**. To undo, run
+`register_claude_desktop.bat --remove` (or
+`python register_claude_desktop.py --remove`).
+
+> If Python isn't found, install Python 3.8+ and re-run the .bat.
+
+## Setup — manual (alternative)
+
+Edit `%APPDATA%\Claude\claude_desktop_config.json` and add (adjust the path to
+where it's installed):
 
 ```json
 {
   "mcpServers": {
     "mxdtm-spaceclaim": {
       "command": "python",
-      "args": ["C:\\path\\to\\tools\\mcp_bridge\\mxdtm_mcp_bridge.py"]
+      "args": ["C:\\ProgramData\\SpaceClaim\\AddIns\\MXDigitalTwinModeller\\V252\\mcp_bridge\\mxdtm_mcp_bridge.py"]
     }
   }
 }
