@@ -1,0 +1,5 @@
+T1 advertised: True
+T2 valid:     env={"success": true, "error": null, "result": {"generated": true, "params": "Phone L=150 W=72 T=8 cornerR=3 pocket=off holes=1 camera=off", "warnings": []}} built=True vol=13204.4
+T3 invalid:   env={"success": false, "error": "invalid spec: back bulge must leave >= min_wall after hollowing", "result": null}
+T4 malformed: env={"success": false, "error": "invalid spec: JSON parse failed: unexpected end of input", "result": null}
+G10_PASS advertised=True validBuilds=True invalidRejected=True malformedRejected=True ALL=True

@@ -481,3 +481,44 @@ structured JSON spec → SpecParser (bind + validate) → PhoneParameters → Ge
 curved envelope, planar + oriented features S00–S09) → ValidationService (kernel-truth Tier-2) →
 FeaFreezeService (license-aware FEA hand-off). Every stage deterministic and kernel-truth gated; the
 only non-C# link is the LLM's NL→JSON step, which the typed Validate() backstops before any geometry.
+
+## LLM/MCP EXPOSURE + Claude-Desktop deployment (2026-07-01) — the spec tool is now LLM-reachable
+
+SpecParser was a library nobody called. Now `generate_phone_from_spec` is a first-class LLM tool,
+reachable from BOTH the in-Add-In AskClaude loop AND an external MCP client — one registry entry
+lights up both paths (they share LlmToolRegistry).
+
+**Track 1 — tool wiring (3 layers, the proven generate_phone pattern):**
+- `LlmToolRegistry` — new ToolDef whose description is the LLM-facing CONTRACT: it enumerates every
+  snake_case field + the curved/oriented rules + a worked example, so Claude emits valid specs. This
+  is the RICH tool — it reaches the whole v2 surface (curved back, lens-on-curved, flank ports,
+  holes/ports/grille/buttons arrays) that the 5-scalar `generate_phone` cannot.
+- `LlmToolDispatcher` — new case: read `spec_json` → `SpecParser.Parse` (binds + Validates) →
+  `SessionContext.GeneratePhone(pr.Params)` → same `Envelope{success,error,result}` shape + warnings.
+  Also added to the null-body guard's self-bind exclusion list (it builds its own body).
+- `McpServer.selfBinds` — added so the MCP path skips BindActiveBody (no pre-existing body to bind).
+
+**Track 2 — Claude Desktop deployment (stdio bridge):** Claude Desktop speaks stdio, the Add-In's
+MCP server is loopback HTTP — so `tools/mcp_bridge/mxdtm_mcp_bridge.py` is a DUMB stdio↔HTTP relay
+(stdlib-only Python). It reads the Add-In's handshake (`%LOCALAPPDATA%\\MXDTM\\mcp_handshake.json` =
+{port,pid}) each request, forwards JSON-RPC bytes verbatim (zero schema drift), and on cold start
+(SpaceClaim not running) returns a helpful JSON-RPC error instead of crashing the MCP session.
+`tools/mcp_bridge/README.md` = the claude_desktop_config.json snippet + setup/troubleshooting.
+
+**Gate g10** (`g10_mcp_spec_tool.py`, headless) — exercises the REAL dispatch entry MCP+AskClaude share:
+- T1 advertised: ToToolsArrayJson() contains generate_phone_from_spec → True.
+- T2 valid curved spec via Dispatch(null,null,"generate_phone_from_spec",args) → Envelope success,
+  a curved phone built in the session (vol=13204.4, holes=1).
+- T3 invalid (bulge 7.2) → success=false "back bulge must leave >= min_wall after hollowing".
+- T4 malformed JSON → success=false "JSON parse failed". G10_PASS ALL=True.
+
+**Live full-relay proof (interactive, not headless):** launched SpaceClaim, polled the live MCP
+server (port 8765, initialize OK), then drove the bridge end-to-end over stdio: `initialize` →
+`tools/list` (the new tool appears with correct MCP `inputSchema`) → `tools/call
+generate_phone_from_spec` with a curved spec → `{"success": true, ... "isError": false}`, a curved
+phone built in the LIVE session. External-client → stdio → loopback HTTP → live SpaceClaim works.
+
+⚠️ Verification pitfall logged: a .NET string LITERAL (e.g. the tool name) lives in the DLL's #US
+heap as UTF-16, NOT ASCII — an ASCII grep of the DLL gives a FALSE NEGATIVE. Search UTF-16 (and mind
+the byte-alignment: an odd offset shifts the decode). Confirm tool presence at runtime via
+ToolsListJson(), not a raw DLL string grep.

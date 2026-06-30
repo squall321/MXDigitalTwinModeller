@@ -246,6 +246,35 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                       "\"camera_bump_mm\": {\"type\": \"number\", \"description\": \"Camera plateau height above the back; omit for none\"}" +
                     "}, \"required\": []}"),
 
+                // The RICH from-scratch tool: the full v2 design surface (curved back, oriented
+                // features, holes/ports/grille/buttons arrays) that flat generate_phone cannot reach.
+                // The LLM does the natural-language -> JSON; SpecParser binds + validates it.
+                new ToolDef(
+                    "generate_phone_from_spec",
+                    "Generate a phone front-metal part FROM SCRATCH from a FULL structured spec - use this " +
+                    "(not generate_phone) whenever the request involves a CURVED back, a lens/USB-C/speaker " +
+                    "feature, or multiple holes/ports. Pass `spec_json`: a JSON object string with these " +
+                    "snake_case keys (all mm; omit any field to keep its default; the server validates " +
+                    "design intent and rejects an unbuildable spec before any geometry): " +
+                    "length_mm, width_mm, thickness_mm, corner_r, min_wall, hollow_wall_mm (0=solid); " +
+                    "back_bulge_mm (>0 = gently CURVED convex back; must leave >= min_wall after hollowing; " +
+                    "curve must be GENTLE i.e. effective R >= width), lens_on_curved_back (bool; needs a " +
+                    "curved back), ports_on_flank (bool; route flank ports through true side entry); " +
+                    "pocket:false to disable the display pocket, or pocket:{enabled,width_mm,length_mm,depth_mm}; " +
+                    "camera:{x_mm,y_mm,diameter_mm,height_mm}; " +
+                    "holes:[{x_mm,y_mm,diameter_mm,through(bool),depth_mm,on_curved_back(bool)}] (a lens hole " +
+                    "on a curved back sets on_curved_back:true so it enters along the local crown normal); " +
+                    "ports:[{type:'usbc'|'lightning',x_mm,y_mm,z_mm,width_mm,height_mm,on_face:'flank'}]; " +
+                    "grille:{origin_x_mm,origin_y_mm,pitch_mm,rows,cols,hole_diameter_mm}; " +
+                    "buttons:[{x_mm,y_mm,z_mm,width_mm,height_mm,depth_mm}]. " +
+                    "Example: {\\\"length_mm\\\":150,\\\"width_mm\\\":72,\\\"thickness_mm\\\":8,\\\"back_bulge_mm\\\":0.7," +
+                    "\\\"lens_on_curved_back\\\":true,\\\"ports_on_flank\\\":true," +
+                    "\\\"holes\\\":[{\\\"x_mm\\\":20,\\\"y_mm\\\":0,\\\"diameter_mm\\\":4,\\\"through\\\":false,\\\"depth_mm\\\":1,\\\"on_curved_back\\\":true}]," +
+                    "\\\"ports\\\":[{\\\"type\\\":\\\"usbc\\\",\\\"x_mm\\\":0,\\\"y_mm\\\":-36,\\\"z_mm\\\":4,\\\"width_mm\\\":9,\\\"height_mm\\\":3,\\\"on_face\\\":\\\"flank\\\"}]}.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"spec_json\": {\"type\": \"string\", \"description\": \"A JSON object string describing the full phone spec (snake_case keys as documented). The server parses + validates it.\"}" +
+                    "}, \"required\": [\"spec_json\"]}"),
+
                 new ToolDef(
                     "set_camera_height",
                     "Change the camera bump height of the generated phone and regenerate. Edits the parametric source of truth so the body stays consistent with the design parameters.",

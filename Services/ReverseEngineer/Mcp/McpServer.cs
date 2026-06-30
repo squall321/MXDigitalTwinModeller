@@ -163,7 +163,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Mcp
             bool readOnly = (toolName == "get_feature_graph" || toolName == "find_features_by_type");
             // generate_phone / set_camera_height BUILD the session body themselves
             // (SessionContext.GeneratePhone) — no pre-existing body to bind.
-            bool selfBinds = (toolName == "generate_phone" || toolName == "set_camera_height");
+            bool selfBinds = (toolName == "generate_phone" || toolName == "generate_phone_from_spec"
+                || toolName == "set_camera_height");
 
             return ApiThreadMarshaller.Run(delegate
             {

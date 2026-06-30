@@ -44,7 +44,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             // generate_phone/set_camera_height are session/generation tools that build their own
             // body via SessionContext — they don't require a pre-existing designBody.
             if (designBody == null && toolName != "get_feature_graph" && toolName != "find_features_by_type"
-                && toolName != "generate_phone" && toolName != "set_camera_height")
+                && toolName != "generate_phone" && toolName != "generate_phone_from_spec"
+                && toolName != "set_camera_height")
                 return Envelope(false, "designBody is null (required for modification tools)", null);
 
             Dictionary<string, object> args;
@@ -256,6 +257,35 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         if (genErr != null) return Envelope(false, genErr, null);
                         return Envelope(true, null, "{\"generated\": true, \"params\": \"" +
                             p.ToString().Replace("\"", "'") + "\"}");
+                    }
+                    case "generate_phone_from_spec":
+                    {
+                        // The LLM emits a full structured JSON spec; SpecParser binds + validates it
+                        // (the same Validate() generate_phone runs, plus the curved/oriented surface).
+                        string specJson = GetString(args, "spec_json");
+                        var pr = Generation.SpecParser.Parse(specJson);
+                        if (!pr.Success)
+                        {
+                            string why = (pr.Errors != null && pr.Errors.Count > 0)
+                                ? string.Join("; ", pr.Errors.ToArray()) : "spec rejected";
+                            return Envelope(false, "invalid spec: " + why, null);
+                        }
+                        string genErr2 = Mcp.SessionContext.Instance.GeneratePhone(pr.Params);
+                        if (genErr2 != null) return Envelope(false, genErr2, null);
+                        string warnJson = "[]";
+                        if (pr.Warnings != null && pr.Warnings.Count > 0)
+                        {
+                            var wb = new StringBuilder("[");
+                            for (int i = 0; i < pr.Warnings.Count; i++)
+                            {
+                                if (i > 0) wb.Append(", ");
+                                wb.Append("\"").Append(EscapeStr(pr.Warnings[i])).Append("\"");
+                            }
+                            wb.Append("]");
+                            warnJson = wb.ToString();
+                        }
+                        return Envelope(true, null, "{\"generated\": true, \"params\": \"" +
+                            pr.Params.ToString().Replace("\"", "'") + "\", \"warnings\": " + warnJson + "}");
                     }
                     case "set_camera_height":
                     {
