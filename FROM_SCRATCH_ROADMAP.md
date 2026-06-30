@@ -444,3 +444,40 @@ deployed DLL, and the probe dies at import with NO marker file.
 
 v2 remaining: LLM SpecParser only. Generation → features → FEA hand-off is now an end-to-end,
 license-aware, kernel-truth-gated pipeline.
+
+## LLM SpecParser DONE (2026-07-01) — v2 COMPLETE, full pipeline runs from a spec
+
+The last v2 item. `SpecParser.Parse(specJson)` binds a STRUCTURED JSON spec into a PhoneParameters
+and runs its design-intent Validate() — the deterministic, dependency-free bridge from an LLM to the
+generator.
+
+DIVISION OF LABOR (the right altitude): the LLM does the natural-language understanding and emits a
+JSON object whose keys are the snake_case design fields — the SAME names PhoneParameters.Validate()
+already uses in its messages (length_mm, min_wall, back_bulge_mm, lens_on_curved_back, ports_on_flank,
+…). SpecParser does NOT do NLP; it binds that JSON to the typed spec and rejects it BEFORE any geometry
+if Validate() fails. Unspecified fields keep PhoneParameters defaults.
+
+**Built (Services/ReverseEngineer/Generation/SpecParser.cs):** ParseResult {Success, Params, Errors,
+Warnings}. Self-contained recursive-descent JSON reader (object/array/string/number/bool/null) — NO
+JSON library is referenced in this project (FeatureGraphJsonWriter hand-rolls output), so SpecParser
+carries its own. Keys matched case-insensitively + synonym-tolerant (length | length_mm | l). Binds the
+full shape: envelope, curved-back, pocket, camera, holes[], ports[], grille, buttons[]. Unknown keys →
+Warnings (typo guard, non-fatal).
+
+**Gate g9** (`g9_spec_parser.py`, headless ANSYS-Student) — the full-pipeline CAPSTONE:
+- CASE A: a realistic LLM-style spec (150×72×8, curved back bulge 0.7, lens-on-curved hole, flank
+  USB-C) → parse clean (errs=[]) → params bound exactly (L=150, lensCurved=True, portsFlank=True,
+  holes=1, ports=1) → Generate runs ALL stages (S00a curved → S00b hollow → S06 holes 1/1 (curved=1)
+  → S07 ports 1/1 (flank=1)), vol=13204.4, validationPass=True → FeaFreezeService.Freeze scdocx
+  320KB. The spec drove the WHOLE pipeline end-to-end.
+- CASE B: design-intent-invalid spec (back_bulge 7.2 leaves no wall) → Validate REJECTS
+  ("back bulge must leave >= min_wall after hollowing"), Success=False, params still returned, NO
+  geometry attempted.
+- CASE C: malformed JSON → "JSON parse failed: unexpected end of input" (graceful, no crash).
+  G9_PASS specBuildsFreezes=True invalidRejected=True malformedRejected=True ALL=True.
+
+**v2 is COMPLETE.** The from-scratch native-SC pipeline is end-to-end: natural language → (LLM) →
+structured JSON spec → SpecParser (bind + validate) → PhoneParameters → GenerationService (flat or
+curved envelope, planar + oriented features S00–S09) → ValidationService (kernel-truth Tier-2) →
+FeaFreezeService (license-aware FEA hand-off). Every stage deterministic and kernel-truth gated; the
+only non-C# link is the LLM's NL→JSON step, which the typed Validate() backstops before any geometry.

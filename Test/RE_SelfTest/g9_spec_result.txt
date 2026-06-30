@@ -1,0 +1,12 @@
+A_parse: success=True errs=[] warns=[]
+A_params: L=150.0 W=72.0 T=8.0 wall=0.60 bulge=0.70 lensCurved=True portsFlank=True holes=1 ports=1
+A_gen: success=True vol=13204.4 validationPass=True
+   S00 bbox vol=86400
+   S00a curvedBack success=True path=zstackB slabs=40 dV=5041.7 vol=91441.7
+   S00b hollow success=True wall=0.6 cornersR=6/6 vol=13228.1
+   S06 holes 1/1 (curved=1) vol=13220.6
+   S07 ports 1/1 (flank=1) vol=13204.4
+A_freeze: success=True fmt=scdocx vol=13204.4 bytes=320518
+B(invalid): success=False errs=['back bulge must leave >= min_wall after hollowing'] paramsReturned=True
+C(malformed): success=False errs=['JSON parse failed: unexpected end of input']
+G9_PASS specBuildsFreezes=True invalidRejected=True malformedRejected=True ALL=True
