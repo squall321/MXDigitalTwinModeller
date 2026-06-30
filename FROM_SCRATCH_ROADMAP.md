@@ -404,6 +404,43 @@ top-recess byte-identical). StageLog shows `(flank=N)`.
 Pitfall logged: the FIRST run after each rebuild can exceed a 240s gate deadline (fresh-DLL JIT
 load) and write NO result file — not a failure, just slow cold-start. Bumped gate deadlines to 300s.
 
-v2 remaining: FEA-freeze STEP hop, LLM SpecParser. The geometry/feature library is now complete for
-curved phone-metal — flat + curved envelope, planar + oriented features, all from one spec, all
-kernel-truth gated.
+v2 remaining: LLM SpecParser. The geometry/feature library is now complete for curved phone-metal —
+flat + curved envelope, planar + oriented features, all from one spec, all kernel-truth gated.
+
+## FEA-freeze hop DONE (2026-06-30) - the single deliberate hand-off crossing
+
+The from-scratch design keeps EVERYTHING on one live Parasolid kernel and crosses out exactly once,
+at the FEA boundary. `FeaFreezeService.Freeze(body, outPath, reopenAndVerify, format)` is that
+crossing. It captures the LIVE kernel-truth fingerprint (volume, bbox-sorted, closed-solid) BEFORE
+the write — refusing to freeze a zero-volume body — then writes + validates the artifact.
+
+KEY ENVIRONMENT FINDING: **the ANSYS STUDENT license REFUSES STEP export** — `part.Export(
+PartExportFormat.Step,...)` throws "This copy of SpaceClaim is not licensed for the specified
+operation." (Same class of limit as Document.Open(.stp) hanging headless — StepRoundTripRunner
+cycle-12.) So STEP is not a usable FEA artifact in this environment.
+
+Design response — dual-format with graceful downgrade:
+- format="scdocx" (DEFAULT): native SpaceClaim doc via Document.SaveAs. License-free, headless-safe,
+  reopens via Document.Load, kernel-truth-FAITHFUL (same Parasolid, no translator). This IS the FEA
+  hand-off in a Student environment; the mesher consumes the native doc.
+- format="step" (opt-in, licensed envs): part.Export(Step). On a LICENSE error it AUTO-DOWNGRADES to
+  scdocx and sets DowngradedFromStep=true — never emits a corrupt/partial artifact.
+- reopenAndVerify re-imports (scdocx→Document.Load; step→StepImportService) and asserts volume+bbox
+  parity within tol — proving the freeze preserved the solid. STEP reopen hangs headless so it's
+  interactive-only; scdocx reopen is headless-safe.
+
+**Gate g8** (`g8_fea_freeze.py`, headless ANSYS-Student):
+- CASE A scdocx + reopenAndVerify: success, fmt=scdocx, closed=True, vol=12208.3,
+  bbox=[8.00,71.50,146.70] (largest=L✓), bytes=275893, **reopened=True fpMatch=True** (Document.Load
+  round-trip, kernel-truth volume+bbox parity — translator-free, lossless).
+- CASE B request step → license refused → **DowngradedFromStep=True, fmt=scdocx**, valid 296KB
+  artifact written (no corrupt STEP). G8_PASS scdocxFreeze+reopen=True stepDowngrade=True ALL=True.
+
+⚠️ BUILD PITFALL (cost two wasted builds): the .csproj uses EXPLICIT `<Compile Include>` items, NOT
+wildcard globbing. A NEW .cs file compiles to NOTHING until you add `<Compile Include="...\\New.cs"/>`
+to MXDigitalTwinModeller.csproj. (Edits to already-included files — like the OnFace methods — build
+fine; only brand-new files need the manual add.) Symptom: BUILD OK but the new type is absent from the
+deployed DLL, and the probe dies at import with NO marker file.
+
+v2 remaining: LLM SpecParser only. Generation → features → FEA hand-off is now an end-to-end,
+license-aware, kernel-truth-gated pipeline.

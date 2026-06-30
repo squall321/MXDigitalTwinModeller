@@ -1,0 +1,5 @@
+gen: success=True vol=12208.3
+A_scdocx: success=True fmt=scdocx downgraded=False closed=True vol=12208.3 bbox=[8.00,71.50,146.70] bytes=275893 reopened=True fpMatch=True err=None
+(unprintable)
+artifacts: A=True (D:\MXDigitalTwinModeller\Test\RE_SelfTest\g8_frozen_A.scdocx)  B=True (D:\MXDigitalTwinModeller\Test\RE_SelfTest\g8_frozen_B.scdocx)
+G8_PASS scdocxFreeze+reopen=True stepDowngrade=True ALL=True
