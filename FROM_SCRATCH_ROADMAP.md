@@ -553,3 +553,26 @@ child SpaceClaim.exe that hold the AddIns DLL lock — `Stop-Process` only kille
 kill the WHOLE tree, leaves-first, via Stop-Process + WMI Terminate, and reports un-killable
 privileged zombies (those need Task Manager). Prefer headless `/RunScript` over interactive launches.
 (Note `$pid` is a PowerShell read-only reserved var — name the loop var anything else.)
+
+## MCP coverage COMPLETE (2026-07-01) — apply_operations batch tool (28 → 29, gap closed)
+
+The last gap-audit item. `apply_operations` runs SEVERAL edits in ONE call: `operations` = an array
+of `{tool, args}`. KEY DESIGN: instead of marshalling JSON → C# delegates for
+ModificationService.ApplyOperations, the dispatcher case RE-DISPATCHES each step through its OWN
+switch — `Dispatch(designBody, graph, opTool, SerializeValue(opArgs))` — so EVERY existing tool
+(including the new *_on_face) is batchable for free, with zero per-tool code. Semantics match
+ApplyOperations: steps run in order, STOP at the first whose Envelope isn't `"success": true`
+(reporting step# + tool + the inner error), and nesting apply_operations is rejected. Added a
+recursive `SerializeValue` to the dispatcher to re-emit each step's parsed args dict as JSON.
+
+**Gate g12** (`g12_apply_operations.py`, headless): T1 advertised; T2 a 3-op chain
+(add_hole→add_boss→add_hole_on_face) on a live curved phone → `{"applied": 3, "chain":
+"add_hole->add_boss->add_hole_on_face"}`, dV=+25.89; T3 first-fail-stops — a chain whose step 2
+targets a non-existent hole → `success=false "step 2 (change_hole_diameter) failed: ... Hole not
+found: H999"` and step 3 did NOT run (dV=-3.02, no boss volume); T4 nesting → `success=false
+"step 1: apply_operations cannot be nested"`. G12_PASS ALL=True.
+
+**MCP coverage is now COMPLETE** — every creation/modification/generation primitive in the services
+is an LLM/MCP tool (29 total): planar add_*, curved add_*_on_face, change/move/rotate/mirror/remove,
+generate_phone[_from_spec] with stop_at_stage, batch apply_operations, + 2 query tools. Nothing in
+ModificationService/GenerationService is unreachable from the tool layer anymore.

@@ -255,6 +255,47 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         return EnvelopeFromResult(r);
                     }
 
+                    // ---- batch op-chain ------------------------------------
+                    // Run several edits in ONE call (one round-trip). operations = an array of
+                    // {tool, args} where tool is any OTHER modification tool name and args is its
+                    // argument object. Each step is RE-DISPATCHED through this same switch, so every
+                    // tool is batchable for free; the chain STOPS at the first step that fails
+                    // (matching ModificationService.ApplyOperations semantics) and reports which
+                    // step + why. Nesting apply_operations inside itself is rejected.
+                    case "apply_operations":
+                    {
+                        if (!args.ContainsKey("operations") || !(args["operations"] is List<object> opsList))
+                            return Envelope(false, "apply_operations needs an 'operations' array of {tool, args}", null);
+                        if (opsList.Count == 0)
+                            return Envelope(false, "operations array is empty", null);
+
+                        var stepNames = new List<string>();
+                        int step = 0;
+                        foreach (var item in opsList)
+                        {
+                            step++;
+                            var opObj = item as Dictionary<string, object>;
+                            if (opObj == null)
+                                return Envelope(false, "step " + step + ": each operation must be an object {tool, args}", null);
+                            if (!opObj.ContainsKey("tool") || !(opObj["tool"] is string opTool) || string.IsNullOrEmpty(opTool))
+                                return Envelope(false, "step " + step + ": missing string 'tool'", null);
+                            if (opTool == "apply_operations")
+                                return Envelope(false, "step " + step + ": apply_operations cannot be nested", null);
+
+                            object opArgsObj = opObj.ContainsKey("args") ? opObj["args"] : null;
+                            var opArgs = opArgsObj as Dictionary<string, object>;
+                            string opArgsJson = (opArgs != null) ? SerializeValue(opArgs) : "{}";
+
+                            // Re-dispatch the step through this same switch (same designBody/graph).
+                            string stepEnv = Dispatch(designBody, graph, opTool, opArgsJson);
+                            stepNames.Add(opTool);
+                            if (stepEnv == null || stepEnv.IndexOf("\"success\": true", StringComparison.Ordinal) < 0)
+                                return Envelope(false, "step " + step + " (" + opTool + ") failed: " + (stepEnv ?? "(null)"), null);
+                        }
+                        return Envelope(true, null, "{\"applied\": " + step + ", \"chain\": \"" +
+                            EscapeStr(string.Join("->", stepNames.ToArray())) + "\"}");
+                    }
+
                     // ---- read-only -----------------------------------------
                     case "get_feature_graph":
                     {
@@ -682,6 +723,45 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
         {
             if (string.IsNullOrEmpty(s)) return string.Empty;
             return s.Replace("\\", "\\\\").Replace("\"", "\\\"").Replace("\n", "\\n").Replace("\r", "\\r").Replace("\t", "\\t");
+        }
+
+        /// <summary>Serialize a value produced by ParseValue (Dictionary/List/string/double/bool/null)
+        /// back to a JSON string — used by apply_operations to re-emit each step's args for the
+        /// recursive Dispatch call.</summary>
+        private static string SerializeValue(object v)
+        {
+            if (v == null) return "null";
+            if (v is bool b) return b ? "true" : "false";
+            if (v is string s) return "\"" + EscapeStr(s) + "\"";
+            if (v is double d) return d.ToString("R", Inv);
+            if (v is long l) return l.ToString(Inv);
+            if (v is int i) return i.ToString(Inv);
+            if (v is List<object> list)
+            {
+                var sb = new StringBuilder("[");
+                for (int k = 0; k < list.Count; k++)
+                {
+                    if (k > 0) sb.Append(", ");
+                    sb.Append(SerializeValue(list[k]));
+                }
+                sb.Append("]");
+                return sb.ToString();
+            }
+            if (v is Dictionary<string, object> obj)
+            {
+                var sb = new StringBuilder("{");
+                bool first = true;
+                foreach (var kv in obj)
+                {
+                    if (!first) sb.Append(", ");
+                    first = false;
+                    sb.Append("\"").Append(EscapeStr(kv.Key)).Append("\": ").Append(SerializeValue(kv.Value));
+                }
+                sb.Append("}");
+                return sb.ToString();
+            }
+            // fallback: stringify
+            return "\"" + EscapeStr(v.ToString()) + "\"";
         }
     }
 }

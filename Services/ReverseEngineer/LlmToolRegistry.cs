@@ -272,6 +272,26 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                       "\"mirror_plane_origin\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"A point on the mirror plane (mm)\"}" +
                     "}, \"required\": [\"feature_id\", \"mirror_plane_normal\", \"mirror_plane_origin\"]}"),
 
+                // ---- batch op-chain -----------------------------------------
+                new ToolDef(
+                    "apply_operations",
+                    "Run SEVERAL edits in ONE call (one round-trip) instead of issuing each tool " +
+                    "separately. Pass `operations`: an array of {\\\"tool\\\": <name>, \\\"args\\\": {...}} where " +
+                    "tool is any OTHER modification/creation tool (add_hole, add_boss, add_hole_on_face, " +
+                    "change_hole_diameter, move_hole, mirror_feature, ...) and args is exactly that tool's " +
+                    "argument object. Steps run IN ORDER and the chain STOPS at the first failure, " +
+                    "reporting which step and why. Use this when the user asks for multiple edits at once " +
+                    "(e.g. 'drill 3 holes and add a boss'). Cannot be nested. Example: {\\\"operations\\\":[" +
+                    "{\\\"tool\\\":\\\"add_hole\\\",\\\"args\\\":{\\\"position_mm\\\":[10,0,7.4],\\\"diameter_mm\\\":3,\\\"through\\\":true}}," +
+                    "{\\\"tool\\\":\\\"add_boss\\\",\\\"args\\\":{\\\"position_mm\\\":[-10,0,7.4],\\\"diameter_mm\\\":5,\\\"height_mm\\\":2}}]}.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"operations\": {\"type\": \"array\", \"description\": \"Ordered list of {tool, args} steps\", " +
+                        "\"items\": {\"type\": \"object\", \"properties\": {" +
+                          "\"tool\": {\"type\": \"string\", \"description\": \"Name of another modification/creation tool\"}, " +
+                          "\"args\": {\"type\": \"object\", \"description\": \"That tool's argument object\"}" +
+                        "}, \"required\": [\"tool\", \"args\"]}}" +
+                    "}, \"required\": [\"operations\"]}"),
+
                 // ---- read-only / introspection tools ------------------------
                 new ToolDef(
                     "get_feature_graph",

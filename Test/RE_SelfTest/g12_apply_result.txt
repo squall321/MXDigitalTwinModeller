@@ -1,0 +1,5 @@
+advertised: True
+A(valid 3-chain): dV=+25.89 env={"success": true, "error": null, "result": {"applied": 3, "chain": "add_hole->add_boss->add_hole_on_face"}}
+B(first-fail):    dV=-3.02 env={"success": false, "error": "step 2 (change_hole_diameter) failed: {\"success\": false, \"error\": \"Hole not found: H999\", \"result\": {\"operation\": \"ChangeHoleDiameter\", \"modified_face_indices\": [], \"new_edge_count\": 0}}", "result": null}
+C(nested):        env={"success": false, "error": "step 1: apply_operations cannot be nested", "result": null}
+G12_PASS advertised=True chainOk=True firstFailStops=True nestRejected=True ALL=True
