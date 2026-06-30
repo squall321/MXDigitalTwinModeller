@@ -164,6 +164,60 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                       "\"depth_mm\": {\"type\": \"number\", \"description\": \"Blind hole depth in mm (when through=false)\"}" +
                     "}, \"required\": [\"center_mm\", \"pattern_type\", \"diameter_mm\", \"through\"]}"),
 
+                // ---- P4 oriented-face creation (curved back/flank) -----------
+                // Unlike the planar add_* (top-face, +Z), these enter along the LOCAL outward
+                // normal of whatever face is nearest the 3D seed, so they target a CURVED back or
+                // flank: a lens hole following the crown, USB-C through a curved flank, a recess or
+                // boss on a bump. seed_mm = a point ON or just outside the target face.
+                new ToolDef(
+                    "add_hole_on_face",
+                    "Drill a hole that ENTERS ALONG THE LOCAL FACE NORMAL at a 3D seed point - use this " +
+                    "(not add_hole) for a hole on a CURVED face (e.g. a camera-lens hole on a curved phone " +
+                    "back, or a hole on a bump) that the planar straight-down add_hole cannot target. The " +
+                    "tool picks the body face nearest seed_mm and drills inward along its outward normal.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"seed_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"A point ON or just outside the target face (X, Y, Z) in mm\"}, " +
+                      "\"diameter_mm\": {\"type\": \"number\", \"description\": \"Hole diameter in mm (> 0)\"}, " +
+                      "\"depth_mm\": {\"type\": \"number\", \"description\": \"Depth along the inward normal in mm (> 0)\"}" +
+                    "}, \"required\": [\"seed_mm\", \"diameter_mm\", \"depth_mm\"]}"),
+
+                new ToolDef(
+                    "add_slit_on_face",
+                    "Cut a rectangular slit/slot that ENTERS ALONG THE LOCAL FACE NORMAL at a 3D seed - use " +
+                    "this (not add_slit) for a slot through a CURVED flank (e.g. a USB-C or speaker slot on " +
+                    "the curved side of a phone). orientation_seed_mm (optional) sets the slit's in-plane long " +
+                    "axis: the slit length runs from the seed toward that point, projected onto the face.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"seed_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"A point ON or just outside the target face (X, Y, Z) in mm\"}, " +
+                      "\"width_mm\": {\"type\": \"number\", \"description\": \"Slit short-side width in mm (> 0)\"}, " +
+                      "\"length_mm\": {\"type\": \"number\", \"description\": \"Slit long-side length in mm (> 0)\"}, " +
+                      "\"depth_mm\": {\"type\": \"number\", \"description\": \"Depth along the inward normal in mm (> 0)\"}, " +
+                      "\"orientation_seed_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"Optional point the slit length points toward (in-plane long axis)\"}" +
+                    "}, \"required\": [\"seed_mm\", \"width_mm\", \"length_mm\", \"depth_mm\"]}"),
+
+                new ToolDef(
+                    "add_pocket_on_face",
+                    "Recess a rectangular pocket that ENTERS ALONG THE LOCAL FACE NORMAL at a 3D seed - use " +
+                    "this (not add_pocket) for a recess on a CURVED face (e.g. a logo or antenna window on a " +
+                    "curved back). The tool picks the body face nearest seed_mm and recesses inward.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"seed_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"A point ON or just outside the target face (X, Y, Z) in mm\"}, " +
+                      "\"width_mm\": {\"type\": \"number\", \"description\": \"Pocket width in mm (> 0)\"}, " +
+                      "\"length_mm\": {\"type\": \"number\", \"description\": \"Pocket length in mm (> 0)\"}, " +
+                      "\"depth_mm\": {\"type\": \"number\", \"description\": \"Recess depth along the inward normal in mm (> 0)\"}" +
+                    "}, \"required\": [\"seed_mm\", \"width_mm\", \"length_mm\", \"depth_mm\"]}"),
+
+                new ToolDef(
+                    "add_boss_on_face",
+                    "Raise a cylindrical boss that STANDS PROUD ALONG THE LOCAL FACE NORMAL at a 3D seed - use " +
+                    "this (not add_boss) for a boss on a CURVED face (e.g. a camera-ring boss on a curved " +
+                    "back). The tool picks the body face nearest seed_mm and raises the boss outward.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"seed_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"A point ON or just outside the target face (X, Y, Z) in mm\"}, " +
+                      "\"diameter_mm\": {\"type\": \"number\", \"description\": \"Boss diameter in mm (> 0)\"}, " +
+                      "\"height_mm\": {\"type\": \"number\", \"description\": \"Boss height along the outward normal in mm (> 0)\"}" +
+                    "}, \"required\": [\"seed_mm\", \"diameter_mm\", \"height_mm\"]}"),
+
                 // ---- "remove" primitive --------------------------------------
                 new ToolDef(
                     "remove_hole",
@@ -243,7 +297,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                       "\"thickness_mm\": {\"type\": \"number\", \"description\": \"Overall thickness (default 7.4)\"}, " +
                       "\"corner_radius_mm\": {\"type\": \"number\", \"description\": \"Corner round radius (default 3.0)\"}, " +
                       "\"wall_mm\": {\"type\": \"number\", \"description\": \"Shell wall thickness; 0 = solid (default 0.6)\"}, " +
-                      "\"camera_bump_mm\": {\"type\": \"number\", \"description\": \"Camera plateau height above the back; omit for none\"}" +
+                      "\"camera_bump_mm\": {\"type\": \"number\", \"description\": \"Camera plateau height above the back; omit for none\"}, " +
+                      "\"stop_at_stage\": {\"type\": \"string\", \"description\": \"Optional: HALT after a stage instead of a full build. 'S00' = bare rectangular base slab (a general primitive to start from), 'S00b' = hollow shell only. Omit for the full phone.\"}" +
                     "}, \"required\": []}"),
 
                 // The RICH from-scratch tool: the full v2 design surface (curved back, oriented
@@ -272,7 +327,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                     "\\\"holes\\\":[{\\\"x_mm\\\":20,\\\"y_mm\\\":0,\\\"diameter_mm\\\":4,\\\"through\\\":false,\\\"depth_mm\\\":1,\\\"on_curved_back\\\":true}]," +
                     "\\\"ports\\\":[{\\\"type\\\":\\\"usbc\\\",\\\"x_mm\\\":0,\\\"y_mm\\\":-36,\\\"z_mm\\\":4,\\\"width_mm\\\":9,\\\"height_mm\\\":3,\\\"on_face\\\":\\\"flank\\\"}]}.",
                     "{\"type\": \"object\", \"properties\": {" +
-                      "\"spec_json\": {\"type\": \"string\", \"description\": \"A JSON object string describing the full phone spec (snake_case keys as documented). The server parses + validates it.\"}" +
+                      "\"spec_json\": {\"type\": \"string\", \"description\": \"A JSON object string describing the full phone spec (snake_case keys as documented). The server parses + validates it.\"}, " +
+                      "\"stop_at_stage\": {\"type\": \"string\", \"description\": \"Optional: HALT after a stage (e.g. 'S00' bare slab, 'S00a' curved back, 'S00b' hollow shell) instead of the full build.\"}" +
                     "}, \"required\": [\"spec_json\"]}"),
 
                 new ToolDef(

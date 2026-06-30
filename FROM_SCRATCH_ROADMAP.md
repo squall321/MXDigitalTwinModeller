@@ -522,3 +522,34 @@ phone built in the LIVE session. External-client → stdio → loopback HTTP →
 heap as UTF-16, NOT ASCII — an ASCII grep of the DLL gives a FALSE NEGATIVE. Search UTF-16 (and mind
 the byte-alignment: an odd offset shifts the decode). Confirm tool presence at runtime via
 ToolsListJson(), not a raw DLL string grep.
+
+## MCP coverage closeout (2026-07-01) — curved-face creation + staged gen are now LLM tools
+
+A 4-agent Workflow gap-audit cross-referenced every creation/generation method against the tool
+layer. Finding: the planar add_* + change/move/rotate/mirror/remove + query + 3 phone-gen tools (23)
+were exposed, but the 4 P4 oriented-face creators and staged generation were NOT. Wired the cheap
+wins (method already exists → pure registry+dispatcher wiring):
+
+- **add_hole_on_face / add_slit_on_face / add_pocket_on_face / add_boss_on_face** — enter along the
+  LOCAL face normal at a `seed_mm`, so the LLM can put a lens hole / USB-C slot / recess / boss on a
+  CURVED back or flank that the planar add_* cannot target. These are GENERAL (body-agnostic), not
+  phone-specific. They take the bound designBody (NOT self-bind).
+- **stop_at_stage** (on generate_phone AND generate_phone_from_spec) — halt after a named stage:
+  "S00" = a bare rectangular base slab (a general from-scratch primitive to start from), "S00b" =
+  hollow shell only, etc. Subsumes a separate generate_base_solid with zero extra surface. Threaded
+  through a new `SessionContext.GeneratePhone(p, stopAtStage)` overload (the old `null`-hardcode at
+  SessionContext.cs:53 is gone). MCP tool count 23 → 28.
+- Deferred: apply_operations (op-chain) needs a JSON-op-array → delegate marshaller (new C#), not
+  pure wiring.
+
+**Gate g11** (`g11_onface_tools.py`, headless, real dispatch entry): T1 all 4 + stop_at_stage
+advertised in ToToolsArrayJson(); T2 on a live curved phone each tool dispatches with the right sign
+(add_hole -7.54, add_pocket -21.60, add_boss **+39.60**, add_slit -9.60); T3 stop_at_stage="S00" →
+bare slab vol=86400 (= 150×72×8, no hollow/curve). G11_PASS ALL=True.
+
+⚠️ Zombie-process fix: interactive SpaceClaim launches (e.g. the live bridge relay test) leak orphan
+child SpaceClaim.exe that hold the AddIns DLL lock — `Stop-Process` only killed the parent. Added
+`Test/RE_SelfTest/_sc_kill.ps1` (`Stop-SpaceClaimTree`) which walks Win32_Process ParentProcessId to
+kill the WHOLE tree, leaves-first, via Stop-Process + WMI Terminate, and reports un-killable
+privileged zombies (those need Task Manager). Prefer headless `/RunScript` over interactive launches.
+(Note `$pid` is a PowerShell read-only reserved var — name the loop var anything else.)

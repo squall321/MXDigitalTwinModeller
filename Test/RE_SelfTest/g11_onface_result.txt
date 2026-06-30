@@ -1,0 +1,8 @@
+advertised(4 onface + stop_at_stage): True
+curved phone built: True
+add_hole_on_face     success=True dV=-7.54 env={"success": true, "error": null, "result": {"operation": "AddHoleOnFac
+add_pocket_on_face   success=True dV=-21.60 env={"success": true, "error": null, "result": {"operation": "AddPocketOnF
+add_boss_on_face     success=True dV=+39.60 env={"success": true, "error": null, "result": {"operation": "AddBossOnFac
+add_slit_on_face     success=True dV=-9.60 env={"success": true, "error": null, "result": {"operation": "AddSlitOnFac
+slab(S00): vol=86400.0 env={"success": true, "error": null, "result": {"generated": true, "params": "Phone L=150 W=72
+G11_PASS advertised=True onfaceOps=True s00Slab(86400~86400)=True ALL=True

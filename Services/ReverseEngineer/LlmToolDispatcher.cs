@@ -133,6 +133,46 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         var r = ModificationService.AddPocket(designBody, pos, w, L, d);
                         return EnvelopeFromResult(r);
                     }
+                    // ---- P4 oriented-face creation: enter along the LOCAL face normal at a
+                    //      3D seed, so they work on a CURVED back/flank (lens hole, USB-C through
+                    //      a curved flank, recess/boss on a bump) that the planar add_* cannot
+                    //      target. seed_mm = a point ON or just outside the target face.
+                    case "add_hole_on_face":
+                    {
+                        double[] seed = GetDoubleArray(args, "seed_mm", 3);
+                        double dia = GetDouble(args, "diameter_mm");
+                        double depth = GetDouble(args, "depth_mm");
+                        var r = ModificationService.AddHoleOnFace(designBody, seed, dia, depth);
+                        return EnvelopeFromResult(r);
+                    }
+                    case "add_slit_on_face":
+                    {
+                        double[] seed = GetDoubleArray(args, "seed_mm", 3);
+                        double w = GetDouble(args, "width_mm");
+                        double L = GetDouble(args, "length_mm");
+                        double d = GetDouble(args, "depth_mm");
+                        double[] orient = args.ContainsKey("orientation_seed_mm")
+                            ? GetDoubleArray(args, "orientation_seed_mm", 3) : null;
+                        var r = ModificationService.AddSlitOnFace(designBody, seed, w, L, d, orient);
+                        return EnvelopeFromResult(r);
+                    }
+                    case "add_pocket_on_face":
+                    {
+                        double[] seed = GetDoubleArray(args, "seed_mm", 3);
+                        double w = GetDouble(args, "width_mm");
+                        double L = GetDouble(args, "length_mm");
+                        double d = GetDouble(args, "depth_mm");
+                        var r = ModificationService.AddPocketOnFace(designBody, seed, w, L, d);
+                        return EnvelopeFromResult(r);
+                    }
+                    case "add_boss_on_face":
+                    {
+                        double[] seed = GetDoubleArray(args, "seed_mm", 3);
+                        double dia = GetDouble(args, "diameter_mm");
+                        double h = GetDouble(args, "height_mm");
+                        var r = ModificationService.AddBossOnFace(designBody, seed, dia, h);
+                        return EnvelopeFromResult(r);
+                    }
                     case "add_rib":
                     {
                         double[] s = GetDoubleArray(args, "start_position_mm", 3);
@@ -253,9 +293,13 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         System.Collections.Generic.List<string> verr;
                         if (!p.Validate(out verr))
                             return Envelope(false, "invalid spec: " + string.Join("; ", verr.ToArray()), null);
-                        string genErr = Mcp.SessionContext.Instance.GeneratePhone(p);
+                        // optional stage halt: "S00" = bare base slab (a general primitive slab),
+                        // "S00b" = hollow shell only, etc.; null/absent = full build.
+                        string stage = args.ContainsKey("stop_at_stage") ? GetString(args, "stop_at_stage") : null;
+                        string genErr = Mcp.SessionContext.Instance.GeneratePhone(p, stage);
                         if (genErr != null) return Envelope(false, genErr, null);
-                        return Envelope(true, null, "{\"generated\": true, \"params\": \"" +
+                        return Envelope(true, null, "{\"generated\": true, \"stopped_at\": " +
+                            (stage == null ? "null" : "\"" + EscapeStr(stage) + "\"") + ", \"params\": \"" +
                             p.ToString().Replace("\"", "'") + "\"}");
                     }
                     case "generate_phone_from_spec":
@@ -270,7 +314,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                                 ? string.Join("; ", pr.Errors.ToArray()) : "spec rejected";
                             return Envelope(false, "invalid spec: " + why, null);
                         }
-                        string genErr2 = Mcp.SessionContext.Instance.GeneratePhone(pr.Params);
+                        string stage2 = args.ContainsKey("stop_at_stage") ? GetString(args, "stop_at_stage") : null;
+                        string genErr2 = Mcp.SessionContext.Instance.GeneratePhone(pr.Params, stage2);
                         if (genErr2 != null) return Envelope(false, genErr2, null);
                         string warnJson = "[]";
                         if (pr.Warnings != null && pr.Warnings.Count > 0)

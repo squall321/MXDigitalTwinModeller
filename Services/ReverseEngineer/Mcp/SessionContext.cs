@@ -45,12 +45,20 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Mcp
         /// </summary>
         public string GeneratePhone(PhoneParameters p)
         {
+            return GeneratePhone(p, null);
+        }
+
+        /// <summary>Generate, optionally HALTING after a named stage (S00 base slab, S00a curved
+        /// back, S00b hollow, S04 pocket, S05 camera, S06 holes, S07 ports, S08 grille). null =
+        /// full build. Lets the LLM ask for "just the base slab" or an incremental/partial part.</summary>
+        public string GeneratePhone(PhoneParameters p, string stopAtStage)
+        {
             try
             {
                 Document.Create();
                 Part part = Window.ActiveWindow.Document.MainPart;
                 var gs = new Generation.GenerationService();
-                var res = gs.Generate(part, p, null);
+                var res = gs.Generate(part, p, stopAtStage);
                 if (!res.Success || res.Body == null)
                     return "generation failed: " + (res.Error ?? "(no body)");
                 lock (_gate)
