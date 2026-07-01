@@ -97,6 +97,16 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                 }
                 if (stopAtStage == "S00b") { Finish(r, body, p); return r; }
 
+                // S02 — edge chamfer (soften the outer edges). Gated: EdgeChamferMm<=0 = no-op.
+                if (p.EdgeChamferMm > 0)
+                {
+                    var rc = ModificationService.AddChamfer(body, p.EdgeChamferMm,
+                        string.IsNullOrEmpty(p.EdgeChamferFilter) ? "top" : p.EdgeChamferFilter);
+                    r.StageLog.Add("S02 chamfer success=" + rc.Success + " (" + p.EdgeChamferMm + "mm " +
+                        p.EdgeChamferFilter + ") vol=" + VolMm3(body).ToString("0.#"));
+                }
+                if (stopAtStage == "S02") { Finish(r, body, p); return r; }
+
                 // S04 — display pocket (top face step-down).
                 if (p.Pocket != null && p.Pocket.Enabled)
                 {
@@ -222,6 +232,71 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                 }
                 if (p.Buttons.Count > 0)
                     r.StageLog.Add("S09 buttons " + btnOk + "/" + p.Buttons.Count + " vol=" + VolMm3(body).ToString("0.#"));
+                if (stopAtStage == "S09") { Finish(r, body, p); return r; }
+
+                // S10 — antenna slits (thin RF gaps). Flank entry via AddSlitOnFace when OnFlank; else top recess.
+                bool curvedFlank = p.BackBulgeMm > 0;
+                int antOk = 0, antFlankN = 0;
+                foreach (var a in p.AntennaSlits)
+                {
+                    if (a.OnFlank)
+                    {
+                        double ySign = a.YMm >= 0 ? 1.0 : -1.0;
+                        double seedY = ySign * (p.WidthMm / 2.0 + 0.05);
+                        double zA = a.ZMm > 0 ? a.ZMm : p.ThicknessMm / 2.0;
+                        var ra = ModificationService.AddSlitOnFace(
+                            body, new double[] { a.XMm, seedY, zA },
+                            a.WidthMm, a.LengthMm, Math.Max(a.DepthMm, p.HollowWallMm + 0.3),
+                            new double[] { a.XMm + 5.0, seedY, zA });
+                        if (ra.Success) { antOk++; antFlankN++; }
+                    }
+                    else
+                    {
+                        var ra = ModificationService.AddSlit(
+                            body, MmPos(a.XMm, a.YMm, p.ThicknessMm),
+                            a.WidthMm, a.LengthMm, Math.Max(0.3, a.DepthMm), new double[] { 0, 0, 1 });
+                        if (ra.Success) antOk++;
+                    }
+                }
+                if (p.AntennaSlits.Count > 0)
+                    r.StageLog.Add("S10 antenna " + antOk + "/" + p.AntennaSlits.Count +
+                        (antFlankN > 0 ? " (flank=" + antFlankN + ")" : "") + " vol=" + VolMm3(body).ToString("0.#"));
+                if (stopAtStage == "S10") { Finish(r, body, p); return r; }
+
+                // S11 — mic/sensor pinholes. Curved-back pinhole routes through AddHoleOnFace.
+                int pinOk = 0, pinCurved = 0;
+                foreach (var ph in p.PinHoles)
+                {
+                    bool useFace = curvedFlank && ph.OnCurvedBack;
+                    if (useFace)
+                    {
+                        double topZ = CrownZAt(p, ph.XMm, ph.YMm);
+                        var rph = ModificationService.AddHoleOnFace(
+                            body, new double[] { ph.XMm, ph.YMm, topZ + 0.05 },
+                            ph.DiameterMm, ph.Through ? p.ThicknessMm : (ph.DepthMm > 0 ? ph.DepthMm : 1.0));
+                        if (rph.Success) { pinOk++; pinCurved++; }
+                    }
+                    else
+                    {
+                        var rph = ModificationService.AddHole(
+                            body, MmPos(ph.XMm, ph.YMm, p.ThicknessMm),
+                            ph.DiameterMm, ph.Through, ph.DepthMm, new double[] { 0, 0, 1 }, false);
+                        if (rph.Success) pinOk++;
+                    }
+                }
+                if (p.PinHoles.Count > 0)
+                    r.StageLog.Add("S11 pinholes " + pinOk + "/" + p.PinHoles.Count +
+                        (pinCurved > 0 ? " (curved=" + pinCurved + ")" : "") + " vol=" + VolMm3(body).ToString("0.#"));
+                if (stopAtStage == "S11") { Finish(r, body, p); return r; }
+
+                // S12 — final softening fillet. Gated: FinalFilletMm<=0 = no-op.
+                if (p.FinalFilletMm > 0)
+                {
+                    var rf = ModificationService.AddChamfer(body, p.FinalFilletMm,
+                        string.IsNullOrEmpty(p.FinalFilletFilter) ? "top" : p.FinalFilletFilter);
+                    r.StageLog.Add("S12 fillet success=" + rf.Success + " (" + p.FinalFilletMm + "mm " +
+                        p.FinalFilletFilter + ") vol=" + VolMm3(body).ToString("0.#"));
+                }
 
                 Finish(r, body, p);
                 return r;

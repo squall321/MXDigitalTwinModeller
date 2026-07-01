@@ -1,0 +1,12 @@
+parse: success=True errs=[]
+gen: success=True vol=13225.8 validationPass=True
+   S00 bbox vol=86400
+   S00a curvedBack success=True path=zstackB slabs=40 dV=5041.7 vol=91441.7
+   S00b hollow success=True wall=0.6 cornersR=6/6 vol=13228.1
+   S02 chamfer success=True (0.4mm top) vol=13228.1
+   S06 holes 0/0 vol=13228.1
+   S10 antenna 1/1 (flank=1) vol=13226.7
+   S11 pinholes 2/2 (curved=1) vol=13225.8
+   S12 fillet success=True (0.3mm top) vol=13225.8
+bad-spec: success=False errs=['edge_chamfer_mm too large for the thickness']
+G13_PASS builtWithLateStages=True allStagesLogged=True invalidRejected=True ALL=True

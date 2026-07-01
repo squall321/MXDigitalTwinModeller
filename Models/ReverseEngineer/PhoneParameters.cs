@@ -53,6 +53,13 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.ReverseEngineer
         public GrilleSpec Grille = null;
         public List<ButtonRecess> Buttons = new List<ButtonRecess>();
 
+        // --- late stages (S02/S10/S11/S12), all OFF by default (v1 byte-identical) ---
+        public string EdgeChamferFilter = "top";        // S02: which edges EdgeChamferMm applies to (all|top|bottom|vertical)
+        public List<AntennaSlit> AntennaSlits = new List<AntennaSlit>();  // S10: thin RF gaps on the flank/back
+        public List<PinHole> PinHoles = new List<PinHole>();             // S11: mic/sensor pinholes
+        public double FinalFilletMm = 0.0;              // S12: final softening round; 0 = disabled
+        public string FinalFilletFilter = "top";        // which edges the final fillet applies to
+
         public class DisplayPocket
         {
             public double WidthMm = 130.0;
@@ -101,6 +108,27 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.ReverseEngineer
         {
             public double XMm, YMm, ZMm;
             public double WidthMm, HeightMm, DepthMm;
+        }
+
+        /// <summary>S10: a thin RF antenna gap. Like a port but narrow; on the flank by default
+        /// (routed through AddSlitOnFace when OnFlank + a body is available), else a top recess.</summary>
+        public class AntennaSlit
+        {
+            public double XMm, YMm, ZMm;
+            public double LengthMm = 8.0;   // run along the edge
+            public double WidthMm = 0.3;    // thin RF gap
+            public double DepthMm = 0.5;
+            public bool OnFlank = true;
+        }
+
+        /// <summary>S11: a small mic/sensor pinhole (through or blind).</summary>
+        public class PinHole
+        {
+            public double XMm, YMm;
+            public double DiameterMm = 0.8;
+            public bool Through = true;
+            public double DepthMm = 0.0;    // ignored when Through
+            public bool OnCurvedBack = false;  // route through AddHoleOnFace on a curved back
         }
 
         /// <summary>
@@ -168,7 +196,38 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.ReverseEngineer
             if (LensOnCurvedBack && !(BackCurveRadiusMm > 0 || BackBulgeMm > 0))
                 errors.Add("lens_on_curved_back requires a curved back");
 
+            // late stages (only checked when populated; 0/empty = flat v1 adds zero errors)
+            if (EdgeChamferMm < 0) errors.Add("edge_chamfer_mm must be >= 0");
+            if (EdgeChamferMm > 0 && EdgeChamferMm * 2 >= ThicknessMm)
+                errors.Add("edge_chamfer_mm too large for the thickness");
+            if (!IsEdgeFilter(EdgeChamferFilter))
+                errors.Add("edge_chamfer_filter must be all|top|bottom|vertical");
+            if (FinalFilletMm < 0) errors.Add("final_fillet_mm must be >= 0");
+            if (FinalFilletMm > 0 && FinalFilletMm * 2 >= ThicknessMm)
+                errors.Add("final_fillet_mm too large for the thickness");
+            if (!IsEdgeFilter(FinalFilletFilter))
+                errors.Add("final_fillet_filter must be all|top|bottom|vertical");
+            foreach (var a in AntennaSlits)
+            {
+                if (a.LengthMm <= 0 || a.WidthMm <= 0 || a.DepthMm <= 0)
+                    errors.Add("antenna slit dims must be positive");
+            }
+            foreach (var ph in PinHoles)
+            {
+                if (ph.DiameterMm <= 0) { errors.Add("pinhole diameter must be positive"); continue; }
+                if (Math.Abs(ph.XMm) + ph.DiameterMm / 2 > LengthMm / 2 ||
+                    Math.Abs(ph.YMm) + ph.DiameterMm / 2 > WidthMm / 2)
+                    errors.Add(string.Format("pinhole at ({0:0.#},{1:0.#}) extends outside the plan", ph.XMm, ph.YMm));
+            }
+
             return errors.Count == 0;
+        }
+
+        private static bool IsEdgeFilter(string f)
+        {
+            if (string.IsNullOrEmpty(f)) return false;
+            string s = f.Trim().ToLowerInvariant();
+            return s == "all" || s == "top" || s == "bottom" || s == "vertical";
         }
 
         public override string ToString()

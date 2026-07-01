@@ -632,3 +632,31 @@ Version=1.5.0` → MSI ProductVersion=1.5.0, both bridge exes in the File table,
 Final user flow: **install MSI → (auto-registers) → restart Claude Desktop → open SpaceClaim → design
 in natural language.** No Python, no JSON editing. The exes are gitignored build artifacts (built by
 build_bridge.bat), like the project's other PyInstaller exes.
+
+## Stage breadth complete: S02/S10/S11/S12 wired (2026-07-01)
+
+The planned S00-S12 stage spec was implemented only as S00/S00a/S00b/S04-S09; the late stages were
+empty (S02's EdgeChamferMm field existed but no stage consumed it). Filled the gap by wiring the four
+missing stages onto existing verbs (pure composition, no new geometry API):
+
+- **S02 edge chamfer** — AddChamfer(EdgeChamferMm, EdgeChamferFilter). Runs after the hollow, before
+  the pocket. Gated: EdgeChamferMm<=0 = no-op (v1 byte-identical). New field EdgeChamferFilter.
+- **S10 antenna slits** — a new List<AntennaSlit> (thin RF gaps). OnFlank routes through
+  AddSlitOnFace (flank/curved entry, like ports); else a top recess via AddSlit.
+- **S11 mic/sensor pinholes** — a new List<PinHole>. OnCurvedBack routes through AddHoleOnFace at
+  CrownZAt(x,y); else planar AddHole. Small through/blind holes.
+- **S12 final fillet** — AddChamfer(FinalFilletMm, FinalFilletFilter), a last softening pass. Gated.
+
+All three layers: PhoneParameters (fields + AntennaSlit/PinHole classes + Validate rules — chamfer/
+fillet <T/2, positive slit dims, pinhole-in-plan), GenerationService (stages + stopAtStage + StageLog),
+SpecParser (edge_chamfer_mm/filter, final_fillet_mm/filter, antenna_slits[], pin_holes[]).
+
+**Gate g13** (`g13_late_stages.py`, headless): a rich spec (curved back + edge chamfer + a flank
+antenna slit + two pinholes incl. one on the curved back + final fillet) → parse clean → Generate
+runs the full pipeline, StageLog shows S00→S00a→S00b→**S02**→S06→**S10** (flank=1)→**S11** (2/2,
+curved=1)→**S12**, vol=13225.8, validationPass=True (closed solid). Invalid spec (edge_chamfer 9mm on
+an 8mm-thick part) → rejected "edge_chamfer_mm too large for the thickness". G13_PASS ALL=True.
+
+The planned S00-S12 stage spec is now COMPLETE — one natural-language spec composes bbox → curved
+envelope → hollow → chamfer → pocket → camera → holes → ports → grille → buttons → antenna → pinholes
+→ final fillet, all kernel-truth gated.

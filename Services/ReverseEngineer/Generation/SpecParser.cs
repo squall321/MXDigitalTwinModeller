@@ -81,6 +81,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
             p.ThicknessMm = Num(o, seen, p.ThicknessMm, "thickness_mm", "thickness", "t");
             p.CornerRadiusMm = Num(o, seen, p.CornerRadiusMm, "corner_r", "corner_radius_mm", "corner_radius");
             p.EdgeChamferMm = Num(o, seen, p.EdgeChamferMm, "edge_chamfer_mm", "edge_chamfer");
+            p.EdgeChamferFilter = Str(o, seen, p.EdgeChamferFilter, "edge_chamfer_filter");
+            p.FinalFilletMm = Num(o, seen, p.FinalFilletMm, "final_fillet_mm", "final_fillet");
+            p.FinalFilletFilter = Str(o, seen, p.FinalFilletFilter, "final_fillet_filter");
             p.MinWallMm = Num(o, seen, p.MinWallMm, "min_wall", "min_wall_mm");
             p.HollowWallMm = Num(o, seen, p.HollowWallMm, "hollow_wall_mm", "hollow_wall", "wall_mm", "wall");
 
@@ -208,6 +211,51 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                         b.HeightMm = Num(bo, s2, b.HeightMm, "height_mm", "height");
                         b.DepthMm = Num(bo, s2, b.DepthMm, "depth_mm", "depth");
                         p.Buttons.Add(b);
+                    }
+            }
+
+            // antenna slits (S10)
+            object antennas;
+            if (TryGet(o, seen, out antennas, "antenna_slits", "antennas"))
+            {
+                var arr = antennas as List<object>;
+                if (arr != null)
+                    foreach (var item in arr)
+                    {
+                        var ao = item as Dictionary<string, object>;
+                        if (ao == null) continue;
+                        var a = new PhoneParameters.AntennaSlit();
+                        var s2 = new HashSet<string>();
+                        a.XMm = Num(ao, s2, a.XMm, "x_mm", "x");
+                        a.YMm = Num(ao, s2, a.YMm, "y_mm", "y");
+                        a.ZMm = Num(ao, s2, a.ZMm, "z_mm", "z");
+                        a.LengthMm = Num(ao, s2, a.LengthMm, "length_mm", "length");
+                        a.WidthMm = Num(ao, s2, a.WidthMm, "width_mm", "width");
+                        a.DepthMm = Num(ao, s2, a.DepthMm, "depth_mm", "depth");
+                        a.OnFlank = Bool(ao, s2, a.OnFlank, "on_flank");
+                        p.AntennaSlits.Add(a);
+                    }
+            }
+
+            // mic/sensor pinholes (S11)
+            object pins;
+            if (TryGet(o, seen, out pins, "pin_holes", "pinholes"))
+            {
+                var arr = pins as List<object>;
+                if (arr != null)
+                    foreach (var item in arr)
+                    {
+                        var po = item as Dictionary<string, object>;
+                        if (po == null) continue;
+                        var ph = new PhoneParameters.PinHole();
+                        var s2 = new HashSet<string>();
+                        ph.XMm = Num(po, s2, ph.XMm, "x_mm", "x");
+                        ph.YMm = Num(po, s2, ph.YMm, "y_mm", "y");
+                        ph.DiameterMm = Num(po, s2, ph.DiameterMm, "diameter_mm", "diameter", "d");
+                        ph.Through = Bool(po, s2, ph.Through, "through");
+                        ph.DepthMm = Num(po, s2, ph.DepthMm, "depth_mm", "depth");
+                        ph.OnCurvedBack = Bool(po, s2, ph.OnCurvedBack, "on_curved_back");
+                        p.PinHoles.Add(ph);
                     }
             }
 
