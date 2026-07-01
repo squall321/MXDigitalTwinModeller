@@ -660,3 +660,33 @@ an 8mm-thick part) → rejected "edge_chamfer_mm too large for the thickness". G
 The planned S00-S12 stage spec is now COMPLETE — one natural-language spec composes bbox → curved
 envelope → hollow → chamfer → pocket → camera → holes → ports → grille → buttons → antenna → pinholes
 → final fillet, all kernel-truth gated.
+
+## Camera plateau upgrade: rounded-rect bump (2026-07-01)
+
+S05's camera was a plain cylinder (the roadmap flagged "cylinder today; P4 adds rounded-rect
+plateau"). Upgraded it to the real phone camera-bump shape — a rounded rectangle — while keeping the
+cylinder as the byte-identical legacy default.
+
+- **ModificationService.AddRoundedRectBoss(body, pos, w, l, h, cornerR)** — extrude a RectangleProfile
+  boss (same 1.5mm embed + RT4/RT5 DesignBody-wrapped Unite as AddBoss), then RoundEdges the 4
+  vertical corner pillars. KEY FIX found by gating: after the Unite the boss is embedded 1.5mm, so the
+  EXPOSED corner edges have length ≈ h (the requested height), NOT extrudeH (=h+embed) — the first
+  filter looked for extrudeH and matched 0 edges (no rounding). Filter to [h-0.6mm, h+embed+0.6mm].
+- **PhoneParameters.CameraIsland** gained WidthMm/LengthMm/CornerRadiusMm + IsRounded (both W,L > 0).
+  Validate: rect dims positive, corner fits the smaller dim, footprint inside the plan.
+- **S05 dispatch**: IsRounded → AddRoundedRectBoss (StageLog "rrect WxL rR"); else legacy AddBoss
+  (StageLog "cyl dD"). SpecParser binds camera width_mm/length_mm/corner_r.
+
+**Gate g14** (`g14_rrect_camera.py`, headless, on a SOLID phone so the boss has material to Unite to):
+- T1 rounded-rect: builds a closed solid (vpass), S05="rrect 20x16 r3", camera dV=468.40 — which is
+  strictly LESS than a sharp 20×16×1.5 rect (480.0), PROVING the corners were shaved (~11.6mm³
+  removed by the 4 corner rounds) while still adding ~97.6% of the block (a failed Unite would give
+  ~0).
+- T2 cylinder legacy: dV=230.90 (= π·7²·1.5), S05="cyl d14" — the default path is unchanged.
+- T3 invalid (corner_r 9 on a 10×8 rect) → rejected "camera corner_r must fit within the smaller rect
+  dimension". G14_PASS ALL=True.
+
+Note surfaced by the gate (pre-existing, not this change): a camera bump over the OPEN top of a
+hollow tray adds ~0 volume (nothing to Unite to on the open face) — a real camera belongs on the
+closed BACK. Both cylinder and rrect behave identically there; a future refinement can place S05 on
+the back face. On a solid part (and the intended back-face placement) the bump unites cleanly.

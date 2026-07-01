@@ -84,8 +84,15 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.ReverseEngineer
         public class CameraIsland
         {
             public double XMm = 0.0, YMm = 0.0;
-            public double DiameterMm = 12.0;    // plateau (cylinder for now)
+            public double DiameterMm = 12.0;    // cylinder plateau (used when Width/Length are 0)
             public double HeightMm = 1.5;
+            // P4: a rounded-rect plateau (the real phone camera-bump shape). When BOTH WidthMm and
+            // LengthMm are > 0, S05 builds a rounded rectangle (corner radius CornerRadiusMm) instead
+            // of the cylinder. 0/0 = cylinder (legacy, byte-identical default).
+            public double WidthMm = 0.0;        // X extent of the rect plateau
+            public double LengthMm = 0.0;       // Y extent of the rect plateau
+            public double CornerRadiusMm = 2.0; // corner round of the rect plateau
+            public bool IsRounded { get { return WidthMm > 0 && LengthMm > 0; } }
         }
 
         public class PortSpec
@@ -164,8 +171,23 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.ReverseEngineer
             // camera bump must not pierce the part
             if (Camera != null)
             {
-                if (Camera.DiameterMm <= 0 || Camera.HeightMm <= 0)
-                    errors.Add("camera island dims must be positive");
+                if (Camera.HeightMm <= 0)
+                    errors.Add("camera bump_height must be positive");
+                if (Camera.IsRounded)
+                {
+                    // rounded-rect plateau: rect dims positive, corner fits, footprint inside the plan
+                    if (Camera.WidthMm <= 0 || Camera.LengthMm <= 0)
+                        errors.Add("camera rect dims must be positive");
+                    if (Camera.CornerRadiusMm < 0 || Camera.CornerRadiusMm * 2 > Math.Min(Camera.WidthMm, Camera.LengthMm))
+                        errors.Add("camera corner_r must fit within the smaller rect dimension");
+                    if (Math.Abs(Camera.XMm) + Camera.WidthMm / 2 > LengthMm / 2 ||
+                        Math.Abs(Camera.YMm) + Camera.LengthMm / 2 > WidthMm / 2)
+                        errors.Add("camera plateau extends outside the plan");
+                }
+                else if (Camera.DiameterMm <= 0)
+                {
+                    errors.Add("camera diameter must be positive");
+                }
                 // bump rises ABOVE the top face; it must not be taller than the part is thick
                 if (Camera.HeightMm >= ThicknessMm)
                     errors.Add("camera bump_height must be < total_thickness");

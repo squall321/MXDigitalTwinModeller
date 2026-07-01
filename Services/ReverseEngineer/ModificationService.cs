@@ -1266,6 +1266,110 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
         }
 
         // -------------------------------------------------------------------
+        // AddRoundedRectBoss (rounded-rectangle plateau, e.g. a real camera bump)
+        // -------------------------------------------------------------------
+        /// <summary>
+        /// Raise a ROUNDED-RECTANGLE plateau (the real phone camera-bump shape) instead of a plain
+        /// cylinder: extrude a RectangleProfile boss along +Z (same embed + RT4/RT5 Unite as AddBoss),
+        /// then RoundEdges its 4 vertical corner pillars to cornerRadiusMm. widthMm = X extent,
+        /// lengthMm = Y extent. The corner-rounding mirrors CurvedShellBuilder.RoundVerticalCorners
+        /// (edge whose length ≈ the boss height = a vertical corner pillar), with a per-edge fallback
+        /// since RoundEdges is a bulk-fillet landmine.
+        /// </summary>
+        public static ModificationResult AddRoundedRectBoss(
+            DesignBody designBody, double[] positionMm, double widthMm, double lengthMm,
+            double heightMm, double cornerRadiusMm)
+        {
+            var result = new ModificationResult { Operation = "AddRoundedRectBoss", ModifiedBody = designBody };
+            if (designBody == null) { result.ErrorMessage = "designBody is null"; return result; }
+            if (positionMm == null || positionMm.Length < 3) { result.ErrorMessage = "positionMm must be length 3"; return result; }
+            if (widthMm <= 0 || lengthMm <= 0) { result.ErrorMessage = "width/length must be > 0"; return result; }
+            if (heightMm <= 0) { result.ErrorMessage = "heightMm must be > 0"; return result; }
+
+            double wM = GeometryUtils.MmToMeters(widthMm);
+            double lM = GeometryUtils.MmToMeters(lengthMm);
+            double hM = GeometryUtils.MmToMeters(heightMm);
+            double crM = GeometryUtils.MmToMeters(Math.Max(0.0, cornerRadiusMm));
+            double px = GeometryUtils.MmToMeters(positionMm[0]);
+            double py = GeometryUtils.MmToMeters(positionMm[1]);
+            double pz = GeometryUtils.MmToMeters(positionMm[2]);
+            const double embedM = 0.0015; // 1.5mm embed (same as AddBoss — clean volumetric overlap)
+
+            var edgesBefore = CaptureEdges(designBody);
+            try
+            {
+                WriteBlock.ExecuteTask("AddRoundedRectBoss", () =>
+                {
+                    double bz = pz - embedM;
+                    double extrudeH = hM + embedM;
+                    Point center = Point.Create(px, py, bz);
+                    Frame frame = Frame.Create(center, Direction.DirX, Direction.DirY);
+                    Plane basePlane = Plane.Create(frame);
+                    Profile profile = new RectangleProfile(basePlane, wM, lM, PointUV.Create(0, 0), 0.0);
+                    Body boss = Body.ExtrudeProfile(profile, extrudeH);
+
+                    Part part = designBody.Parent as Part;
+                    DesignBody bossDb = null;
+                    if (part != null)
+                    {
+                        bossDb = DesignBody.Create(part, "_rrboss_cutter", boss);
+                        designBody.Shape.Unite(new[] { bossDb.Shape });
+                        try { bossDb.Delete(); } catch { }
+                    }
+                    else designBody.Shape.Unite(new[] { boss });
+
+                    // Round the 4 vertical corner pillars of the plateau. After the Unite the boss is
+                    // embedded 1.5mm INTO the slab, so the EXPOSED vertical corner edges have length ≈
+                    // hM (the requested height), NOT extrudeH (=hM+embed). Filter to edges whose length
+                    // is within a generous band around hM (covers slight kernel trimming) and RoundEdges
+                    // (bulk then per-edge fallback).
+                    if (crM > 1e-6)
+                    {
+                        var candidates = new List<Edge>();
+                        double lo = hM - 0.0006, hi = hM + embedM + 0.0006; // [h-0.6mm, h+embed+0.6mm]
+                        try
+                        {
+                            foreach (var e in designBody.Shape.Edges)
+                            {
+                                try { if (e.Length >= lo && e.Length <= hi) candidates.Add(e); }
+                                catch { }
+                            }
+                        }
+                        catch { }
+                        if (candidates.Count > 0)
+                        {
+                            try
+                            {
+                                var map = new Dictionary<Edge, EdgeRound>();
+                                foreach (var e in candidates)
+                                    if (!map.ContainsKey(e)) map[e] = new FixedRadiusRound(crM);
+                                designBody.Shape.RoundEdges(map);
+                            }
+                            catch
+                            {
+                                foreach (var e in candidates)
+                                {
+                                    try
+                                    {
+                                        var m1 = new Dictionary<Edge, EdgeRound> { { e, new FixedRadiusRound(crM) } };
+                                        designBody.Shape.RoundEdges(m1);
+                                    }
+                                    catch { }
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            catch (Exception ex) { result.ErrorMessage = "AddRoundedRectBoss failed: " + ex.Message; return result; }
+
+            var edgesAfter = CaptureEdges(designBody);
+            result.NewlyCreatedEdges = DiffEdges(edgesBefore, edgesAfter);
+            result.Success = true;
+            return result;
+        }
+
+        // -------------------------------------------------------------------
         // AddHole
         // -------------------------------------------------------------------
         /// <summary>

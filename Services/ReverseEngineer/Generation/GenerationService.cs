@@ -119,18 +119,27 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                 }
                 if (stopAtStage == "S04") { Finish(r, body, p); return r; }
 
-                // S05 — camera plateau (boss on top face).
+                // S05 — camera plateau. A rounded-rect plateau (real camera-bump shape) when
+                // Camera.IsRounded (Width/Length set); else the legacy cylinder (byte-identical).
                 if (p.Camera != null)
                 {
-                    var rb = ModificationService.AddBoss(
-                        body, MmPos(p.Camera.XMm, p.Camera.YMm, p.ThicknessMm),
-                        p.Camera.DiameterMm, p.Camera.HeightMm, new double[] { 0, 0, 1 });
-                    r.StageLog.Add("S05 camera success=" + rb.Success + " vol=" + VolMm3(body).ToString("0.#"));
+                    var rb = p.Camera.IsRounded
+                        ? ModificationService.AddRoundedRectBoss(
+                            body, MmPos(p.Camera.XMm, p.Camera.YMm, p.ThicknessMm),
+                            p.Camera.WidthMm, p.Camera.LengthMm, p.Camera.HeightMm, p.Camera.CornerRadiusMm)
+                        : ModificationService.AddBoss(
+                            body, MmPos(p.Camera.XMm, p.Camera.YMm, p.ThicknessMm),
+                            p.Camera.DiameterMm, p.Camera.HeightMm, new double[] { 0, 0, 1 });
+                    string shape = p.Camera.IsRounded
+                        ? "rrect " + p.Camera.WidthMm + "x" + p.Camera.LengthMm + " r" + p.Camera.CornerRadiusMm
+                        : "cyl d" + p.Camera.DiameterMm;
+                    r.StageLog.Add("S05 camera success=" + rb.Success + " (" + shape + ") vol=" + VolMm3(body).ToString("0.#"));
                     if (!rb.Success) { r.Error = "S05 camera failed: " + rb.ErrorMessage; r.Body = body; return r; }
                     // P3: mint a stable handle keyed by the intended anchor (survives renumber).
                     r.Handles.Add(new FeatureHandle("S05", "boss", 0,
                         new double[] { p.Camera.XMm, p.Camera.YMm, p.ThicknessMm },
-                        new double[] { 0, 0, 1 }, p.Camera.DiameterMm));
+                        new double[] { 0, 0, 1 },
+                        p.Camera.IsRounded ? Math.Max(p.Camera.WidthMm, p.Camera.LengthMm) : p.Camera.DiameterMm));
                 }
                 if (stopAtStage == "S05") { Finish(r, body, p); return r; }
 

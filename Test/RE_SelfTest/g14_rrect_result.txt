@@ -1,0 +1,7 @@
+T1 rrect: parse=True gen=True vol=86868.4 dV=468.40 vpass=True faces={}
+   S05 camera success=True (rrect 20x16 r3) vol=86868.4
+   sharp-rect vol=480.0; rounded dV=468.40 (< sharp means corners were shaved)
+T2 cyl:   gen=True dV=230.90
+   S05 camera success=True (cyl d14) vol=86630.9
+T3 bad:   parse=False errs=['camera corner_r must fit within the smaller rect dimension']
+G14_PASS rrectBump=True cylLegacy=True invalidRejected=True ALL=True

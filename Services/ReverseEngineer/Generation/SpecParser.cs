@@ -124,6 +124,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                     ci.YMm = Num(camObj, s2, ci.YMm, "y_mm", "y");
                     ci.DiameterMm = Num(camObj, s2, ci.DiameterMm, "diameter_mm", "diameter", "d");
                     ci.HeightMm = Num(camObj, s2, ci.HeightMm, "height_mm", "height", "h");
+                    // rounded-rect plateau (set width_mm + length_mm to use it instead of the cylinder)
+                    ci.WidthMm = Num(camObj, s2, ci.WidthMm, "width_mm", "width", "w");
+                    ci.LengthMm = Num(camObj, s2, ci.LengthMm, "length_mm", "length", "l");
+                    ci.CornerRadiusMm = Num(camObj, s2, ci.CornerRadiusMm, "corner_r", "corner_radius_mm", "corner_radius");
                     p.Camera = ci;
                 }
             }
