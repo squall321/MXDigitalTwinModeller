@@ -598,3 +598,37 @@ added `mxdtm-spaceclaim`; re-run idempotent (no dup); `--remove` dropped only ou
 
 User flow now: install MSI → double-click `register_claude_desktop.bat` → restart Claude Desktop →
 open SpaceClaim → "make me a curved phone with a USB-C port" in natural language.
+
+## Zero-Python install + auto-register + natural version-up (2026-07-01)
+
+Closing the loop so an end user needs NOTHING but the MSI (no Python, no config editing).
+
+**Python-free (PyInstaller exes):** `tools/mcp_bridge/build_bridge.bat` builds `mxdtm_mcp_bridge.exe`
+(8.2MB) and `register_claude_desktop.exe` (7.6MB) as `--onefile --console` bundles (Python is frozen
+inside; the user machine needs none). The registrar auto-detects: if a sibling `mxdtm_mcp_bridge.exe`
+exists it registers THAT as a Python-free `command` (args `[]`); else it falls back to
+`python mxdtm_mcp_bridge.py` (source checkout). Two robustness bugs found + fixed by testing the exes:
+  - registrar dropped the user's other servers when the existing config had a UTF-8 BOM → now reads
+    via `utf-8-sig`/`utf-8`/`utf-16` fallback (a mis-decode must NOT be treated as "unparseable").
+    Re-verified: preserves `other`+`theme` for both plain-UTF-8 AND BOM configs.
+  - bridge emitted a broken JSON-RPC error on a non-UTF-8 Windows codepage (lone surrogate from the
+    OS error string) → `_force_utf8_streams()` + `safe()` (`ascii`+`backslashreplace`, which never
+    raises on lone surrogates). Verified clean `-32002` error + exit 0 with proper stdin bytes (the
+    earlier "surrogate" repro was a PowerShell-pipe artifact, not the bridge — a real MCP client
+    pipes clean bytes).
+
+**Install-time auto-registration (WiX CustomAction):** `RegisterClaudeDesktop` runs
+`register_claude_desktop.exe` `After="InstallFiles"`, `Impersonate="yes"` (writes to the INSTALLING
+user's %APPDATA%, not the elevated SYSTEM profile), `Return="ignore"` + `Condition="NOT REMOVE"`
+(best-effort — a failure, e.g. Claude Desktop not yet installed, never aborts setup). The MSI now
+bundles both exes (primary) plus the .py/.bat/README (fallback + docs).
+
+**Natural version-up (single source of truth):** `<MXVersion>1.4.0</MXVersion>` in the .csproj →
+passed to `wix build` as `-d Version=$(MXVersion)` → the .wxs reads `$(Version)` (with a
+`?ifndef?`→1.4.0 default for a bare `wix build`). Bump that one value to release; MajorUpgrade
+(already present) upgrades in place. AssemblyInfo synced to 1.4.0.0. Verified: `wix build -d
+Version=1.5.0` → MSI ProductVersion=1.5.0, both bridge exes in the File table, CustomAction present.
+
+Final user flow: **install MSI → (auto-registers) → restart Claude Desktop → open SpaceClaim → design
+in natural language.** No Python, no JSON editing. The exes are gitignored build artifacts (built by
+build_bridge.bat), like the project's other PyInstaller exes.

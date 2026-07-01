@@ -36,9 +36,30 @@ HANDSHAKE = os.path.join(
 CONNECT_TIMEOUT = 10  # seconds per HTTP call
 
 
+def _force_utf8_streams():
+    # A frozen exe launched on a non-UTF-8 Windows codepage can otherwise corrupt the
+    # JSON-RPC channel (surrogates in OS error strings -> UnicodeEncodeError). Force UTF-8
+    # with replacement on both streams so the pipe stays clean regardless of locale.
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")  # py3.7+
+        except Exception:
+            pass
+
+
+def safe(text):
+    # Turn any string (incl. lone surrogates from OS error messages, e.g. a non-UTF-8
+    # Windows codepage) into pure ASCII so json.dumps (ascii-safe) can always serialize it.
+    # 'backslashreplace' never raises on lone surrogates the way 'replace'/utf-8 can.
+    try:
+        return str(text).encode("ascii", "backslashreplace").decode("ascii")
+    except Exception:
+        return "(unprintable)"
+
+
 def log(msg):
     # stderr only — stdout is the JSON-RPC channel and must stay clean.
-    sys.stderr.write("[mxdtm-bridge] " + str(msg) + "\n")
+    sys.stderr.write("[mxdtm-bridge] " + safe(msg) + "\n")
     sys.stderr.flush()
 
 
@@ -102,11 +123,11 @@ def handle_line(line):
         return json.dumps(jsonrpc_error(
             req_id, -32002,
             "Could not reach the SpaceClaim MCP server at %s (%s). "
-            "Is SpaceClaim still open?" % (url, getattr(e, "reason", e))))
+            "Is SpaceClaim still open?" % (url, safe(getattr(e, "reason", e)))))
     except Exception as e:
         if is_notification:
             return None
-        return json.dumps(jsonrpc_error(req_id, -32603, "bridge relay error: %s" % e))
+        return json.dumps(jsonrpc_error(req_id, -32603, "bridge relay error: %s" % safe(e)))
 
     text = resp_bytes.decode("utf-8", errors="replace").strip()
     # The server returns an empty body for notifications (e.g. notifications/initialized).
@@ -116,6 +137,7 @@ def handle_line(line):
 
 
 def main():
+    _force_utf8_streams()
     log("started; handshake=%s" % HANDSHAKE)
     # Line-delimited JSON-RPC over stdio (the MCP stdio framing Claude Desktop uses).
     for line in sys.stdin:

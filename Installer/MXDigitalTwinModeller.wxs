@@ -1,9 +1,16 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+    <!-- Version is injected at build time from the single source of truth (MSBuild
+         property MXVersion, passed as -d Version=...). Defaults to 1.4.0 if built with a
+         bare `wix build`. Bumping MXVersion in the .csproj naturally drives MajorUpgrade
+         (an in-place upgrade that removes the old build before installing the new one). -->
+    <?ifndef Version ?>
+        <?define Version = "1.4.0" ?>
+    <?endif?>
     <Package
         Name="MX Digital Twin Modeller"
         Manufacturer="MX Composites"
-        Version="1.4.0"
+        Version="$(Version)"
         UpgradeCode="A7E3B5C1-4D2F-4A8E-9B1C-6F3D8E2A1B5C"
         Scope="perMachine"
         InstallerVersion="500"
@@ -80,6 +87,19 @@
         <!-- ================================================================ -->
 
         <ComponentGroup Id="McpBridgeComponents" Directory="McpBridgeDir">
+            <!-- Python-free standalone EXEs (PyInstaller) — the primary artifacts the config
+                 points at, so the end user needs NO Python installed. Built by build_bridge.bat. -->
+            <Component Id="McpBridgeExe" Guid="*">
+                <File Id="mxdtm_mcp_bridge.exe"
+                      Source="$(ProjectDir)\tools\mcp_bridge\mxdtm_mcp_bridge.exe"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="McpRegisterExe" Guid="*">
+                <File Id="register_claude_desktop.exe"
+                      Source="$(ProjectDir)\tools\mcp_bridge\register_claude_desktop.exe"
+                      KeyPath="yes" />
+            </Component>
+            <!-- Python source + .bat + README (fallback for source runs / manual setup / docs). -->
             <Component Id="McpBridgePy" Guid="*">
                 <File Id="mxdtm_mcp_bridge.py"
                       Source="$(ProjectDir)\tools\mcp_bridge\mxdtm_mcp_bridge.py"
@@ -101,6 +121,24 @@
                       KeyPath="yes" />
             </Component>
         </ComponentGroup>
+
+        <!-- Install-time auto-registration with Claude Desktop.
+             The registrar merges an 'mxdtm-spaceclaim' server into the INSTALLING USER's
+             %APPDATA%\Claude config, so the CA must run IMPERSONATED (not as the elevated
+             SYSTEM account whose %APPDATA% is the wrong profile). It is best-effort: a
+             failure (e.g. no Claude Desktop yet) must NOT abort the install, so the sequence
+             condition + the CA's own non-fatal exit handling keep setup succeeding. The user
+             can always re-run register_claude_desktop.exe / .bat later. -->
+        <CustomAction Id="RegisterClaudeDesktop"
+                      FileRef="register_claude_desktop.exe"
+                      ExeCommand=""
+                      Execute="deferred"
+                      Impersonate="yes"
+                      Return="ignore" />
+        <InstallExecuteSequence>
+            <Custom Action="RegisterClaudeDesktop" After="InstallFiles"
+                    Condition="NOT REMOVE" />
+        </InstallExecuteSequence>
 
         <!-- ================================================================ -->
         <!-- Mechanical ACT Extension — XML                                    -->

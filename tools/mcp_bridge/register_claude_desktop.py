@@ -34,23 +34,48 @@ def config_path():
     return os.path.expanduser("~/Library/Application Support/Claude/claude_desktop_config.json")
 
 
-def bridge_path():
-    return os.path.join(os.path.dirname(os.path.abspath(__file__)), "mxdtm_mcp_bridge.py")
+def here():
+    # When frozen by PyInstaller, this exe lives in the install dir; sys.executable is the exe.
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(os.path.abspath(sys.executable))
+    return os.path.dirname(os.path.abspath(__file__))
+
+
+def resolve_launch():
+    """Return (command, args) for the Claude Desktop config entry.
+
+    Prefer a bundled `mxdtm_mcp_bridge.exe` sitting next to us (Python-free — what
+    the MSI ships). Fall back to `python mxdtm_mcp_bridge.py` for a source checkout.
+    """
+    d = here()
+    exe = os.path.join(d, "mxdtm_mcp_bridge.exe")
+    if os.path.isfile(exe):
+        return exe, []
+    py = os.path.join(d, "mxdtm_mcp_bridge.py")
+    return None, [py]  # command filled in by caller (a Python interpreter)
 
 
 def load_config(path):
     if not os.path.isfile(path):
         return {}
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            print("[warn] existing config is not a JSON object; starting fresh (a backup is kept).")
+    # utf-8-sig transparently strips a BOM if present (editors / some writers add one),
+    # so an existing config with a BOM is NOT mistaken for unparseable (which would drop
+    # the user's other servers). Fall back through a couple of encodings before giving up.
+    for enc in ("utf-8-sig", "utf-8", "utf-16"):
+        try:
+            with open(path, "r", encoding=enc) as f:
+                data = json.load(f)
+            if not isinstance(data, dict):
+                print("[warn] existing config is not a JSON object; starting fresh (a backup is kept).")
+                return {}
+            return data
+        except (UnicodeError, UnicodeDecodeError):
+            continue  # wrong encoding — try the next
+        except Exception as e:
+            print("[warn] could not parse existing config (%s); starting fresh (a backup is kept)." % e)
             return {}
-        return data
-    except Exception as e:
-        print("[warn] could not parse existing config (%s); starting fresh (a backup is kept)." % e)
-        return {}
+    print("[warn] could not decode existing config; starting fresh (a backup is kept).")
+    return {}
 
 
 def backup(path):
@@ -78,13 +103,7 @@ def main():
     args = ap.parse_args()
 
     path = config_path()
-    bridge = bridge_path()
     print("Claude Desktop config: %s" % path)
-    print("Bridge script:         %s" % bridge)
-
-    if not args.remove and not os.path.isfile(bridge):
-        print("[error] bridge script not found next to this file: %s" % bridge)
-        return 2
 
     cfg = load_config(path)
     servers = cfg.get("mcpServers")
@@ -103,14 +122,26 @@ def main():
         print("Restart Claude Desktop for the change to take effect.")
         return 0
 
+    # Resolve the launch target: prefer the bundled Python-free bridge exe; else python + .py.
+    command, extra_args = resolve_launch()
+    if command is None:
+        # source checkout: need a Python interpreter to run the .py bridge
+        py_script = extra_args[0]
+        if not os.path.isfile(py_script):
+            print("[error] neither mxdtm_mcp_bridge.exe nor mxdtm_mcp_bridge.py found next to me.")
+            return 2
+        command = args.python
+        launch_args = [py_script]
+        print("Bridge (source):       %s %s" % (command, py_script))
+    else:
+        launch_args = extra_args  # [] — the exe is self-contained (no Python)
+        print("Bridge (bundled exe):  %s" % command)
+
     # Add / refresh ONLY our entry; everything else in the config is preserved.
-    servers[SERVER_KEY] = {
-        "command": args.python,
-        "args": [bridge],
-    }
+    servers[SERVER_KEY] = {"command": command, "args": launch_args}
     cfg["mcpServers"] = servers
     write_config(path, cfg)
-    print("[ok] registered '%s' (command=%s)." % (SERVER_KEY, args.python))
+    print("[ok] registered '%s' (command=%s)." % (SERVER_KEY, command))
     print("")
     print("Next steps:")
     print("  1. Open SpaceClaim (the MXDigitalTwinModeller Add-In starts the MCP server).")

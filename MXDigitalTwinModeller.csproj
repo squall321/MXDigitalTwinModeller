@@ -509,6 +509,13 @@
     PyInstaller EXE 미존재 시 wix build 실패 가능 →
     EXE 존재 확인 후 분기 (BUILD_PIPELINE_PLAN.md Phase B-5).
   -->
+  <!-- SINGLE SOURCE OF TRUTH for the product version. Bump this one value to release a
+       new version; it flows to the MSI (via -d Version=) which drives MajorUpgrade, so an
+       install over an older build upgrades in place automatically. -->
+  <PropertyGroup>
+    <MXVersion>1.4.0</MXVersion>
+  </PropertyGroup>
+
   <Target Name="BuildInstaller" AfterTargets="ClearWorkbenchRibbonCache">
     <PropertyGroup>
       <CalibratorExeExists Condition="Exists('$(ProjectDir)Mechanical\MXSimulator\calibration\MaterialCalibrator.exe')">true</CalibratorExeExists>
@@ -529,9 +536,10 @@
              Importance="high"
              Condition="'$(CanBuildMsi)' != 'true'" />
 
-    <Exec Command="wix build &quot;$(ProjectDir)Installer\MXDigitalTwinModeller.wxs&quot; -d BuildOutputDir=&quot;$(OutputPath.TrimEnd('\\'))&quot; -d ProjectDir=&quot;$(ProjectDir.TrimEnd('\\'))&quot; -d Configuration=$(Configuration) -ext WixToolset.UI.wixext -o &quot;$(ProjectDir)Installer\MXDigitalTwinModeller.msi&quot; -arch x64 --nologo"
+    <Exec Command="wix build &quot;$(ProjectDir)Installer\MXDigitalTwinModeller.wxs&quot; -d BuildOutputDir=&quot;$(OutputPath.TrimEnd('\\'))&quot; -d ProjectDir=&quot;$(ProjectDir.TrimEnd('\\'))&quot; -d Configuration=$(Configuration) -d Version=$(MXVersion) -ext WixToolset.UI.wixext -o &quot;$(ProjectDir)Installer\MXDigitalTwinModeller.msi&quot; -arch x64 --nologo"
           IgnoreExitCode="false"
           Condition="'$(CanBuildMsi)' == 'true'" />
+    <Message Text="MSI version: $(MXVersion)" Importance="high" Condition="'$(CanBuildMsi)' == 'true'" />
     <Message Text="MSI installer built: $(ProjectDir)Installer\MXDigitalTwinModeller.msi"
              Importance="high"
              Condition="'$(CanBuildMsi)' == 'true'" />

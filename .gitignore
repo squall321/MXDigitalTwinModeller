@@ -144,5 +144,9 @@ Examples/iphone/*.glb
 # --- Large build artifacts (regenerable, exceed GitHub limits) ---
 Mechanical/MXSimulator/calibration/dist/
 Mechanical/MXSimulator/calibration/build/
+# MCP bridge PyInstaller output (exes covered by *.exe below; build/dist/spec are clutter)
+tools/mcp_bridge/build/
+tools/mcp_bridge/dist/
+tools/mcp_bridge/*.spec
 *.exe
 *.pkg

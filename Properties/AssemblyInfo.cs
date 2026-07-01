@@ -19,5 +19,7 @@ using System.Runtime.InteropServices;
 [assembly: Guid("b8f3e2a1-9c4d-4e5f-8a7b-1d2c3e4f5a6b")]
 
 // 어셈블리의 버전 정보는 다음 네 가지 값으로 구성됩니다.
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
+// Keep in sync with <MXVersion> in MXDigitalTwinModeller.csproj (the MSI's single source
+// of truth). This is a compile-time literal, so bump it alongside MXVersion on release.
+[assembly: AssemblyVersion("1.4.0.0")]
+[assembly: AssemblyFileVersion("1.4.0.0")]

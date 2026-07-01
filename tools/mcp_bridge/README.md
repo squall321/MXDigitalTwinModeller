@@ -30,37 +30,43 @@ Claude Desktop ──stdio──▶ mxdtm_mcp_bridge.py ──HTTP──▶ 127.
 1. **SpaceClaim with the MXDigitalTwinModeller Add-In installed and running.**
    The MCP server starts automatically when the Add-In loads; it writes
    `%LOCALAPPDATA%\MXDTM\mcp_handshake.json` = `{"port": …, "pid": …}`.
-2. **Python 3.8+** on PATH (stdlib only — no `pip install` needed).
-3. **Claude Desktop** (or another stdio MCP client).
+2. **Claude Desktop** (or another stdio MCP client).
 
-## Setup — one click (recommended)
+No Python needed on the user's machine — the bridge and registrar ship as
+standalone `.exe` files (PyInstaller). Python is only needed on the *build*
+machine to produce them (`build_bridge.bat`).
 
-The MSI installs this folder next to the Add-In at
-`C:\ProgramData\SpaceClaim\AddIns\MXDigitalTwinModeller\V252\mcp_bridge\`.
+## Setup — automatic (the MSI does it)
 
-**Double-click `register_claude_desktop.bat`.** It safely merges an
-`mxdtm-spaceclaim` server into your Claude Desktop config — your existing
-servers and settings are preserved, and a backup
-(`claude_desktop_config.json.mxdtm-bak`) is made first. It auto-fills the bridge
-path and the Python interpreter, so you don't edit any JSON by hand.
+The installer places this folder at
+`C:\ProgramData\SpaceClaim\AddIns\MXDigitalTwinModeller\V252\mcp_bridge\` and
+runs `register_claude_desktop.exe` during install, which safely merges an
+`mxdtm-spaceclaim` server into **your** Claude Desktop config (existing servers
+and settings preserved; a `*.mxdtm-bak` backup is made first). The config points
+at the bundled `mxdtm_mcp_bridge.exe`.
 
-Then **fully restart Claude Desktop**. To undo, run
-`register_claude_desktop.bat --remove` (or
-`python register_claude_desktop.py --remove`).
+Just **fully restart Claude Desktop** after installing, open SpaceClaim, and ask
+Claude to design a phone.
 
-> If Python isn't found, install Python 3.8+ and re-run the .bat.
+> If Claude Desktop wasn't installed when you ran the MSI, run the one-click step
+> below afterwards.
+
+## Setup — one click (if you need to re-run it)
+
+**Double-click `register_claude_desktop.exe`** (or `register_claude_desktop.bat`).
+Same safe merge as above. To undo:
+`register_claude_desktop.exe --remove`.
 
 ## Setup — manual (alternative)
 
-Edit `%APPDATA%\Claude\claude_desktop_config.json` and add (adjust the path to
-where it's installed):
+Edit `%APPDATA%\Claude\claude_desktop_config.json` and add:
 
 ```json
 {
   "mcpServers": {
     "mxdtm-spaceclaim": {
-      "command": "python",
-      "args": ["C:\\ProgramData\\SpaceClaim\\AddIns\\MXDigitalTwinModeller\\V252\\mcp_bridge\\mxdtm_mcp_bridge.py"]
+      "command": "C:\\ProgramData\\SpaceClaim\\AddIns\\MXDigitalTwinModeller\\V252\\mcp_bridge\\mxdtm_mcp_bridge.exe",
+      "args": []
     }
   }
 }
@@ -69,8 +75,8 @@ where it's installed):
 Then **fully restart Claude Desktop**. The `mxdtm-spaceclaim` tools appear once
 SpaceClaim is open with the Add-In loaded.
 
-> If `python` isn't on PATH, use the full interpreter path (e.g.
-> `"command": "C:\\Python311\\python.exe"`).
+> Running from source instead of the installed exe? Point `command` at your
+> Python interpreter and `args` at `mxdtm_mcp_bridge.py`.
 
 ## Usage
 
