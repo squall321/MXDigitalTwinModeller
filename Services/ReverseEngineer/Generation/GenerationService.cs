@@ -68,6 +68,19 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                 r.StageLog.Add("S00 bbox vol=" + VolMm3(body).ToString("0.#"));
                 if (stopAtStage == "S00") { Finish(r, body, p); return r; }
 
+                // S01 — corner rounding for SOLID mode. The hollow builders round the tray's
+                // vertical corners themselves (S00b CornersRounded); a solid part (HollowWall<=0)
+                // never applied corner_r at all. Runs BEFORE S00a so the vertical-edge filter
+                // sees only the 4 slab corner edges, not the curved Z-stack.
+                if (p.HollowWallMm <= 0 && p.CornerRadiusMm > 0)
+                {
+                    var rcr = ModificationService.AddChamfer(body, p.CornerRadiusMm, "vertical");
+                    r.StageLog.Add("S01 corners success=" + rcr.Success + " (r" + p.CornerRadiusMm +
+                        ") vol=" + VolMm3(body).ToString("0.#"));
+                    if (!rcr.Success) { r.Error = "S01 corners failed: " + rcr.ErrorMessage; r.Body = body; return r; }
+                }
+                if (stopAtStage == "S01") { Finish(r, body, p); return r; }
+
                 // S00a — v2 CURVED BACK (gated). When BackBulgeMm<=0 the slab is untouched, so v1
                 // output stays byte-identical. Runs before the hollow so S00b walls the curved form.
                 if (p.BackBulgeMm > 0)
@@ -119,6 +132,23 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                 }
                 if (stopAtStage == "S04") { Finish(r, body, p); return r; }
 
+                // S04b — front camera punch-hole: a small THROUGH hole on the display side
+                // (validated to sit inside the pocket when one is enabled). Planar AddHole —
+                // the through cutter spans the body's Z extent.
+                if (p.FrontPunch != null)
+                {
+                    var rpp = ModificationService.AddHole(
+                        body, MmPos(p.FrontPunch.XMm, p.FrontPunch.YMm, p.ThicknessMm),
+                        p.FrontPunch.DiameterMm, true, 0.0, new double[] { 0, 0, 1 }, false);
+                    r.StageLog.Add("S04b punch success=" + rpp.Success + " (d" + p.FrontPunch.DiameterMm +
+                        ") vol=" + VolMm3(body).ToString("0.#"));
+                    if (!rpp.Success) { r.Error = "S04b punch failed: " + rpp.ErrorMessage; r.Body = body; return r; }
+                    r.Handles.Add(new FeatureHandle("S04b", "hole", 0,
+                        new double[] { p.FrontPunch.XMm, p.FrontPunch.YMm, p.ThicknessMm },
+                        new double[] { 0, 0, 1 }, p.FrontPunch.DiameterMm));
+                }
+                if (stopAtStage == "S04b") { Finish(r, body, p); return r; }
+
                 // S05 — camera plateau on the BACK. A real phone camera bump sits on the CLOSED back
                 // face (z=0, the solid tray floor's outer side), protruding along -Z — NOT the open
                 // top (z=T, the display side) where a boss would have no material to unite to. A
@@ -143,6 +173,26 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                         new double[] { p.Camera.XMm, p.Camera.YMm, 0.0 },
                         backAxis,
                         p.Camera.IsRounded ? Math.Max(p.Camera.WidthMm, p.Camera.LengthMm) : p.Camera.DiameterMm));
+
+                    // S05L — lens openings recessed into the plateau's OUTER face (z=-h, normal
+                    // -Z): seed just outside the plateau along -Z so AddHoleOnFace latches the
+                    // plateau top and drills inward (+Z). Depth 0 = auto (back-surface level).
+                    int lensOk = 0, lensOrd = 0;
+                    foreach (var lz in p.Camera.Lenses)
+                    {
+                        double lensDepth = lz.DepthMm > 0 ? lz.DepthMm : p.Camera.HeightMm;
+                        double lx = p.Camera.XMm + lz.XMm, ly = p.Camera.YMm + lz.YMm;
+                        var rl = ModificationService.AddHoleOnFace(
+                            body, new double[] { lx, ly, -p.Camera.HeightMm - 0.05 },
+                            lz.DiameterMm, lensDepth);
+                        if (rl.Success) lensOk++;
+                        r.Handles.Add(new FeatureHandle("S05L", "hole", lensOrd++,
+                            new double[] { lx, ly, -p.Camera.HeightMm },
+                            new double[] { 0, 0, -1 }, lz.DiameterMm));
+                    }
+                    if (p.Camera.Lenses.Count > 0)
+                        r.StageLog.Add("S05L lenses " + lensOk + "/" + p.Camera.Lenses.Count +
+                            " vol=" + VolMm3(body).ToString("0.#"));
                 }
                 if (stopAtStage == "S05") { Finish(r, body, p); return r; }
 
@@ -218,17 +268,23 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                         " vol=" + VolMm3(body).ToString("0.#"));
                 if (stopAtStage == "S07") { Finish(r, body, p); return r; }
 
-                // S08 — speaker grille (hole-pattern grid on the top face).
+                // S08 — speaker grille. Legacy: through-grid on the top face. OnBack (realism):
+                // drilled from the BACK face (z=0, the camera side — always planar, the curved
+                // bulge sits on +Z) as BLIND holes that pierce the tray floor into the cavity.
                 if (p.Grille != null)
                 {
+                    bool gBack = p.Grille.OnBack;
+                    double gz = gBack ? 0.0 : p.ThicknessMm;
+                    double[] gDrill = gBack ? new double[] { 0, 0, -1 } : new double[] { 0, 0, 1 };
+                    double gDepth = gBack ? (p.HollowWallMm > 0 ? p.HollowWallMm + 0.5 : 1.0) : 0.0;
                     var rg = ModificationService.AddHolePattern(
-                        body, MmPos(p.Grille.OriginXMm, p.Grille.OriginYMm, p.ThicknessMm),
+                        body, MmPos(p.Grille.OriginXMm, p.Grille.OriginYMm, gz),
                         new double[] { 0, 0, 1 }, "grid", p.Grille.Rows * p.Grille.Cols,
-                        p.Grille.PitchMm, p.Grille.HoleDiameterMm, true,
+                        p.Grille.PitchMm, p.Grille.HoleDiameterMm, !gBack,
                         p.Grille.Rows, p.Grille.Cols, p.Grille.PitchMm, p.Grille.PitchMm,
-                        0.0, new double[] { 0, 0, 1 });
+                        gDepth, gDrill);
                     r.StageLog.Add("S08 grille success=" + rg.Success + " (" + p.Grille.Rows + "x" + p.Grille.Cols +
-                        ") vol=" + VolMm3(body).ToString("0.#"));
+                        (gBack ? " back" : "") + ") vol=" + VolMm3(body).ToString("0.#"));
                 }
                 if (stopAtStage == "S08") { Finish(r, body, p); return r; }
 

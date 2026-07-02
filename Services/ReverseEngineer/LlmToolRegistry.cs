@@ -336,11 +336,17 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                     "curve must be GENTLE i.e. effective R >= width), lens_on_curved_back (bool; needs a " +
                     "curved back), ports_on_flank (bool; route flank ports through true side entry); " +
                     "pocket:false to disable the display pocket, or pocket:{enabled,width_mm,length_mm,depth_mm}; " +
-                    "camera:{x_mm,y_mm,diameter_mm,height_mm}; " +
+                    "camera:{x_mm,y_mm,diameter_mm,height_mm,width_mm,length_mm,corner_r," +
+                    "lenses:[{x_mm,y_mm,diameter_mm,depth_mm}]} (width+length>0 = rounded-rect plateau; " +
+                    "lenses = openings recessed into the plateau, offsets from the camera centre, " +
+                    "depth_mm 0 = down to back-surface level); " +
+                    "front_punch:{x_mm,y_mm,diameter_mm} (front-camera punch hole through the display side, " +
+                    "must sit inside the pocket when one is enabled); " +
                     "holes:[{x_mm,y_mm,diameter_mm,through(bool),depth_mm,on_curved_back(bool)}] (a lens hole " +
                     "on a curved back sets on_curved_back:true so it enters along the local crown normal); " +
                     "ports:[{type:'usbc'|'lightning',x_mm,y_mm,z_mm,width_mm,height_mm,on_face:'flank'}]; " +
-                    "grille:{origin_x_mm,origin_y_mm,pitch_mm,rows,cols,hole_diameter_mm}; " +
+                    "grille:{origin_x_mm,origin_y_mm,pitch_mm,rows,cols,hole_diameter_mm,on_back} " +
+                    "(on_back:true drills the grille on the BACK face as blind holes piercing the tray floor); " +
                     "buttons:[{x_mm,y_mm,z_mm,width_mm,height_mm,depth_mm}]. " +
                     "Example: {\\\"length_mm\\\":150,\\\"width_mm\\\":72,\\\"thickness_mm\\\":8,\\\"back_bulge_mm\\\":0.7," +
                     "\\\"lens_on_curved_back\\\":true,\\\"ports_on_flank\\\":true," +

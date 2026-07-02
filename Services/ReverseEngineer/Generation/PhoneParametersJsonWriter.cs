@@ -70,6 +70,32 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                 Num(sb, "width_mm", p.Camera.WidthMm);
                 Num(sb, "length_mm", p.Camera.LengthMm);
                 Num(sb, "corner_r", p.Camera.CornerRadiusMm);
+                if (p.Camera.Lenses != null && p.Camera.Lenses.Count > 0)
+                {
+                    sb.Append(", \"lenses\": [");
+                    for (int i = 0; i < p.Camera.Lenses.Count; i++)
+                    {
+                        var lz = p.Camera.Lenses[i];
+                        if (i > 0) sb.Append(", ");
+                        sb.Append("{");
+                        Num(sb, "x_mm", lz.XMm, first: true);
+                        Num(sb, "y_mm", lz.YMm);
+                        Num(sb, "diameter_mm", lz.DiameterMm);
+                        Num(sb, "depth_mm", lz.DepthMm);
+                        sb.Append("}");
+                    }
+                    sb.Append("]");
+                }
+                sb.Append("}");
+            }
+
+            // front camera punch-hole (omitted when null)
+            if (p.FrontPunch != null)
+            {
+                sb.Append(", \"front_punch\": {");
+                Num(sb, "x_mm", p.FrontPunch.XMm, first: true);
+                Num(sb, "y_mm", p.FrontPunch.YMm);
+                Num(sb, "diameter_mm", p.FrontPunch.DiameterMm);
                 sb.Append("}");
             }
 
@@ -124,6 +150,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                 Num(sb, "rows", p.Grille.Rows);
                 Num(sb, "cols", p.Grille.Cols);
                 Num(sb, "hole_diameter_mm", p.Grille.HoleDiameterMm);
+                Bool(sb, "on_back", p.Grille.OnBack);
                 sb.Append("}");
             }
 

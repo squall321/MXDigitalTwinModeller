@@ -788,3 +788,28 @@ LLM capability.
   {thickness_mm:4} built 5 bodies live (specimen + 4 grips), measure_body [4,19,165]mm bbox
   (override echoed), validate_body pass:true with the volume-only degrade note. The Claude Desktop
   user path is verified for the new CAE surface.
+
+## Realism wave: multi-lens / front punch / back grille / S01 solid corners (2026-07-03)
+
+Four param->stage features over PROVEN primitives (no new geometry R&D), closing the deferred
+realism items and two stage-spec gaps:
+
+- **camera.lenses[]** (S05L): lens openings recessed into the plateau's OUTER face (z=-h, -Z) via
+  AddHoleOnFace seeded just outside the plateau; offsets are camera-centre-relative; depth_mm 0 =
+  auto (back-surface level). Validate: fits inside the rect/cyl plateau footprint, leaves min_wall.
+- **front_punch** (S04b): display-side THROUGH hole (planar AddHole at z=T); Validate pins it
+  inside the display pocket when one is enabled.
+- **grille.on_back** (S08): grille drilled from the BACK face (z=0 - ALWAYS planar, the curved
+  bulge sits on +Z) as BLIND holes (depth wall+0.5) piercing the tray floor into the cavity.
+- **S01** (solid corner rounding): corner_r finally applies in SOLID mode (hollow builders already
+  rounded tray corners; a solid part silently ignored it). AddChamfer "vertical" right after S00,
+  BEFORE S00a so the filter sees only the 4 slab corners. stop_at_stage gained "S01"/"S04b".
+
+SpecParser binds the three new keys (+ aliases), PhoneParametersJsonWriter emits them (round-trip
+contract intact), generate_phone_from_spec's description documents them (the LLM-facing contract).
+
+**Gate g17** (headless, volume-arithmetic verdicts - all EXACT to 3+ decimals):
+T1 lenses 2/2, dV=58.905 (= 2*pi*2.5^2*1.5). T2 punch dV=49.480 (= pi*1.5^2*7). T3 back grille
+dV=2.827 (= 6*pi*0.25*0.6). T4 S01 corners dV=61.805 (= (4-pi)*9*8). T5 writer/parser round-trip
+(lenses/front_punch/on_back survive, 0 warnings) + rejection of lens-outside-plateau and
+punch-outside-pocket. G17_PASS ALL=True (5/5).

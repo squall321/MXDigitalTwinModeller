@@ -45,8 +45,12 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.ReverseEngineer
         // --- corner / mounting holes (S06 in the skeleton; real lens holes later) ---
         public List<HoleSpec> Holes = new List<HoleSpec>();
 
-        // --- camera plateau (S05): boss on the top face (cylinder today, rounded-rect later) ---
+        // --- camera plateau (S05): boss on the closed BACK face (z=0, -Z), cylinder or
+        //     rounded-rect, optionally with lens openings recessed into the plateau ---
         public CameraIsland Camera = null;      // null = no camera bump
+
+        // --- front camera punch-hole (S04b): display-side through hole; null = none ---
+        public PunchHole FrontPunch = null;
 
         // --- richer feature blocks, populated as later stages come online (P5) ---
         public List<PortSpec> Ports = new List<PortSpec>();
@@ -93,6 +97,26 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.ReverseEngineer
             public double LengthMm = 0.0;       // Y extent of the rect plateau
             public double CornerRadiusMm = 2.0; // corner round of the rect plateau
             public bool IsRounded { get { return WidthMm > 0 && LengthMm > 0; } }
+            // Realism: lens openings recessed into the plateau's OUTER face (multi-camera layout).
+            // Offsets are RELATIVE to the camera centre. Empty = plain plateau (legacy default).
+            public List<Lens> Lenses = new List<Lens>();
+        }
+
+        /// <summary>One camera-lens opening on the plateau. DepthMm 0 = auto (the plateau
+        /// height, i.e. the recess reaches back-surface level).</summary>
+        public class Lens
+        {
+            public double XMm, YMm;             // offset from the camera centre
+            public double DiameterMm = 4.0;
+            public double DepthMm = 0.0;        // 0 = auto (Camera.HeightMm)
+        }
+
+        /// <summary>Realism: front camera punch-hole — a small THROUGH hole on the display
+        /// side (top face), inside the display pocket when one is enabled.</summary>
+        public class PunchHole
+        {
+            public double XMm, YMm;
+            public double DiameterMm = 3.0;
         }
 
         public class PortSpec
@@ -109,6 +133,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.ReverseEngineer
             public double PitchMm = 2.0;
             public int Rows = 1, Cols = 6;
             public double HoleDiameterMm = 1.0;
+            // Realism: drill the grille on the BACK face (z=0, the camera side — always planar,
+            // the curved bulge sits on +Z) as blind holes piercing the tray floor, instead of
+            // the legacy through-grid on the top face.
+            public bool OnBack = false;
         }
 
         public class ButtonRecess
@@ -191,6 +219,41 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.ReverseEngineer
                 // bump rises ABOVE the top face; it must not be taller than the part is thick
                 if (Camera.HeightMm >= ThicknessMm)
                     errors.Add("camera bump_height must be < total_thickness");
+                // lenses must fit inside the plateau footprint and not breach the front
+                foreach (var lz in Camera.Lenses)
+                {
+                    if (lz.DiameterMm <= 0) { errors.Add("lens diameter must be positive"); continue; }
+                    if (lz.DepthMm < 0) errors.Add("lens depth must be >= 0");
+                    if (Camera.IsRounded)
+                    {
+                        if (Math.Abs(lz.XMm) + lz.DiameterMm / 2 > Camera.WidthMm / 2 ||
+                            Math.Abs(lz.YMm) + lz.DiameterMm / 2 > Camera.LengthMm / 2)
+                            errors.Add(string.Format(
+                                "lens at ({0:0.#},{1:0.#}) extends outside the plateau", lz.XMm, lz.YMm));
+                    }
+                    else if (Math.Sqrt(lz.XMm * lz.XMm + lz.YMm * lz.YMm) + lz.DiameterMm / 2
+                             > Camera.DiameterMm / 2)
+                    {
+                        errors.Add(string.Format(
+                            "lens at ({0:0.#},{1:0.#}) extends outside the plateau", lz.XMm, lz.YMm));
+                    }
+                    if (lz.DepthMm > Camera.HeightMm + ThicknessMm - MinWallMm)
+                        errors.Add("lens depth must leave >= min_wall of front material");
+                }
+            }
+
+            // front punch-hole: inside the plan, and inside the pocket when one is enabled
+            if (FrontPunch != null)
+            {
+                if (FrontPunch.DiameterMm <= 0)
+                    errors.Add("front punch diameter must be positive");
+                if (Math.Abs(FrontPunch.XMm) + FrontPunch.DiameterMm / 2 > LengthMm / 2 ||
+                    Math.Abs(FrontPunch.YMm) + FrontPunch.DiameterMm / 2 > WidthMm / 2)
+                    errors.Add("front punch extends outside the plan");
+                if (Pocket != null && Pocket.Enabled &&
+                    (Math.Abs(FrontPunch.XMm) + FrontPunch.DiameterMm / 2 > Pocket.WidthMm / 2 ||
+                     Math.Abs(FrontPunch.YMm) + FrontPunch.DiameterMm / 2 > Pocket.LengthMm / 2))
+                    errors.Add("front punch must sit inside the display pocket");
             }
 
             // holes fit through and don't collide with the pocket void where they'd be too thin

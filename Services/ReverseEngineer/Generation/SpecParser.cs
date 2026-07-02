@@ -145,7 +145,42 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                     ci.WidthMm = Num(camObj, s2, ci.WidthMm, "width_mm", "width", "w");
                     ci.LengthMm = Num(camObj, s2, ci.LengthMm, "length_mm", "length", "l");
                     ci.CornerRadiusMm = Num(camObj, s2, ci.CornerRadiusMm, "corner_r", "corner_radius_mm", "corner_radius");
+                    // multi-lens layout recessed into the plateau (offsets from the camera centre)
+                    object lenses;
+                    if (TryGet(camObj, s2, out lenses, "lenses"))
+                    {
+                        var arrL = lenses as List<object>;
+                        if (arrL != null)
+                            foreach (var it in arrL)
+                            {
+                                var lo = it as Dictionary<string, object>;
+                                if (lo == null) continue;
+                                var lz = new PhoneParameters.Lens();
+                                var s3 = new HashSet<string>();
+                                lz.XMm = Num(lo, s3, lz.XMm, "x_mm", "x");
+                                lz.YMm = Num(lo, s3, lz.YMm, "y_mm", "y");
+                                lz.DiameterMm = Num(lo, s3, lz.DiameterMm, "diameter_mm", "diameter", "d");
+                                lz.DepthMm = Num(lo, s3, lz.DepthMm, "depth_mm", "depth");
+                                ci.Lenses.Add(lz);
+                            }
+                    }
                     p.Camera = ci;
+                }
+            }
+
+            // front camera punch-hole (display-side through hole)
+            object punch;
+            if (TryGet(o, seen, out punch, "front_punch", "punch_hole"))
+            {
+                var puObj = punch as Dictionary<string, object>;
+                if (puObj != null)
+                {
+                    var fp = new PhoneParameters.PunchHole();
+                    var s2 = new HashSet<string>();
+                    fp.XMm = Num(puObj, s2, fp.XMm, "x_mm", "x");
+                    fp.YMm = Num(puObj, s2, fp.YMm, "y_mm", "y");
+                    fp.DiameterMm = Num(puObj, s2, fp.DiameterMm, "diameter_mm", "diameter", "d");
+                    p.FrontPunch = fp;
                 }
             }
 
@@ -209,6 +244,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                     g.Rows = (int)Math.Round(Num(go, s2, g.Rows, "rows"));
                     g.Cols = (int)Math.Round(Num(go, s2, g.Cols, "cols"));
                     g.HoleDiameterMm = Num(go, s2, g.HoleDiameterMm, "hole_diameter_mm", "hole_diameter");
+                    g.OnBack = Bool(go, s2, g.OnBack, "on_back");
                     p.Grille = g;
                 }
             }
