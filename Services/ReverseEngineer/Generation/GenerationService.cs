@@ -119,26 +119,29 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                 }
                 if (stopAtStage == "S04") { Finish(r, body, p); return r; }
 
-                // S05 — camera plateau. A rounded-rect plateau (real camera-bump shape) when
-                // Camera.IsRounded (Width/Length set); else the legacy cylinder (byte-identical).
+                // S05 — camera plateau on the BACK. A real phone camera bump sits on the CLOSED back
+                // face (z=0, the solid tray floor's outer side), protruding along -Z — NOT the open
+                // top (z=T, the display side) where a boss would have no material to unite to. A
+                // rounded-rect plateau (real shape) when Camera.IsRounded; else the legacy cylinder.
                 if (p.Camera != null)
                 {
+                    var backAxis = new double[] { 0, 0, -1 };
                     var rb = p.Camera.IsRounded
                         ? ModificationService.AddRoundedRectBoss(
-                            body, MmPos(p.Camera.XMm, p.Camera.YMm, p.ThicknessMm),
-                            p.Camera.WidthMm, p.Camera.LengthMm, p.Camera.HeightMm, p.Camera.CornerRadiusMm)
+                            body, MmPos(p.Camera.XMm, p.Camera.YMm, 0.0),
+                            p.Camera.WidthMm, p.Camera.LengthMm, p.Camera.HeightMm, p.Camera.CornerRadiusMm, backAxis)
                         : ModificationService.AddBoss(
-                            body, MmPos(p.Camera.XMm, p.Camera.YMm, p.ThicknessMm),
-                            p.Camera.DiameterMm, p.Camera.HeightMm, new double[] { 0, 0, 1 });
+                            body, MmPos(p.Camera.XMm, p.Camera.YMm, 0.0),
+                            p.Camera.DiameterMm, p.Camera.HeightMm, backAxis);
                     string shape = p.Camera.IsRounded
                         ? "rrect " + p.Camera.WidthMm + "x" + p.Camera.LengthMm + " r" + p.Camera.CornerRadiusMm
                         : "cyl d" + p.Camera.DiameterMm;
-                    r.StageLog.Add("S05 camera success=" + rb.Success + " (" + shape + ") vol=" + VolMm3(body).ToString("0.#"));
+                    r.StageLog.Add("S05 camera success=" + rb.Success + " (" + shape + " back) vol=" + VolMm3(body).ToString("0.#"));
                     if (!rb.Success) { r.Error = "S05 camera failed: " + rb.ErrorMessage; r.Body = body; return r; }
                     // P3: mint a stable handle keyed by the intended anchor (survives renumber).
                     r.Handles.Add(new FeatureHandle("S05", "boss", 0,
-                        new double[] { p.Camera.XMm, p.Camera.YMm, p.ThicknessMm },
-                        new double[] { 0, 0, 1 },
+                        new double[] { p.Camera.XMm, p.Camera.YMm, 0.0 },
+                        backAxis,
                         p.Camera.IsRounded ? Math.Max(p.Camera.WidthMm, p.Camera.LengthMm) : p.Camera.DiameterMm));
                 }
                 if (stopAtStage == "S05") { Finish(r, body, p); return r; }

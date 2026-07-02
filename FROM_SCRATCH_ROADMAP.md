@@ -690,3 +690,25 @@ Note surfaced by the gate (pre-existing, not this change): a camera bump over th
 hollow tray adds ~0 volume (nothing to Unite to on the open face) — a real camera belongs on the
 closed BACK. Both cylinder and rrect behave identically there; a future refinement can place S05 on
 the back face. On a solid part (and the intended back-face placement) the bump unites cleanly.
+
+## Camera moved to the BACK face (2026-07-02)
+
+g14 surfaced that a camera on the OPEN top of a hollow tray adds ~0 volume (nothing to unite to).
+Real phones put the camera on the CLOSED back. S05 now places the plateau at z=0 (the tray floor's
+outer side) protruding along -Z, for BOTH shapes:
+
+- **AddRoundedRectBoss gained `axisDir`** (default +Z) — base embeds along -axis, extrude runs +axis,
+  frame Z = axis (the AddBoss axis-aware idiom). S05 passes {0,0,-1} to both AddBoss and
+  AddRoundedRectBoss; StageLog shows "(… back)". FeatureHandle anchor moved to (x,y,0), axis -Z.
+
+**Gate g15** (`g15_back_camera.py`, headless, HOLLOW phone — the exact case that failed before):
+rrect dV=749.5, cyl dV=369.5, both minZ=-1.50 (protrude on the back), vpass. The dV EXCEEDS the bare
+outer bump because the 1.5mm embed passes through the 0.6mm floor and leaves a 0.9mm pedestal INSIDE
+the cavity under the footprint — intended (P0 lesson: full 1.5mm embed = robust Boolean; cyl arithmetic
+exact: pi*49*(1.5+0.9)=369.4). G15_PASS ALL=True.
+
+⚠️ Environment note: a run of SpaceClaim launches this session ended with SC hanging BEFORE
+/RunScript — root cause found by enumerating the process's windows: a modal **"ANSYS LICENSE MANAGER
+MESSAGE"** dialog was blocking startup (likely from dozens of rapid force-killed launches). It cleared
+on its own after one long-lived launch; if it recurs, enumerate windows (user32 EnumWindows on the SC
+pid) to see the dialog rather than guessing, and let one SC instance live long enough to pass it.

@@ -1278,7 +1278,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
         /// </summary>
         public static ModificationResult AddRoundedRectBoss(
             DesignBody designBody, double[] positionMm, double widthMm, double lengthMm,
-            double heightMm, double cornerRadiusMm)
+            double heightMm, double cornerRadiusMm, double[] axisDir = null)
         {
             var result = new ModificationResult { Operation = "AddRoundedRectBoss", ModifiedBody = designBody };
             if (designBody == null) { result.ErrorMessage = "designBody is null"; return result; }
@@ -1294,16 +1294,23 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             double py = GeometryUtils.MmToMeters(positionMm[1]);
             double pz = GeometryUtils.MmToMeters(positionMm[2]);
             const double embedM = 0.0015; // 1.5mm embed (same as AddBoss — clean volumetric overlap)
+            // axis the plateau rises along (default +Z). e.g. a BACK camera uses (0,0,-1) to protrude
+            // below the closed back face. Base is embedded along -axis; extrude runs +axis.
+            double[] axisU = NormalizeVec3(axisDir) ?? new[] { 0.0, 0.0, 1.0 };
 
             var edgesBefore = CaptureEdges(designBody);
             try
             {
                 WriteBlock.ExecuteTask("AddRoundedRectBoss", () =>
                 {
-                    double bz = pz - embedM;
                     double extrudeH = hM + embedM;
-                    Point center = Point.Create(px, py, bz);
-                    Frame frame = Frame.Create(center, Direction.DirX, Direction.DirY);
+                    // base point embedded into the body along -axis; frame Z = +axis so extrude protrudes.
+                    Point center = Point.Create(
+                        px - axisU[0] * embedM, py - axisU[1] * embedM, pz - axisU[2] * embedM);
+                    Direction axD = Direction.Create(axisU[0], axisU[1], axisU[2]);
+                    Direction dX = axD.ArbitraryPerpendicular;
+                    Direction dY = Direction.Cross(axD, dX);
+                    Frame frame = Frame.Create(center, dX, dY);   // Frame.DirZ = dX x dY = +axis
                     Plane basePlane = Plane.Create(frame);
                     Profile profile = new RectangleProfile(basePlane, wM, lM, PointUV.Create(0, 0), 0.0);
                     Body boss = Body.ExtrudeProfile(profile, extrudeH);

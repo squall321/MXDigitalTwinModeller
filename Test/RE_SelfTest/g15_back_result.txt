@@ -1,0 +1,5 @@
+T1 rrect(hollow): gen=True vpass=True dV=749.50 minZ=-1.50
+   S05 camera success=True (rrect 20x16 r3 back) vol=9133.2
+T2 cyl(hollow):   gen=True dV=369.50 minZ=-1.50
+   S05 camera success=True (cyl d14 back) vol=8753.2
+G15_PASS rrectBackAddsVol=True cylBackAddsVol=True ALL=True
