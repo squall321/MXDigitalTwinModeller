@@ -30,6 +30,21 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
         private static readonly CultureInfo Inv = CultureInfo.InvariantCulture;
 
         /// <summary>
+        /// C1 guard: tools that do NOT need a pre-existing designBody — read-only graph tools,
+        /// pure spec/param tools, session-binding tools, and the from-scratch generators (which
+        /// build/bind their own body via SessionContext). Everything else is rejected on a null
+        /// body BEFORE its case runs. Keep in sync with McpServer's selfBinds/readOnly sets.
+        /// </summary>
+        private static readonly HashSet<string> NoBodyTools = new HashSet<string>
+        {
+            "get_feature_graph", "find_features_by_type",              // graph-only reads
+            "generate_phone", "generate_phone_from_spec", "set_camera_height", // phone generation
+            "parse_spec", "get_parameters", "set_parameters",          // pure spec/param tools
+            "rebind_active_body", "import_step",                       // session binding
+            "generate_tensile_specimen", "generate_laminate",          // CAE from-scratch generators
+        };
+
+        /// <summary>
         /// Dispatch one tool_use call. designBody/graph are the targets;
         /// toolName matches LlmToolRegistry.GetAllTools()[i].Name; inputJson
         /// is the JSON object the LLM emitted for "input".
@@ -41,11 +56,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
         {
             if (string.IsNullOrEmpty(toolName))
                 return Envelope(false, "toolName is null/empty", null);
-            // generate_phone/set_camera_height are session/generation tools that build their own
-            // body via SessionContext — they don't require a pre-existing designBody.
-            if (designBody == null && toolName != "get_feature_graph" && toolName != "find_features_by_type"
-                && toolName != "generate_phone" && toolName != "generate_phone_from_spec"
-                && toolName != "set_camera_height")
+            if (designBody == null && !NoBodyTools.Contains(toolName))
                 return Envelope(false, "designBody is null (required for modification tools)", null);
 
             Dictionary<string, object> args;
@@ -390,6 +401,437 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         return Envelope(true, null, "{\"camera_height_mm\": " + newH + ", \"regenerated\": true}");
                     }
 
+                    // ---- kernel-truth inspection (P6/P8) --------------------
+                    case "validate_body":
+                    {
+                        var sc = Mcp.SessionContext.Instance;
+                        if (sc.Params != null && ReferenceEquals(sc.Body, designBody))
+                        {
+                            // full Tier-2 check: closed solid + min-wall march in the generated frame.
+                            var vr = Generation.ValidationService.Validate(designBody, sc.Params);
+                            var vb = new StringBuilder();
+                            vb.Append("{\"pass\": ").Append(vr.Pass ? "true" : "false");
+                            vb.Append(", \"issues\": ").Append(JsonStringArray(vr.Issues));
+                            vb.Append(", \"volume_mm3\": ").Append(vr.VolumeMm3.ToString("0.###", Inv));
+                            vb.Append(", \"min_wall_mm\": ").Append(
+                                vr.MinWallMm >= 0 ? vr.MinWallMm.ToString("0.###", Inv) : "null");
+                            vb.Append("}");
+                            return Envelope(true, null, vb.ToString());
+                        }
+                        // no params for THIS body (external/CAE body): degrade to volume-only, never lie.
+                        double vVol;
+                        try { vVol = designBody.Shape.Volume * 1e9; } catch { vVol = 0; }
+                        bool vPass = vVol > 0;
+                        return Envelope(true, null, "{\"pass\": " + (vPass ? "true" : "false") +
+                            ", \"issues\": " + (vPass ? "[]" : "[\"not a closed solid (Volume<=0)\"]") +
+                            ", \"volume_mm3\": " + vVol.ToString("0.###", Inv) +
+                            ", \"min_wall_mm\": null" +
+                            ", \"note\": \"no session parameters for this body - volume-only check (min-wall march needs the generated-phone frame)\"}");
+                    }
+                    case "measure_body":
+                    {
+                        double mVol;
+                        try { mVol = designBody.Shape.Volume * 1e9; } catch { mVol = 0; }
+                        bool mClosed;
+                        try { mClosed = designBody.Shape.IsClosed; } catch { mClosed = false; }
+                        var mbb = designBody.Shape.GetBoundingBox(Geometry.Matrix.Identity);
+                        double[] mDims =
+                        {
+                            (mbb.MaxCorner.X - mbb.MinCorner.X) * 1000.0,
+                            (mbb.MaxCorner.Y - mbb.MinCorner.Y) * 1000.0,
+                            (mbb.MaxCorner.Z - mbb.MinCorner.Z) * 1000.0,
+                        };
+                        Array.Sort(mDims); // sorted ascending — the fea_freeze fingerprint convention
+                        return Envelope(true, null, "{\"volume_mm3\": " + mVol.ToString("0.###", Inv) +
+                            ", \"bbox_size_mm\": [" + mDims[0].ToString("0.###", Inv) + ", " +
+                            mDims[1].ToString("0.###", Inv) + ", " + mDims[2].ToString("0.###", Inv) + "]" +
+                            ", \"closed_solid\": " + ((mClosed && mVol > 0) ? "true" : "false") + "}");
+                    }
+                    case "fea_freeze":
+                    {
+                        string outPath = GetString(args, "out_path");
+                        string fmt = args.ContainsKey("format") ? GetString(args, "format") : "scdocx";
+                        // reopenAndVerify pinned FALSE: Document.Open(.stp) hangs behind a translator
+                        // dialog in /Headless — the fingerprint in the payload is the parity contract.
+                        var fr = Generation.FeaFreezeService.Freeze(designBody, outPath, false, fmt);
+                        if (fr == null || !fr.Success)
+                            return Envelope(false, (fr != null ? fr.Error : null) ?? "freeze failed", null);
+                        double[] fb = fr.BboxSizeMm ?? new double[3];
+                        return Envelope(true, null, "{\"path\": \"" + EscapeStr(fr.StepPath ?? "") + "\"" +
+                            ", \"format\": \"" + EscapeStr(fr.Format ?? "") + "\"" +
+                            ", \"volume_mm3\": " + fr.VolumeMm3.ToString("0.###", Inv) +
+                            ", \"bbox_sorted_mm\": [" + fb[0].ToString("0.###", Inv) + ", " +
+                            fb[1].ToString("0.###", Inv) + ", " + fb[2].ToString("0.###", Inv) + "]" +
+                            ", \"closed_solid\": " + (fr.ClosedSolid ? "true" : "false") +
+                            ", \"downgraded_from_step\": " + (fr.DowngradedFromStep ? "true" : "false") +
+                            ", \"file_bytes\": " + fr.FileBytes.ToString(Inv) + "}");
+                    }
+
+                    // ---- spec / params session tools (P7 read+write halves) --
+                    case "parse_spec":
+                    {
+                        string specJson3 = GetString(args, "spec_json");
+                        var pr3 = Generation.SpecParser.Parse(specJson3);
+                        // the tool itself succeeded — validity is the PAYLOAD (dry-run lint).
+                        return Envelope(true, null, "{\"valid\": " + (pr3.Success ? "true" : "false") +
+                            ", \"errors\": " + JsonStringArray(pr3.Errors) +
+                            ", \"warnings\": " + JsonStringArray(pr3.Warnings) +
+                            ", \"params_summary\": \"" +
+                            EscapeStr(pr3.Params != null ? pr3.Params.ToString().Replace("\"", "'") : "") + "\"}");
+                    }
+                    case "get_parameters":
+                    {
+                        var sc = Mcp.SessionContext.Instance;
+                        if (sc.Params == null)
+                            return Envelope(false,
+                                "no session parameters (params exist only after generate_phone/generate_phone_from_spec/set_parameters)", null);
+                        return Envelope(true, null, Generation.PhoneParametersJsonWriter.ToJson(sc.Params));
+                    }
+                    case "set_parameters":
+                    {
+                        var sc = Mcp.SessionContext.Instance;
+                        if (sc.Params == null)
+                            return Envelope(false,
+                                "no session parameters to patch (call generate_phone/generate_phone_from_spec first)", null);
+                        string patchJson = GetString(args, "spec_patch");
+                        // Deep-copy the baseline via the round-trip writer so a REJECTED patch can
+                        // never corrupt the live session params (Parse mutates its baseline).
+                        var baseCopy = Generation.SpecParser.Parse(
+                            Generation.PhoneParametersJsonWriter.ToJson(sc.Params));
+                        if (!baseCopy.Success)
+                            return Envelope(false, "internal: baseline round-trip failed: " +
+                                string.Join("; ", baseCopy.Errors.ToArray()), null);
+                        var pr4 = Generation.SpecParser.Parse(patchJson, baseCopy.Params);
+                        if (!pr4.Success)
+                            return Envelope(false, "invalid patch: " + string.Join("; ", pr4.Errors.ToArray()), null);
+                        string stage3 = args.ContainsKey("stop_at_stage") ? GetString(args, "stop_at_stage") : null;
+                        string genErr3 = sc.GeneratePhone(pr4.Params, stage3);
+                        if (genErr3 != null) return Envelope(false, genErr3, null);
+                        return Envelope(true, null, "{\"generated\": true, \"stopped_at\": " +
+                            (stage3 == null ? "null" : "\"" + EscapeStr(stage3) + "\"") +
+                            ", \"params\": \"" + pr4.Params.ToString().Replace("\"", "'") + "\"" +
+                            ", \"warnings\": " + JsonStringArray(pr4.Warnings) + "}");
+                    }
+
+                    // ---- session binding -------------------------------------
+                    case "rebind_active_body":
+                    {
+                        var sc = Mcp.SessionContext.Instance;
+                        string bindErr2;
+                        if (!sc.BindActiveBody(out bindErr2))
+                            return Envelope(false, "rebind failed: " + (bindErr2 ?? "(no reason)"), null);
+                        return Envelope(true, null, "{\"bound\": true, \"body_name\": \"" +
+                            EscapeStr(sc.Body != null ? (sc.Body.Name ?? "") : "") + "\"" +
+                            ", \"feature_counts\": " + FeatureCountsJson(sc.Graph) + "}");
+                    }
+                    case "import_step":
+                    {
+                        string stepPath = GetString(args, "path");
+                        var ir = StepImportService.ImportAndExtract(stepPath);
+                        if (ir == null || !ir.Success || ir.ImportedBody == null)
+                            return Envelope(false, "import failed: " +
+                                (ir != null ? (ir.ErrorMessage ?? "(no message)") : "(null result)"), null);
+                        // MUST rebind explicitly: McpServer's auto-bind only fires when session.Body
+                        // is null — without this, later mod tools keep mutating the STALE old body.
+                        string ibErr = Mcp.SessionContext.Instance.BindBody(
+                            ir.ImportedBody, ir.ExtractedGraph, stepPath);
+                        if (ibErr != null) return Envelope(false, ibErr, null);
+                        return Envelope(true, null, "{\"imported\": true, \"path\": \"" + EscapeStr(stepPath) + "\"" +
+                            ", \"body_name\": \"" + EscapeStr(ir.ImportedBody.Name ?? "") + "\"" +
+                            ", \"feature_counts\": " + FeatureCountsJson(ir.ExtractedGraph) +
+                            ", \"note\": \"opened a NEW document; previously open documents remain\"}");
+                    }
+
+                    // ---- CAE from-scratch generators -------------------------
+                    case "generate_tensile_specimen":
+                    {
+                        string standard = GetString(args, "standard");
+                        Models.TensileTest.ASTMSpecimenType stdType;
+                        try
+                        {
+                            stdType = (Models.TensileTest.ASTMSpecimenType)Enum.Parse(
+                                typeof(Models.TensileTest.ASTMSpecimenType), standard.Trim(), true);
+                        }
+                        catch
+                        {
+                            return Envelope(false, "unknown standard '" + standard +
+                                "' (e.g. ASTM_E8_Standard, ASTM_D638_TypeI, ISO_6892_1, ASTM_D3039, ASTM_D5766_OHT, Custom)", null);
+                        }
+                        var spParams = new TensileTest.ASTMSpecimenFactory().GetDefaultParameters(stdType);
+                        if (args.ContainsKey("overrides") && args["overrides"] is Dictionary<string, object> ovr)
+                            ApplySpecimenOverrides(spParams, ovr);
+                        Part tPart = ResolveActivePart(true);
+                        if (tPart == null)
+                            return Envelope(false, "no active part and could not create a document", null);
+                        var preBodies = new HashSet<DesignBody>(
+                            ConformalMesh.ConformalMeshService.CollectBodies(tPart, null));
+                        var specimen = new TensileTest.SpecimenModelingService()
+                            .CreateTensileSpecimen(tPart, spParams);
+                        if (specimen == null)
+                            return Envelope(false, "specimen creation returned null", null);
+                        // bind the SPECIMEN (not a grip jaw) so graph/mod/measure tools target it.
+                        string tbErr = Mcp.SessionContext.Instance.BindBody(specimen, null, null);
+                        if (tbErr != null) return Envelope(false, tbErr, null);
+                        return Envelope(true, null, "{\"generated\": true, \"standard\": \"" +
+                            EscapeStr(stdType.ToString()) + "\"" +
+                            ", \"specimen_body\": \"" + EscapeStr(specimen.Name ?? "") + "\"" +
+                            ", \"bodies_created\": " + JsonStringArray(NewBodyNames(tPart, preBodies)) +
+                            ", \"params\": \"" + EscapeStr(spParams.ToString().Replace("\"", "'")) + "\"}");
+                    }
+                    case "generate_laminate":
+                    {
+                        double lamW = GetDouble(args, "width_mm");
+                        double lamL = GetDouble(args, "length_mm");
+                        string dirStr = args.ContainsKey("stacking_direction")
+                            ? GetString(args, "stacking_direction") : "Z";
+                        Models.Laminate.StackingDirection lamDir;
+                        try
+                        {
+                            lamDir = (Models.Laminate.StackingDirection)Enum.Parse(
+                                typeof(Models.Laminate.StackingDirection), dirStr.Trim(), true);
+                        }
+                        catch { return Envelope(false, "stacking_direction must be X|Y|Z", null); }
+                        var lamP = new Models.Laminate.RectangularLaminateParameters
+                        { WidthMm = lamW, LengthMm = lamL, Direction = lamDir };
+                        lamP.Layers = ParseLayers(args, "layers");
+                        string lamErr;
+                        // the service does NOT call Validate — the wrapper must.
+                        if (!lamP.Validate(out lamErr)) return Envelope(false, lamErr, null);
+                        Part lamPart = ResolveActivePart(true);
+                        if (lamPart == null)
+                            return Envelope(false, "no active part and could not create a document", null);
+                        var lamBodies = new Laminate.RectangularLaminateService()
+                            .CreateRectangularLaminate(lamPart, lamP);
+                        if (lamBodies == null || lamBodies.Count == 0)
+                            return Envelope(false, "laminate creation returned no bodies", null);
+                        string lamBindErr = Mcp.SessionContext.Instance.BindBody(lamBodies[0], null, null);
+                        if (lamBindErr != null) return Envelope(false, lamBindErr, null);
+                        var lamNames = new List<string>();
+                        foreach (var b in lamBodies) lamNames.Add(b.Name ?? "(unnamed)");
+                        return Envelope(true, null, "{\"generated\": true, \"bodies_created\": " +
+                            JsonStringArray(lamNames) +
+                            ", \"total_thickness_mm\": " + lamP.GetTotalThicknessMm().ToString("0.###", Inv) +
+                            ", \"interfaces\": " + (lamBodies.Count - 1).ToString(Inv) + "}");
+                    }
+
+                    // ---- CAE mutators on existing bodies ---------------------
+                    case "laminate_body":
+                    {
+                        DesignBody lbTarget = designBody;
+                        if (args.ContainsKey("body_name"))
+                        {
+                            string lbName = GetString(args, "body_name");
+                            lbTarget = ResolveBodyByName(designBody.Parent as Part, lbName);
+                            if (lbTarget == null) return Envelope(false, "body not found: " + lbName, null);
+                        }
+                        var slP = new Models.Laminate.SolidLaminateParameters();
+                        slP.Layers = ParseLayers(args, "layers");
+                        slP.DeleteOriginalBody = !args.ContainsKey("delete_original") || GetBool(args, "delete_original");
+                        string slErr;
+                        if (!slP.Validate(out slErr)) return Envelope(false, slErr, null);
+                        var slSvc = new Laminate.SolidLaminateService();
+                        var slA = slSvc.AnalyzeSolid(lbTarget);
+                        if (slA == null || !slA.IsValid)
+                            return Envelope(false, "solid analysis failed: " +
+                                (slA != null ? (slA.ErrorMessage ?? "(no message)") : "(null)"), null);
+                        double slSum = slP.GetTotalThicknessMm();
+                        double slTol = Math.Max(0.02, slA.ThicknessMm * 0.01);
+                        if (Math.Abs(slSum - slA.ThicknessMm) > slTol)
+                            return Envelope(false, string.Format(Inv,
+                                "layer thickness sum {0:0.###}mm != detected body thickness {1:0.###}mm",
+                                slSum, slA.ThicknessMm), null);
+                        // stale-session guard runs in finally: the service deletes the source
+                        // BEFORE slicing, so a mid-slice throw must still rebind the session.
+                        List<DesignBody> plies = null;
+                        try
+                        {
+                            plies = slSvc.CreateSolidLaminate(lbTarget.Parent as Part, lbTarget, slA, slP);
+                        }
+                        finally
+                        {
+                            if (designBody.IsDeleted)
+                            { string slIgn; Mcp.SessionContext.Instance.BindActiveBody(out slIgn); }
+                        }
+                        var plyNames = new List<string>();
+                        if (plies != null) foreach (var b in plies) plyNames.Add(b.Name ?? "(unnamed)");
+                        return Envelope(true, null, "{\"layers_created\": " + JsonStringArray(plyNames) +
+                            ", \"detected_thickness_mm\": " + slA.ThicknessMm.ToString("0.###", Inv) +
+                            ", \"stacking_direction\": [" + slA.StackingNormal.X.ToString("0.###", Inv) + ", " +
+                            slA.StackingNormal.Y.ToString("0.###", Inv) + ", " +
+                            slA.StackingNormal.Z.ToString("0.###", Inv) + "]}");
+                    }
+                    case "cut_void":
+                    {
+                        string shapeStr = GetString(args, "shape");
+                        VoidCut.CutterShape cvShape;
+                        try
+                        {
+                            cvShape = (VoidCut.CutterShape)Enum.Parse(
+                                typeof(VoidCut.CutterShape), shapeStr.Trim(), true);
+                        }
+                        catch { return Envelope(false, "shape must be Cuboid|Cylinder|Sphere", null); }
+                        string modeStr = GetString(args, "mode");
+                        VoidCut.BooleanMode cvMode;
+                        try
+                        {
+                            cvMode = (VoidCut.BooleanMode)Enum.Parse(
+                                typeof(VoidCut.BooleanMode), modeStr.Trim(), true);
+                        }
+                        catch { return Envelope(false, "mode must be Subtract|Unite|Intersect", null); }
+                        double cvD1 = GetDouble(args, "dim1_mm");
+                        double cvD2 = GetDoubleOrDefault(args, "dim2_mm", 0.0);
+                        double cvD3 = GetDoubleOrDefault(args, "dim3_mm", 0.0);
+                        if (cvD1 <= 0) return Envelope(false, "dim1_mm must be > 0", null);
+                        if (cvShape == VoidCut.CutterShape.Cuboid && (cvD2 <= 0 || cvD3 <= 0))
+                            return Envelope(false,
+                                "Cuboid needs dim1_mm(width) dim2_mm(height) dim3_mm(depth) all > 0", null);
+                        if (cvShape == VoidCut.CutterShape.Cylinder && cvD2 <= 0)
+                            return Envelope(false,
+                                "Cylinder needs dim1_mm(RADIUS) and dim2_mm(height) > 0", null);
+                        double[] cvPos = GetDoubleArray(args, "position_mm", 3);
+                        double cvOff = GetDoubleOrDefault(args, "offset_mm", 0.0);
+                        bool cvNS = args.ContainsKey("create_named_selection")
+                            && GetBool(args, "create_named_selection");
+                        Part cvPart = designBody.Parent as Part;
+                        var cvTargets = new List<DesignBody>();
+                        if (args.ContainsKey("target_body_names")
+                            && args["target_body_names"] is List<object> cvTn && cvTn.Count > 0)
+                        {
+                            foreach (var t in cvTn)
+                            {
+                                var tb = ResolveBodyByName(cvPart, t != null ? t.ToString() : null);
+                                if (tb == null) return Envelope(false, "target body not found: " + t, null);
+                                cvTargets.Add(tb);
+                            }
+                        }
+                        else cvTargets.Add(designBody);
+                        VoidCut.VoidCutResult cvRes = null;
+                        try
+                        {
+                            cvRes = VoidCut.VoidCutService.ExecuteWithShape(cvPart, cvShape,
+                                cvD1, cvD2, cvD3, cvPos[0], cvPos[1], cvPos[2],
+                                cvTargets, cvMode, cvOff, true, cvNS, true);
+                        }
+                        finally
+                        {
+                            // stale-session guard: Subtract can fully consume the session body —
+                            // rebind even on the exception path (finally) so the session heals.
+                            if (designBody.IsDeleted)
+                            { string cvIgn; Mcp.SessionContext.Instance.BindActiveBody(out cvIgn); }
+                        }
+                        if (cvRes == null) return Envelope(false, "cut_void returned null", null);
+                        // The service counts a THROWN Boolean as SKIPPED (FailedCount is never
+                        // incremented on this path) — gate success on SkippedCount.
+                        bool cvOk = cvRes.SkippedCount == 0 && cvRes.SubtractedCount > 0;
+                        string cvPayload = "{\"processed\": " + cvRes.SubtractedCount.ToString(Inv) +
+                            ", \"skipped\": " + cvRes.SkippedCount.ToString(Inv) +
+                            ", \"volume_before_mm3\": " + cvRes.TotalVolumeBeforeMm3.ToString("0.###", Inv) +
+                            ", \"volume_after_mm3\": " + cvRes.TotalVolumeAfterMm3.ToString("0.###", Inv) +
+                            ", \"named_selections\": " + cvRes.NamedSelectionsCreated.ToString(Inv) +
+                            ", \"log\": " + JsonStringArray(cvRes.Log) + "}";
+                        return Envelope(cvOk, cvOk ? null
+                            : ("cut_void: " + cvRes.SkippedCount + " skipped(failed) / " +
+                               cvRes.SubtractedCount + " processed - see log"), cvPayload);
+                    }
+                    case "simplify_bodies":
+                    {
+                        string simKw = GetString(args, "keyword");
+                        string simModeStr = GetString(args, "mode");
+                        Models.Simplify.SimplifyMode simMode;
+                        try
+                        {
+                            simMode = (Models.Simplify.SimplifyMode)Enum.Parse(
+                                typeof(Models.Simplify.SimplifyMode), simModeStr.Trim(), true);
+                        }
+                        catch { return Envelope(false, "mode must be BoundingBox|SolidToShell", null); }
+                        // stale-session guard runs in finally: the keyword can match (and delete)
+                        // the session body, including on a partial-failure exception path.
+                        Models.Simplify.SimplifyResult simRes = null;
+                        try
+                        {
+                            simRes = Simplify.SimplifyService.Execute(
+                                designBody.Parent as Part, simKw, simMode);
+                        }
+                        finally
+                        {
+                            if (designBody.IsDeleted)
+                            { string simIgn; Mcp.SessionContext.Instance.BindActiveBody(out simIgn); }
+                        }
+                        if (simRes == null) return Envelope(false, "simplify returned null", null);
+                        bool simOk = simRes.FailedCount == 0;
+                        string simPayload = "{\"matched\": " + simRes.MatchedCount.ToString(Inv) +
+                            ", \"processed\": " + simRes.ProcessedCount.ToString(Inv) +
+                            ", \"failed\": " + simRes.FailedCount.ToString(Inv) +
+                            ", \"log\": " + JsonStringArray(simRes.Log) + "}";
+                        return Envelope(simOk, simOk ? null
+                            : ("simplify: " + simRes.FailedCount + " body(ies) failed - see log"), simPayload);
+                    }
+                    case "create_bending_fixture":
+                    {
+                        DesignBody bfTarget = designBody;
+                        if (args.ContainsKey("body_name"))
+                        {
+                            string bfName = GetString(args, "body_name");
+                            bfTarget = ResolveBodyByName(designBody.Parent as Part, bfName);
+                            if (bfTarget == null) return Envelope(false, "body not found: " + bfName, null);
+                        }
+                        var bfSvc = new BendingFixture.BendingFixtureService();
+                        var bfP = new Models.BendingFixture.BendingFixtureParameters();
+                        if (args.ContainsKey("span_mm"))
+                        { bfP.UseSpanRatio = false; bfP.SpanMm = GetDouble(args, "span_mm"); }
+                        else if (args.ContainsKey("span_ratio"))
+                        { bfP.UseSpanRatio = true; bfP.SpanRatio = GetDouble(args, "span_ratio"); }
+                        bfP.SupportDiameter = GetDoubleOrDefault(args, "support_diameter_mm", bfP.SupportDiameter);
+                        bfP.LoadingNoseDiameter = GetDoubleOrDefault(args, "nose_diameter_mm", bfP.LoadingNoseDiameter);
+                        // MANDATORY pre-step: DetectDirections populates ComputedSpanMm/Body*Mm —
+                        // the DesignBody overload of CreateFixtures does NOT, and skipping it yields
+                        // degenerate geometry with no error.
+                        var bfBox = bfSvc.ComputeBoundingBox(bfTarget);
+                        bfSvc.DetectDirections(bfBox, bfP);
+                        string bfErr;
+                        if (!bfP.Validate(out bfErr)) return Envelope(false, bfErr, null);
+                        var fixtures = bfSvc.CreateFixtures(bfTarget.Parent as Part, bfTarget, bfP);
+                        var bfNames = new List<string>();
+                        if (fixtures != null) foreach (var b in fixtures) bfNames.Add(b.Name ?? "(unnamed)");
+                        return Envelope(true, null, "{\"bodies_created\": " + JsonStringArray(bfNames) +
+                            ", \"span_mm\": " + bfP.ComputedSpanMm.ToString("0.###", Inv) +
+                            ", \"span_axis\": \"" + bfP.SpanDirection.ToString() + "\"" +
+                            ", \"loading_axis\": \"" + bfP.LoadingDirection.ToString() + "\"}");
+                    }
+
+                    // ---- read-only assembly inspection -----------------------
+                    case "detect_contacts":
+                    {
+                        double dcTol = GetDoubleOrDefault(args, "tolerance_mm", 0.1);
+                        string dcKw = args.ContainsKey("keyword") ? GetString(args, "keyword") : null;
+                        bool dcPl = !args.ContainsKey("detect_planar") || GetBool(args, "detect_planar");
+                        bool dcCy = !args.ContainsKey("detect_cylindrical") || GetBool(args, "detect_cylindrical");
+                        var dcBodies = ConformalMesh.ConformalMeshService.CollectBodies(
+                            designBody.Parent as Part, dcKw);
+                        if (dcBodies == null || dcBodies.Count < 2)
+                            return Envelope(true, null,
+                                "{\"pairs\": [], \"count\": 0, \"note\": \"fewer than 2 bodies matched\"}");
+                        var dcPairs = ConformalMesh.ConformalMeshService.DetectInterfaces(
+                            dcBodies, dcTol, dcPl, dcCy);
+                        var dcSb = new StringBuilder("[");
+                        for (int i = 0; i < dcPairs.Count; i++)
+                        {
+                            var pr5 = dcPairs[i];
+                            if (i > 0) dcSb.Append(", ");
+                            dcSb.Append("{\"body_a\": \"")
+                                .Append(EscapeStr(pr5.BodyA != null ? (pr5.BodyA.Name ?? "") : "")).Append("\"");
+                            dcSb.Append(", \"body_b\": \"")
+                                .Append(EscapeStr(pr5.BodyB != null ? (pr5.BodyB.Name ?? "") : "")).Append("\"");
+                            dcSb.Append(", \"type\": \"")
+                                .Append(pr5.Type.ToString().ToLowerInvariant()).Append("\"");
+                            dcSb.Append(", \"area_mm2\": ").Append(pr5.TotalAreaMm2.ToString("0.###", Inv));
+                            dcSb.Append("}");
+                        }
+                        dcSb.Append("]");
+                        return Envelope(true, null, "{\"pairs\": " + dcSb.ToString() +
+                            ", \"count\": " + dcPairs.Count.ToString(Inv) + "}");
+                    }
+
                     default:
                         return Envelope(false, "Unknown toolName: " + toolName, null);
                 }
@@ -497,6 +939,129 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             }
             sb.Append("], \"count\": ").Append(ids.Count.ToString(Inv)).Append("}");
             return sb.ToString();
+        }
+
+        // ----------------------------------------------------------------
+        // CAE tool-surface helpers (part/body resolution + payload builders)
+        // ----------------------------------------------------------------
+
+        /// <summary>Active MainPart; optionally create a fresh document when none is open.</summary>
+        private static Part ResolveActivePart(bool createIfNone)
+        {
+            var win = Window.ActiveWindow;
+            if ((win == null || win.Document == null) && createIfNone)
+            {
+                Document.Create();
+                win = Window.ActiveWindow;
+            }
+            return (win != null && win.Document != null) ? win.Document.MainPart : null;
+        }
+
+        /// <summary>Resolve a body by name (exact match first, then substring, both
+        /// case-insensitive), searching recursively through components.</summary>
+        private static DesignBody ResolveBodyByName(Part part, string name)
+        {
+            if (part == null || string.IsNullOrEmpty(name)) return null;
+            var all = ConformalMesh.ConformalMeshService.CollectBodies(part, null);
+            foreach (var b in all)
+                if (string.Equals(b.Name, name, StringComparison.OrdinalIgnoreCase)) return b;
+            foreach (var b in all)
+                if (b.Name != null && b.Name.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0) return b;
+            return null;
+        }
+
+        /// <summary>Bodies present now but not in the pre-call snapshot (generator payloads).</summary>
+        private static List<string> NewBodyNames(Part part, HashSet<DesignBody> before)
+        {
+            var names = new List<string>();
+            foreach (var b in ConformalMesh.ConformalMeshService.CollectBodies(part, null))
+                if (!before.Contains(b)) names.Add(b.Name ?? "(unnamed)");
+            return names;
+        }
+
+        /// <summary>Parse a [{name?, thickness_mm}] array into laminate layer definitions.
+        /// Missing names default to Layer_i. Throws ArgumentException (→ error envelope).</summary>
+        private static List<Models.Laminate.LaminateLayerDefinition> ParseLayers(
+            Dictionary<string, object> args, string key)
+        {
+            if (!args.ContainsKey(key) || !(args[key] is List<object> arr) || arr.Count == 0)
+                throw new ArgumentException("missing/empty required array field: " + key);
+            var layers = new List<Models.Laminate.LaminateLayerDefinition>();
+            int idx = 0;
+            foreach (var item in arr)
+            {
+                idx++;
+                var o = item as Dictionary<string, object>;
+                if (o == null)
+                    throw new ArgumentException(key + "[" + idx + "] must be an object {name, thickness_mm}");
+                string name = (o.ContainsKey("name") && o["name"] != null)
+                    ? o["name"].ToString() : ("Layer_" + idx);
+                double t = GetDouble(o, "thickness_mm");
+                layers.Add(new Models.Laminate.LaminateLayerDefinition(name, t));
+            }
+            return layers;
+        }
+
+        /// <summary>Apply snake_case numeric/bool overrides onto factory-default specimen params.
+        /// Unknown keys throw (clear LLM feedback) rather than being silently ignored.</summary>
+        private static void ApplySpecimenOverrides(
+            Models.TensileTest.TensileSpecimenParameters p, Dictionary<string, object> ov)
+        {
+            foreach (var kv in ov)
+            {
+                switch (kv.Key.Trim().ToLowerInvariant())
+                {
+                    case "gauge_length_mm": p.GaugeLength = GetDouble(ov, kv.Key); break;
+                    case "gauge_width_mm": p.GaugeWidth = GetDouble(ov, kv.Key); break;
+                    case "thickness_mm": p.Thickness = GetDouble(ov, kv.Key); break;
+                    case "grip_width_mm": p.GripWidth = GetDouble(ov, kv.Key); break;
+                    case "total_length_mm": p.TotalLength = GetDouble(ov, kv.Key); break;
+                    case "fillet_radius_mm": p.FilletRadius = GetDouble(ov, kv.Key); break;
+                    case "grip_length_mm": p.GripLength = GetDouble(ov, kv.Key); break;
+                    case "notch_depth_mm": p.NotchDepth = GetDouble(ov, kv.Key); break;
+                    case "notch_radius_mm": p.NotchRadius = GetDouble(ov, kv.Key); break;
+                    case "notch_angle_deg": p.NotchAngle = GetDouble(ov, kv.Key); break;
+                    case "is_double_notch": p.IsDoubleNotch = GetBool(ov, kv.Key); break;
+                    case "hole_diameter_mm": p.HoleDiameter = GetDouble(ov, kv.Key); break;
+                    case "is_elliptical_hole": p.IsEllipticalHole = GetBool(ov, kv.Key); break;
+                    case "hole_major_axis_mm": p.HoleMajorAxis = GetDouble(ov, kv.Key); break;
+                    case "hole_minor_axis_mm": p.HoleMinorAxis = GetDouble(ov, kv.Key); break;
+                    case "is_rectangular": p.IsRectangular = GetBool(ov, kv.Key); break;
+                    case "tab_length_mm": p.TabLength = GetDouble(ov, kv.Key); break;
+                    case "tab_thickness_mm": p.TabThickness = GetDouble(ov, kv.Key); break;
+                    default:
+                        throw new ArgumentException("unknown override key: " + kv.Key +
+                            " (expected e.g. gauge_length_mm, gauge_width_mm, thickness_mm, ...)");
+                }
+            }
+        }
+
+        private static string JsonStringArray(IEnumerable<string> items)
+        {
+            var sb = new StringBuilder("[");
+            bool first = true;
+            if (items != null)
+                foreach (var s in items)
+                {
+                    if (!first) sb.Append(", ");
+                    first = false;
+                    sb.Append("\"").Append(EscapeStr(s ?? "")).Append("\"");
+                }
+            sb.Append("]");
+            return sb.ToString();
+        }
+
+        private static string FeatureCountsJson(FeatureGraph g)
+        {
+            if (g == null) return "{}";
+            int holes = g.Holes != null ? g.Holes.Count : 0;
+            int bosses = g.Bosses != null ? g.Bosses.Count : 0;
+            int walls = g.Walls != null ? g.Walls.Count : 0;
+            int fillets = g.FilletChains != null ? g.FilletChains.Count : 0;
+            int slits = g.Slits != null ? g.Slits.Count : 0;
+            return "{\"holes\": " + holes.ToString(Inv) + ", \"bosses\": " + bosses.ToString(Inv) +
+                ", \"walls\": " + walls.ToString(Inv) + ", \"fillet_chains\": " + fillets.ToString(Inv) +
+                ", \"slits\": " + slits.ToString(Inv) + "}";
         }
 
         // ----------------------------------------------------------------

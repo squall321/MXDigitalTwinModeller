@@ -39,7 +39,21 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
         /// <summary>Parse a structured JSON spec into a validated PhoneParameters.</summary>
         public static ParseResult Parse(string specJson)
         {
-            var r = new ParseResult { Params = new PhoneParameters() };
+            return Parse(specJson, new PhoneParameters());
+        }
+
+        /// <summary>
+        /// Parse ONTO a baseline (PATCH semantics — the set_parameters channel): only the keys
+        /// present in the JSON change; everything else keeps the baseline's values, because Bind
+        /// already treats current Params values as the defaults. Two rules the caller must know:
+        ///   - LIST blocks (holes/ports/buttons/antenna_slits/pin_holes) are REPLACED wholesale
+        ///     when their key is supplied (cleared first — Bind appends), never merged per-item.
+        ///   - camera/grille are also replaced wholesale (Bind builds a fresh object).
+        /// The baseline instance is MUTATED — pass a private copy, not a live session object.
+        /// </summary>
+        public static ParseResult Parse(string specJson, PhoneParameters baseline)
+        {
+            var r = new ParseResult { Params = baseline ?? new PhoneParameters() };
             if (string.IsNullOrEmpty(specJson))
             { r.Errors.Add("spec JSON is empty"); return r; }
 
@@ -56,6 +70,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
             var obj = root as Dictionary<string, object>;
             if (obj == null) { r.Errors.Add("top-level spec must be a JSON object"); return r; }
 
+            // Patch semantics: a supplied list block REPLACES the baseline's list (Bind appends,
+            // so clear first). On a fresh baseline the lists are empty and this is a no-op.
+            ClearSuppliedLists(obj, r.Params);
             Bind(obj, r);
 
             // design-intent validation (Tier-1 guard) — same gate the MCP path uses.
@@ -269,6 +286,25 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
                     r.Warnings.Add("unknown spec key ignored: '" + k + "'");
         }
 
+        /// <summary>Replace-not-append: clear each baseline list whose key (or alias) the patch
+        /// supplies, mirroring the alias sets Bind consults for those blocks.</summary>
+        private static void ClearSuppliedLists(Dictionary<string, object> o, PhoneParameters p)
+        {
+            if (HasKey(o, "holes")) p.Holes.Clear();
+            if (HasKey(o, "ports")) p.Ports.Clear();
+            if (HasKey(o, "buttons")) p.Buttons.Clear();
+            if (HasKey(o, "antenna_slits", "antennas")) p.AntennaSlits.Clear();
+            if (HasKey(o, "pin_holes", "pinholes")) p.PinHoles.Clear();
+        }
+
+        private static bool HasKey(Dictionary<string, object> o, params string[] keys)
+        {
+            foreach (var k in keys)
+                foreach (var kv in o)
+                    if (string.Equals(kv.Key, k, StringComparison.OrdinalIgnoreCase)) return true;
+            return false;
+        }
+
         // -------------------------------------------------------------------
         // Typed getters (case-insensitive, synonym-tolerant). Each marks every
         // alias it consults as 'seen' so the unknown-key warning stays accurate.
@@ -292,9 +328,11 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Gen
             object v;
             if (!TryGet(o, seen, out v, keys) || v == null) return dflt;
             if (v is double) return (double)v;
-            // tolerate a numeric string
+            // tolerate a numeric string — but on net472 TryParse also accepts "NaN"/"Infinity",
+            // which sail through Validate's </> range checks and later break the JSON writer.
             double d;
-            if (v is string && double.TryParse((string)v, NumberStyles.Any, Inv, out d)) return d;
+            if (v is string && double.TryParse((string)v, NumberStyles.Any, Inv, out d)
+                && !double.IsNaN(d) && !double.IsInfinity(d)) return d;
             return dflt;
         }
 

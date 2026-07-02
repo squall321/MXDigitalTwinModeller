@@ -93,6 +93,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Mcp
 
                 lock (_gate)
                 {
+                    // Params/Handles describe the GENERATED phone; when the session re-points at a
+                    // DIFFERENT body they'd be stale lies (validate_body would march phone dims on
+                    // foreign geometry) — drop them. Re-binding the same body keeps them.
+                    if (!ReferenceEquals(Body, body)) { Params = null; Handles = null; }
                     Body = body;
                     Graph = new FeatureExtractor().Extract(body);
                 }
@@ -101,12 +105,40 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Mcp
             catch (Exception ex) { error = ex.Message; return false; }
         }
 
-        /// <summary>Re-extract the graph after a successful mutation. API-thread only.</summary>
+        /// <summary>
+        /// Explicitly bind a KNOWN body into the session (import_step / CAE generators like
+        /// generate_tensile_specimen), optionally reusing a pre-extracted graph. Clears Params/
+        /// Handles when the body actually changes (they describe the generated phone only).
+        /// API-thread only. Returns null on success, else an error message.
+        /// </summary>
+        public string BindBody(DesignBody body, FeatureGraph graph, string sourcePath)
+        {
+            if (body == null) return "BindBody: body is null";
+            try
+            {
+                lock (_gate)
+                {
+                    if (!ReferenceEquals(Body, body)) { Params = null; Handles = null; }
+                    Body = body;
+                    Graph = graph ?? new FeatureExtractor().Extract(body);
+                    if (sourcePath != null) SourcePath = sourcePath;
+                }
+                return null;
+            }
+            catch (Exception ex) { return "BindBody exception: " + ex.Message; }
+        }
+
+        /// <summary>Re-extract the graph after a successful mutation. API-thread only.
+        /// A DELETED body (a mutator legitimately consumed it, e.g. cut_void Subtract) must not
+        /// be extracted — that would throw and replace the tool's successful result with an
+        /// error. Unbind instead; the next call's stale-bind check re-resolves.</summary>
         public void RefreshGraph()
         {
             lock (_gate)
             {
-                if (Body != null) Graph = new FeatureExtractor().Extract(Body);
+                if (Body == null) return;
+                if (Body.IsDeleted) { Body = null; Graph = null; Params = null; Handles = null; return; }
+                Graph = new FeatureExtractor().Extract(Body);
             }
         }
 

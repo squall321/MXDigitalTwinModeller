@@ -158,33 +158,55 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Mcp
 
         /// <summary>Marshal the Dispatch call onto the API thread (read-only: no WriteBlock;
         /// mutating: WriteBlock inside the marshalled work + graph refresh on success).</summary>
+        /// <summary>C2: tools that do not mutate geometry — skip the RefreshGraph after dispatch.
+        /// Keep in sync with LlmToolDispatcher.NoBodyTools (C1) and SelfBindTools (C3).</summary>
+        private static readonly System.Collections.Generic.HashSet<string> ReadOnlyTools =
+            new System.Collections.Generic.HashSet<string>
+        {
+            "get_feature_graph", "find_features_by_type",
+            "validate_body", "measure_body", "fea_freeze", "detect_contacts",
+        };
+
+        /// <summary>C3: tools that build/bind their own session body (or need none at all) —
+        /// skip the pre-bind AND the RefreshGraph; Dispatch receives designBody = null.</summary>
+        private static readonly System.Collections.Generic.HashSet<string> SelfBindTools =
+            new System.Collections.Generic.HashSet<string>
+        {
+            "generate_phone", "generate_phone_from_spec", "set_camera_height",
+            "parse_spec", "get_parameters", "set_parameters",
+            "rebind_active_body", "import_step",
+            "generate_tensile_specimen", "generate_laminate",
+        };
+
         private string ExecuteTool(string toolName, string argsJson)
         {
-            bool readOnly = (toolName == "get_feature_graph" || toolName == "find_features_by_type");
-            // generate_phone / set_camera_height BUILD the session body themselves
-            // (SessionContext.GeneratePhone) — no pre-existing body to bind.
-            bool selfBinds = (toolName == "generate_phone" || toolName == "generate_phone_from_spec"
-                || toolName == "set_camera_height");
+            bool readOnly = ReadOnlyTools.Contains(toolName);
+            bool selfBinds = SelfBindTools.Contains(toolName);
 
             return ApiThreadMarshaller.Run(delegate
             {
                 var session = SessionContext.Instance;
                 string result = null;
                 string bindErr = null;
+                bool dispatched = false;
 
                 // EVERYTHING that touches the body runs inside ONE WriteBlock. Bind walks
                 // Component.Content (REQUIRES WriteBlock). Generation tools skip the bind —
-                // they create the body via SessionContext.GeneratePhone.
+                // they create the body via SessionContext.GeneratePhone. A DELETED session body
+                // (a prior mutator consumed it) counts as unbound, else every later call would
+                // dispatch a dead DocObject.
                 WriteBlock.ExecuteTask("MCP " + toolName, new Task(delegate
                 {
-                    if (!selfBinds && session.Body == null && !session.BindActiveBody(out bindErr))
+                    if (!selfBinds && (session.Body == null || session.Body.IsDeleted)
+                        && !session.BindActiveBody(out bindErr))
                         return;
+                    dispatched = true;
                     result = LlmToolDispatcher.Dispatch(
                         selfBinds ? null : session.Body, session.Graph, toolName, argsJson);
                     if (!readOnly && !selfBinds) session.RefreshGraph();
                 }));
 
-                if (!selfBinds && session.Body == null)
+                if (!dispatched)
                     return LlmToolDispatcherEnvelopeError("no active body: " + (bindErr ?? "bind failed"));
                 return result;
             });

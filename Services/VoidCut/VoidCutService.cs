@@ -160,7 +160,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.VoidCut
                         if (offsetM > 0)
                             ScaleBody(cutterCopy, cutterBody, offsetM);
 
-                        ApplyBoolean(targetBody, cutterCopy, mode);
+                        ApplyBoolean(part, targetBody, cutterCopy, mode);
                         result.SubtractedCount++;
                         result.Log.Add(string.Format("  [OK] {0}", bodyName));
 
@@ -523,20 +523,41 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.VoidCut
 
         #region Boolean Operations
 
-        private static void ApplyBoolean(DesignBody target, Body cutterCopy, BooleanMode mode)
+        private static void ApplyBoolean(Part part, DesignBody target, Body cutterCopy, BooleanMode mode)
         {
-            var tools = new Body[] { cutterCopy };
-            switch (mode)
+            // target.Shape belongs to a DesignBody but cutterCopy is a raw unowned Body — a mixed
+            // Boolean throws "Some modeler bodies belong to design bodies and some do not."
+            // Wrap the copy in a temp DesignBody first (the proven ModificationService idiom),
+            // then delete the wrapper (the Boolean usually consumes it).
+            DesignBody toolDb = null;
+            Body[] tools;
+            if (part != null)
             {
-                case BooleanMode.Unite:
-                    target.Shape.Unite(tools);
-                    break;
-                case BooleanMode.Intersect:
-                    target.Shape.Intersect(tools);
-                    break;
-                default:
-                    target.Shape.Subtract(tools);
-                    break;
+                toolDb = DesignBody.Create(part, "_voidcut_tool", cutterCopy);
+                tools = new Body[] { toolDb.Shape };
+            }
+            else
+            {
+                tools = new Body[] { cutterCopy };
+            }
+            try
+            {
+                switch (mode)
+                {
+                    case BooleanMode.Unite:
+                        target.Shape.Unite(tools);
+                        break;
+                    case BooleanMode.Intersect:
+                        target.Shape.Intersect(tools);
+                        break;
+                    default:
+                        target.Shape.Subtract(tools);
+                        break;
+                }
+            }
+            finally
+            {
+                if (toolDb != null) { try { toolDb.Delete(); } catch { } }
             }
         }
 

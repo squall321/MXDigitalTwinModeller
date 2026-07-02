@@ -282,6 +282,7 @@
     <Compile Include="Services\ReverseEngineer\Generation\ValidationService.cs" />
     <Compile Include="Services\ReverseEngineer\Generation\FeaFreezeService.cs" />
     <Compile Include="Services\ReverseEngineer\Generation\SpecParser.cs" />
+    <Compile Include="Services\ReverseEngineer\Generation\PhoneParametersJsonWriter.cs" />
     <Compile Include="Services\ReverseEngineer\ModelScale.cs" />
     <Compile Include="Services\ReverseEngineer\FaceClassifier.cs" />
     <Compile Include="Services\ReverseEngineer\AdjacencyBuilder.cs" />

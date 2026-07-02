@@ -353,10 +353,194 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
 
                 new ToolDef(
                     "set_camera_height",
-                    "Change the camera bump height of the generated phone and regenerate. Edits the parametric source of truth so the body stays consistent with the design parameters.",
+                    "Change the camera bump height of the generated phone and regenerate. Edits the parametric source of truth so the body stays consistent with the design parameters. (Superseded by the generic set_parameters, kept for back-compat.)",
                     "{\"type\": \"object\", \"properties\": {" +
                       "\"height_mm\": {\"type\": \"number\", \"description\": \"New camera bump height (mm)\"}" +
                     "}, \"required\": [\"height_mm\"]}"),
+
+                // ---- kernel-truth inspection (P6/P8) -------------------------
+                new ToolDef(
+                    "validate_body",
+                    "Kernel-truth manufacturability check of the CURRENT body: closed-solid volume plus a " +
+                    "minimum-wall march when the body was generated in this session (the march samples the " +
+                    "generated-phone frame, so min_wall_mm is null for imported/CAE bodies - volume-only then). " +
+                    "Run this after a chain of modification tools to verify the result is still buildable.",
+                    "{\"type\": \"object\", \"properties\": {}, \"required\": []}"),
+
+                new ToolDef(
+                    "measure_body",
+                    "Measure the CURRENT body: volume_mm3, bbox_size_mm (sorted ascending - the same " +
+                    "orientation-invariant convention fea_freeze fingerprints use), and closed_solid. Use it " +
+                    "before/after an edit to reason about volume deltas, or to check parity with a freeze.",
+                    "{\"type\": \"object\", \"properties\": {}, \"required\": []}"),
+
+                new ToolDef(
+                    "fea_freeze",
+                    "Freeze the CURRENT body to an FEA-handoff file and return its kernel-truth fingerprint " +
+                    "(volume/bbox/closed) captured BEFORE the write. format 'scdocx' (default) is license-free " +
+                    "native SpaceClaim; 'step' auto-downgrades to scdocx under the ANSYS Student license " +
+                    "(downgraded_from_step:true in the result). SIDE EFFECT: the scdocx path saves the ACTIVE " +
+                    "document, retargeting its save path to out_path.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"out_path\": {\"type\": \"string\", \"description\": \"Absolute output path; extension is normalized to the format actually written\"}, " +
+                      "\"format\": {\"type\": \"string\", \"enum\": [\"scdocx\", \"step\"], \"description\": \"Default scdocx. step falls back to scdocx when the license refuses STEP export.\"}" +
+                    "}, \"required\": [\"out_path\"]}"),
+
+                // ---- spec / params session tools (P7 read+write halves) ------
+                new ToolDef(
+                    "parse_spec",
+                    "DRY-RUN lint of a phone spec WITHOUT creating any geometry or document: binds the same " +
+                    "spec_json generate_phone_from_spec takes and returns valid/errors/warnings (warnings " +
+                    "flag typo'd/unknown keys even when the spec passes). Iterate here until valid, then call " +
+                    "generate_phone_from_spec.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"spec_json\": {\"type\": \"string\", \"description\": \"A JSON object string - the same snake_case schema generate_phone_from_spec documents\"}" +
+                    "}, \"required\": [\"spec_json\"]}"),
+
+                new ToolDef(
+                    "get_parameters",
+                    "Return the CURRENT session PhoneParameters as a full JSON spec (snake_case keys, " +
+                    "round-trip compatible with parse_spec / generate_phone_from_spec / set_parameters). " +
+                    "This is the READ half of the parametric loop - inspect before editing. Errors when no " +
+                    "phone has been generated in this session.",
+                    "{\"type\": \"object\", \"properties\": {}, \"required\": []}"),
+
+                new ToolDef(
+                    "set_parameters",
+                    "PATCH any phone parameters and REGENERATE - the generic write half of the parametric " +
+                    "loop (supersedes set_camera_height). spec_patch is a JSON object with the same keys as " +
+                    "generate_phone_from_spec; ONLY supplied keys change. Rules: list blocks (holes/ports/" +
+                    "buttons/antenna_slits/pin_holes) and camera/grille objects are REPLACED wholesale when " +
+                    "supplied. Regeneration replays ALL stages from parameters - direct geometry edits made " +
+                    "with add_*/change_* tools are NOT preserved.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"spec_patch\": {\"type\": \"string\", \"description\": \"JSON object string; only the supplied keys are changed (e.g. {\\\"length_mm\\\": 160})\"}, " +
+                      "\"stop_at_stage\": {\"type\": \"string\", \"description\": \"Optional: HALT the regeneration after a stage (same semantics as generate_phone)\"}" +
+                    "}, \"required\": [\"spec_patch\"]}"),
+
+                // ---- session binding -----------------------------------------
+                new ToolDef(
+                    "rebind_active_body",
+                    "Re-point the session at the ACTIVE document's first body and re-extract its FeatureGraph. " +
+                    "Use after opening/switching documents: the automatic bind only fires when the session has " +
+                    "no body yet, so without this the tools keep editing the previously bound (stale) body.",
+                    "{\"type\": \"object\", \"properties\": {}, \"required\": []}"),
+
+                new ToolDef(
+                    "import_step",
+                    "Import a .stp/.step file via SpaceClaim's native translator into a NEW document, extract " +
+                    "its FeatureGraph, and bind it as the session body (subsequent tools then edit the import). " +
+                    "WARNING: interactive SpaceClaim sessions only - the STEP translator hangs behind a dialog " +
+                    "in /Headless mode. STEP IMPORT is not license-blocked on Student (only export is).",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"path\": {\"type\": \"string\", \"description\": \"Absolute path to a .stp/.step file\"}" +
+                    "}, \"required\": [\"path\"]}"),
+
+                // ---- CAE from-scratch generators -----------------------------
+                new ToolDef(
+                    "generate_tensile_specimen",
+                    "Generate a standard tensile/shear TEST SPECIMEN from scratch (plus grip jaws and named " +
+                    "faces/selections for the Mechanical handoff) in the active document. 26 standards: " +
+                    "ASTM_E8_Standard, ASTM_E8_SubSize, ISO_6892_1, ASTM_D638_TypeI..TypeV, ISO_527_2_Type1A/B, " +
+                    "ASTM_E602_VNotch/UNotch, ASTM_E338, ASTM_E292, ASTM_D5766_OHT, ASTM_D6484_OHC, " +
+                    "ASTM_D6742_FHT, ASTM_D5961_Bearing, ASTM_D3039, IPC_TM650_Tensile, IPC_TM650_PTHPull, " +
+                    "DMA_Tensile_Rectangle, DMA_Tensile_DogBone, ASTM_D5379_Iosipescu, ASTM_D7078_VNotchRailShear, " +
+                    "Custom. The session binds to the SPECIMEN body afterwards.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"standard\": {\"type\": \"string\", \"description\": \"One of the standard names above (e.g. ASTM_D638_TypeI)\"}, " +
+                      "\"overrides\": {\"type\": \"object\", \"description\": \"Optional dimension overrides in mm/deg: gauge_length_mm, gauge_width_mm, thickness_mm, grip_width_mm, total_length_mm, fillet_radius_mm, grip_length_mm, notch_depth_mm, notch_radius_mm, notch_angle_deg, is_double_notch, hole_diameter_mm, is_elliptical_hole, hole_major_axis_mm, hole_minor_axis_mm, is_rectangular, tab_length_mm, tab_thickness_mm\"}" +
+                    "}, \"required\": [\"standard\"]}"),
+
+                new ToolDef(
+                    "generate_laminate",
+                    "Generate an N-layer rectangular LAMINATE stack from scratch (individual conformal bodies " +
+                    "with coincident interfaces + automatic interface Named Selections) in the active document - " +
+                    "e.g. an OLED/adhesive/glass display stack for CAE. The session binds to the first layer.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"width_mm\": {\"type\": \"number\", \"description\": \"Plate width in mm (> 0)\"}, " +
+                      "\"length_mm\": {\"type\": \"number\", \"description\": \"Plate length in mm (> 0)\"}, " +
+                      "\"stacking_direction\": {\"type\": \"string\", \"enum\": [\"X\", \"Y\", \"Z\"], \"description\": \"Stack axis (default Z)\"}, " +
+                      "\"layers\": {\"type\": \"array\", \"description\": \"Bottom-up layer list\", \"items\": {\"type\": \"object\", \"properties\": {" +
+                        "\"name\": {\"type\": \"string\", \"description\": \"Layer/body name (default Layer_i)\"}, " +
+                        "\"thickness_mm\": {\"type\": \"number\", \"description\": \"Layer thickness in mm (> 0)\"}" +
+                      "}, \"required\": [\"thickness_mm\"]}}" +
+                    "}, \"required\": [\"width_mm\", \"length_mm\", \"layers\"]}"),
+
+                // ---- CAE mutators on existing bodies -------------------------
+                new ToolDef(
+                    "laminate_body",
+                    "Slice an EXISTING solid into laminate plies along its auto-detected thickness direction " +
+                    "(largest planar face pair), preserving the true outline (arcs, fillets, holes) - e.g. " +
+                    "'split this cover glass into 3 plies'. Layer thicknesses must sum to the detected body " +
+                    "thickness. DESTRUCTIVE when delete_original=true (default): the source body is removed.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"body_name\": {\"type\": \"string\", \"description\": \"Target body name (default: the session body)\"}, " +
+                      "\"layers\": {\"type\": \"array\", \"description\": \"Bottom-up ply list; thicknesses must sum to the body thickness\", \"items\": {\"type\": \"object\", \"properties\": {" +
+                        "\"name\": {\"type\": \"string\"}, " +
+                        "\"thickness_mm\": {\"type\": \"number\"}" +
+                      "}, \"required\": [\"thickness_mm\"]}}, " +
+                      "\"delete_original\": {\"type\": \"boolean\", \"description\": \"Remove the source solid after slicing (default true)\"}" +
+                    "}, \"required\": [\"layers\"]}"),
+
+                new ToolDef(
+                    "cut_void",
+                    "Create a parametric cutter primitive and Boolean it against target bodies - the numeric " +
+                    "swiss-army Boolean. shape 'Cuboid': dim1=width dim2=height dim3=depth; 'Cylinder': " +
+                    "dim1=RADIUS dim2=height (axis +Z); 'Sphere': dim1=RADIUS. position_mm is the cutter " +
+                    "center. mode Subtract removes material, Unite adds, Intersect keeps the overlap. " +
+                    "Reports volume before/after so the delta is checkable.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"shape\": {\"type\": \"string\", \"enum\": [\"Cuboid\", \"Cylinder\", \"Sphere\"]}, " +
+                      "\"dim1_mm\": {\"type\": \"number\", \"description\": \"Cuboid width | Cylinder RADIUS | Sphere RADIUS (mm)\"}, " +
+                      "\"dim2_mm\": {\"type\": \"number\", \"description\": \"Cuboid height | Cylinder height (mm)\"}, " +
+                      "\"dim3_mm\": {\"type\": \"number\", \"description\": \"Cuboid depth (mm)\"}, " +
+                      "\"position_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"Cutter center (X, Y, Z) in mm\"}, " +
+                      "\"mode\": {\"type\": \"string\", \"enum\": [\"Subtract\", \"Unite\", \"Intersect\"]}, " +
+                      "\"offset_mm\": {\"type\": \"number\", \"description\": \"Grow the cutter by this clearance (default 0)\"}, " +
+                      "\"target_body_names\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"Target bodies by name (default: the session body)\"}, " +
+                      "\"create_named_selection\": {\"type\": \"boolean\", \"description\": \"Create an NS on the cut faces (default false)\"}" +
+                    "}, \"required\": [\"shape\", \"dim1_mm\", \"position_mm\", \"mode\"]}"),
+
+                new ToolDef(
+                    "simplify_bodies",
+                    "Keyword-driven CAE simplification across the whole part: mode 'BoundingBox' replaces each " +
+                    "matched body with its bounding box (renamed *_simplified), 'SolidToShell' replaces thin " +
+                    "solids with a mid-surface sheet (*_shell). Matching is a case-insensitive substring of " +
+                    "body names, recursive through components (e.g. keyword 'screw' = 'replace all screws " +
+                    "with boxes'). DESTRUCTIVE: the original bodies are deleted.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"keyword\": {\"type\": \"string\", \"description\": \"Case-insensitive substring of body names to match\"}, " +
+                      "\"mode\": {\"type\": \"string\", \"enum\": [\"BoundingBox\", \"SolidToShell\"]}" +
+                    "}, \"required\": [\"keyword\", \"mode\"]}"),
+
+                new ToolDef(
+                    "create_bending_fixture",
+                    "Create a 3-point bending rig around a body: two lower supports + a loading nose (each a " +
+                    "semi-cylinder with a reinforcement block, 6 bodies total). Span/width/loading axes are " +
+                    "auto-detected from the bounding box (longest=span, shortest=loading); the real top/bottom " +
+                    "surfaces are found by Boolean probing so curved bodies work. Defaults: span_ratio 0.8, " +
+                    "diameters 3.8mm (ASTM D790-ish). Fails cleanly if a fixture would collide with the body.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"body_name\": {\"type\": \"string\", \"description\": \"Target body name (default: the session body)\"}, " +
+                      "\"span_ratio\": {\"type\": \"number\", \"description\": \"Support span as a fraction of body length (default 0.8)\"}, " +
+                      "\"span_mm\": {\"type\": \"number\", \"description\": \"Explicit support span in mm (overrides span_ratio)\"}, " +
+                      "\"support_diameter_mm\": {\"type\": \"number\", \"description\": \"Lower support roller diameter (default 3.8)\"}, " +
+                      "\"nose_diameter_mm\": {\"type\": \"number\", \"description\": \"Loading nose diameter (default 3.8)\"}" +
+                    "}, \"required\": []}"),
+
+                // ---- read-only assembly inspection ---------------------------
+                new ToolDef(
+                    "detect_contacts",
+                    "Find contact interfaces between ALL body pairs in the part (read-only): anti-parallel " +
+                    "planar faces within tolerance and coaxial equal-radius cylinders. Returns body pairs with " +
+                    "type and contact area - the assembly-inspection step before conformal meshing or bonded-" +
+                    "contact setup.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"tolerance_mm\": {\"type\": \"number\", \"description\": \"Max face-to-face gap in mm (default 0.1)\"}, " +
+                      "\"keyword\": {\"type\": \"string\", \"description\": \"Optional: only consider bodies whose name contains this substring\"}, " +
+                      "\"detect_planar\": {\"type\": \"boolean\", \"description\": \"Detect planar contacts (default true)\"}, " +
+                      "\"detect_cylindrical\": {\"type\": \"boolean\", \"description\": \"Detect cylindrical contacts (default true)\"}" +
+                    "}, \"required\": []}"),
             };
             return tools;
         }

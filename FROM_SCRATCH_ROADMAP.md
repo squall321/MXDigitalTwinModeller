@@ -712,3 +712,53 @@ exact: pi*49*(1.5+0.9)=369.4). G15_PASS ALL=True.
 MESSAGE"** dialog was blocking startup (likely from dozens of rapid force-killed launches). It cleared
 on its own after one long-lived launch; if it recurs, enumerate windows (user32 EnumWindows on the SC
 pid) to see the dialog rather than guessing, and let one SC instance live long enough to pass it.
+
+## FULL MCP COVERAGE: 28 -> 43 tools (2026-07-02)
+
+The tool surface now spans EVERY basic in-process service, not just phone RE. Audited all services
+(4-agent workflow: RE session-level, non-RE CAE, wiring constraints, synthesis) then wired 15 new
+tools through the 3-layer pattern (Registry ToolDef + Dispatcher case + McpServer guard sets):
+
+- **Kernel-truth inspection**: `validate_body` (Tier-2 volume+min-wall march; degrades to volume-only
+  on non-generated bodies), `measure_body` (volume/bbox-sorted/closed - the fea_freeze fingerprint
+  convention), `fea_freeze` (scdocx default, STEP auto-downgrade on Student).
+- **P7 param loop closed**: `get_parameters` (NEW PhoneParametersJsonWriter - snake_case round-trips
+  through SpecParser with 0 warnings), `set_parameters` (NEW SpecParser.Parse(json, baseline) overload
+  = patch semantics; baseline deep-copied via the writer so a rejected patch can't corrupt session
+  params; supersedes set_camera_height), `parse_spec` (dry-run lint, surfaces typo'd-key warnings).
+- **Session binding**: `rebind_active_body`, `import_step` (interactive-only warning; explicitly
+  rebinds session Body+Graph+Source - auto-bind only fires on a null session body).
+- **CAE generators**: `generate_tensile_specimen` (26 ASTM/ISO standards + numeric overrides; binds
+  the SPECIMEN, not a grip), `generate_laminate` (N-layer conformal stack + interface NS).
+- **CAE mutators**: `laminate_body` (slice existing solid, thickness-sum check), `cut_void`
+  (parametric Cuboid/Cylinder/Sphere boolean), `simplify_bodies` (keyword -> bbox/shell, DESTRUCTIVE),
+  `create_bending_fixture` (3-point rig; DetectDirections is a MANDATORY pre-step or ComputedSpanMm=0
+  builds degenerate geometry silently), `detect_contacts` (read-only interface finder).
+- **Guard sets refactored**: dispatcher C1 NoBodyTools + McpServer C2 ReadOnlyTools / C3 SelfBindTools
+  as HashSets (kept in sync; every C3 name must be in C1 because Dispatch receives designBody=null).
+
+**Adversarial review (3 lenses x refute-verify) confirmed 6 real defects, all fixed:**
+1. (major) RefreshGraph on a DELETED session body threw and replaced a successful mutator result with
+   an error -> RefreshGraph now unbinds (Body/Graph/Params/Handles=null) when Body.IsDeleted.
+2. (major) McpServer auto-bind only fired on Body==null, so a deleted-but-non-null body poisoned every
+   later call -> stale check is now (null || IsDeleted), and a `dispatched` flag keeps a successful
+   result from being replaced by the bind error.
+3. cut_void success gated on FailedCount which VoidCutService NEVER increments (thrown booleans are
+   SkippedCount) -> gate on SkippedCount==0 && SubtractedCount>0.
+4. "NaN"/"Infinity" numeric STRINGS pass net472 TryParse + all </> Validate checks, then the JSON
+   writer emits bare NaN (invalid JSON) -> SpecParser.Num rejects non-finite; writer emits 0 as
+   defense in depth.
+5. laminate_body's stale-session rebind was unreachable when the service threw AFTER deleting the
+   source -> all 3 destructive-mutator guards moved into finally blocks.
+6. (root cause of the only g16 failure) VoidCutService.ApplyBoolean did `target.Shape.Subtract(rawCopy)`
+   -> kernel refuses MIXED owned/unowned booleans: "Some modeler bodies belong to design bodies and
+   some do not." Fixed with the proven ModificationService idiom: wrap the tool in a temp DesignBody,
+   boolean with its Shape, delete the wrapper in finally. (This also fixes the interactive VoidCut UI.)
+
+**Gate g16** (`g16_full_mcp.py`, headless, real Dispatch calls): 14 phases - tools/list=43, parse_spec
+valid/warn/error, generate+measure+validate (minwall 0.62), add_hole dV=-1.885 (=pi*1^2*0.6 exactly,
+the tray floor), fea_freeze parity + step-downgrade, get_parameters->parse_spec ROUND-TRIP (0 errors
+0 warnings), set_parameters length 160 + camera 2.2 echo, D638-I specimen (5 bodies, bbox min 4.0
+override), bending rig (6 bodies, span 132), laminate 3-ply + detect_contacts (2 planar, 5000mm2),
+simplify Layer_2, slab cut_void dV=-400 + apply_operations batch dV=-400, laminate_body 2 plies with
+session surviving delete_original, rebind. import_step is interactive-only (documented g16b manual).
