@@ -547,6 +547,67 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                       "\"detect_planar\": {\"type\": \"boolean\", \"description\": \"Detect planar contacts (default true)\"}, " +
                       "\"detect_cylindrical\": {\"type\": \"boolean\", \"description\": \"Detect cylindrical contacts (default true)\"}" +
                     "}, \"required\": []}"),
+
+                // ---- licensed-seat CAE tools ---------------------------------
+                new ToolDef(
+                    "mesh_with_gmsh",
+                    "Volume-mesh the whole active part with the bundled external Gmsh: STEP export -> .geo " +
+                    "script -> gmsh.exe -> parsed node/element counts, optionally writing an LS-DYNA .k file. " +
+                    "NOTE: step 1 is a STEP export, which the ANSYS STUDENT license refuses - on a Student " +
+                    "seat this tool fails gracefully with the diagnostic log; run it on a licensed seat.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"element_size_mm\": {\"type\": \"number\", \"description\": \"Global element size in mm (default 5.0)\"}, " +
+                      "\"growth_rate\": {\"type\": \"number\", \"description\": \"Size growth rate 1.0-3.0 (default 1.3)\"}, " +
+                      "\"shape\": {\"type\": \"string\", \"enum\": [\"Tet\", \"Hex\"], \"description\": \"Element shape (default Tet)\"}, " +
+                      "\"algorithm\": {\"type\": \"string\", \"enum\": [\"Auto\", \"Delaunay\", \"Frontal\", \"HXT\"], \"description\": \"Mesh algorithm (default Auto)\"}, " +
+                      "\"midside_nodes\": {\"type\": \"boolean\", \"description\": \"Quadratic elements (default false)\"}, " +
+                      "\"body_overrides\": {\"type\": \"array\", \"description\": \"Per-body element sizes\", \"items\": {\"type\": \"object\", \"properties\": {" +
+                        "\"body_name\": {\"type\": \"string\"}, " +
+                        "\"element_size_mm\": {\"type\": \"number\"}" +
+                      "}, \"required\": [\"body_name\", \"element_size_mm\"]}}, " +
+                      "\"kfile_path\": {\"type\": \"string\", \"description\": \"Optional: also write an LS-DYNA .k file to this absolute path\"}" +
+                    "}, \"required\": []}"),
+
+                new ToolDef(
+                    "conformal_mesh",
+                    "Run the conformal-mesh workflow on the CURRENT part's bodies (2+): detect contact " +
+                    "interfaces -> interface Named Selections -> Share Topology -> optional cylinder edge " +
+                    "sizing -> SpaceClaim tet/hex mesh -> optional LS-DYNA/ANSYS export. Works on bodies " +
+                    "already in the document (never imports files). NOTE: the SC meshing commands may be " +
+                    "license-gated on a Student seat - the tool then reports mesh_ok:false with the full log.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"tolerance_mm\": {\"type\": \"number\", \"description\": \"Interface gap tolerance in mm (default 1.0)\"}, " +
+                      "\"keyword\": {\"type\": \"string\", \"description\": \"Optional body-name filter (substring)\"}, " +
+                      "\"detect_planar\": {\"type\": \"boolean\", \"description\": \"Default true\"}, " +
+                      "\"detect_cylindrical\": {\"type\": \"boolean\", \"description\": \"Default true\"}, " +
+                      "\"share_topology\": {\"type\": \"boolean\", \"description\": \"Enable Share Topology (default true)\"}, " +
+                      "\"create_named_selections\": {\"type\": \"boolean\", \"description\": \"Interface NS groups (default true)\"}, " +
+                      "\"element_size_mm\": {\"type\": \"number\", \"description\": \"Mesh element size in mm (default 2.0)\"}, " +
+                      "\"strategy\": {\"type\": \"string\", \"enum\": [\"AutoTet\", \"AutoHex\", \"Mixed\"], \"description\": \"Default AutoTet\"}, " +
+                      "\"growth_rate\": {\"type\": \"number\", \"description\": \"1.0-5.0 (default 1.8)\"}, " +
+                      "\"midside_nodes\": {\"type\": \"boolean\", \"description\": \"Default false\"}, " +
+                      "\"split_cylinder_edges\": {\"type\": \"boolean\", \"description\": \"Default false\"}, " +
+                      "\"cylinder_divisions\": {\"type\": \"integer\", \"description\": \"Circle divisions when splitting (default 8)\"}, " +
+                      "\"export_path\": {\"type\": \"string\", \"description\": \"Optional: export the mesh to this absolute path\"}, " +
+                      "\"export_format\": {\"type\": \"string\", \"enum\": [\"LS-DYNA\", \"ANSYS\"], \"description\": \"Default LS-DYNA\"}" +
+                    "}, \"required\": []}"),
+
+                new ToolDef(
+                    "surface_laminate",
+                    "Grow laminate layers FROM a planar face of an existing body: the face's boundary " +
+                    "(lines/arcs/ellipses) is extruded layer by layer along the face normal (or reversed), " +
+                    "with interface Named Selections between plies. Address the face with seed_mm - a 3D " +
+                    "point ON the planar face (the add_*_on_face idiom). Complements laminate_body (which " +
+                    "SLICES a solid) and generate_laminate (which builds a free-standing stack).",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"seed_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"A point ON the planar face to laminate from (X, Y, Z) in mm\"}, " +
+                      "\"body_name\": {\"type\": \"string\", \"description\": \"Target body name (default: the session body)\"}, " +
+                      "\"layers\": {\"type\": \"array\", \"description\": \"Layer list, first layer sits on the face\", \"items\": {\"type\": \"object\", \"properties\": {" +
+                        "\"name\": {\"type\": \"string\"}, " +
+                        "\"thickness_mm\": {\"type\": \"number\"}" +
+                      "}, \"required\": [\"thickness_mm\"]}}, " +
+                      "\"direction\": {\"type\": \"string\", \"enum\": [\"normal\", \"reverse\"], \"description\": \"Stack along the face normal (default) or reversed into/away from it\"}" +
+                    "}, \"required\": [\"seed_mm\", \"layers\"]}"),
             };
             return tools;
         }

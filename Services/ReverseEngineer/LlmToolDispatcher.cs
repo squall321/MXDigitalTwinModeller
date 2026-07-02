@@ -807,7 +807,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         bool dcPl = !args.ContainsKey("detect_planar") || GetBool(args, "detect_planar");
                         bool dcCy = !args.ContainsKey("detect_cylindrical") || GetBool(args, "detect_cylindrical");
                         var dcBodies = ConformalMesh.ConformalMeshService.CollectBodies(
-                            designBody.Parent as Part, dcKw);
+                            ScanRootPart(designBody), dcKw);
                         if (dcBodies == null || dcBodies.Count < 2)
                             return Envelope(true, null,
                                 "{\"pairs\": [], \"count\": 0, \"note\": \"fewer than 2 bodies matched\"}");
@@ -830,6 +830,188 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         dcSb.Append("]");
                         return Envelope(true, null, "{\"pairs\": " + dcSb.ToString() +
                             ", \"count\": " + dcPairs.Count.ToString(Inv) + "}");
+                    }
+
+                    // ---- licensed-seat CAE tools (STEP-export / SC-meshing gated on
+                    //      ANSYS Student; they fail GRACEFULLY there with the full log) ----
+                    case "mesh_with_gmsh":
+                    {
+                        var gmp = new Models.GmshMesher.GmshMeshParameters();
+                        gmp.GlobalElementSizeMm = GetDoubleOrDefault(args, "element_size_mm", gmp.GlobalElementSizeMm);
+                        gmp.GrowthRate = GetDoubleOrDefault(args, "growth_rate", gmp.GrowthRate);
+                        if (args.ContainsKey("shape"))
+                        {
+                            try
+                            {
+                                gmp.Shape = (Models.GmshMesher.ElementShape)Enum.Parse(
+                                    typeof(Models.GmshMesher.ElementShape), GetString(args, "shape").Trim(), true);
+                            }
+                            catch { return Envelope(false, "shape must be Tet|Hex", null); }
+                        }
+                        if (args.ContainsKey("algorithm"))
+                        {
+                            try
+                            {
+                                gmp.Algorithm = (Models.GmshMesher.MeshAlgorithm)Enum.Parse(
+                                    typeof(Models.GmshMesher.MeshAlgorithm), GetString(args, "algorithm").Trim(), true);
+                            }
+                            catch { return Envelope(false, "algorithm must be Auto|Delaunay|Frontal|HXT", null); }
+                        }
+                        if (args.ContainsKey("midside_nodes")) gmp.MidsideNodes = GetBool(args, "midside_nodes");
+                        Part gmPart = designBody.Parent as Part;
+                        if (gmPart == null) return Envelope(false, "body has no parent Part", null);
+                        if (args.ContainsKey("body_overrides")
+                            && args["body_overrides"] is List<object> gmOv && gmOv.Count > 0)
+                        {
+                            // gmsh volume tag = 1-based STEP import order = part body order; the
+                            // geo writer adds the +1 itself (BodyIndex is 0-based).
+                            var order = new List<DesignBody>();
+                            foreach (DesignBody b in gmPart.Bodies) order.Add(b);
+                            foreach (var item in gmOv)
+                            {
+                                var oo = item as Dictionary<string, object>;
+                                if (oo == null)
+                                    return Envelope(false, "body_overrides items must be {body_name, element_size_mm}", null);
+                                string ovName = GetString(oo, "body_name");
+                                double ovSize = GetDouble(oo, "element_size_mm");
+                                int ovIdx = order.FindIndex(
+                                    b => string.Equals(b.Name, ovName, StringComparison.OrdinalIgnoreCase));
+                                if (ovIdx < 0) return Envelope(false, "override body not found: " + ovName, null);
+                                gmp.BodyOverrides.Add(new Models.GmshMesher.BodyMeshOverride(ovName, ovIdx, ovSize));
+                            }
+                        }
+                        var mesh = GmshMesher.GmshMeshService.RunMeshPipeline(gmPart, null, gmp);
+                        if (mesh == null)
+                            return Envelope(false,
+                                "gmsh pipeline failed - see log (STEP export is license-refused on ANSYS Student seats)",
+                                "{\"log\": " + JsonStringArray(GmshMesher.GmshMeshService.DiagnosticLog) + "}");
+                        string kOut = "null";
+                        if (args.ContainsKey("kfile_path"))
+                        {
+                            string kPath = GetString(args, "kfile_path");
+                            GmshMesher.GmshKFileWriter.WriteKFile(
+                                kPath, mesh, gmPart, GmshMesher.GmshMeshService.DiagnosticLog);
+                            kOut = "\"" + EscapeStr(kPath) + "\"";
+                        }
+                        return Envelope(true, null, "{\"nodes\": " + mesh.TotalNodeCount.ToString(Inv) +
+                            ", \"volume_elements\": " + mesh.VolumeElements.Count.ToString(Inv) +
+                            ", \"surface_elements\": " + mesh.SurfaceElements.Count.ToString(Inv) +
+                            ", \"kfile\": " + kOut +
+                            ", \"log\": " + JsonStringArray(GmshMesher.GmshMeshService.DiagnosticLog) + "}");
+                    }
+                    case "conformal_mesh":
+                    {
+                        var cmp = new Models.ConformalMesh.ConformalMeshParameters();
+                        // PINNED: never import over MCP — Document.Open(.stp) is the headless-hang
+                        // path; the current part's bodies are the workflow input.
+                        cmp.ImportMode = Models.ConformalMesh.StepImportMode.UseCurrentPart;
+                        cmp.ToleranceMm = GetDoubleOrDefault(args, "tolerance_mm", cmp.ToleranceMm);
+                        cmp.BodyKeyword = args.ContainsKey("keyword") ? GetString(args, "keyword") : "";
+                        cmp.DetectPlanar = !args.ContainsKey("detect_planar") || GetBool(args, "detect_planar");
+                        cmp.DetectCylindrical = !args.ContainsKey("detect_cylindrical") || GetBool(args, "detect_cylindrical");
+                        cmp.EnableShareTopology = !args.ContainsKey("share_topology") || GetBool(args, "share_topology");
+                        cmp.CreateInterfaceNamedSelections = !args.ContainsKey("create_named_selections")
+                            || GetBool(args, "create_named_selections");
+                        cmp.ElementSizeMm = GetDoubleOrDefault(args, "element_size_mm", cmp.ElementSizeMm);
+                        cmp.GrowthRate = GetDoubleOrDefault(args, "growth_rate", cmp.GrowthRate);
+                        if (args.ContainsKey("strategy"))
+                        {
+                            try
+                            {
+                                cmp.Strategy = (Models.ConformalMesh.MeshStrategy)Enum.Parse(
+                                    typeof(Models.ConformalMesh.MeshStrategy), GetString(args, "strategy").Trim(), true);
+                            }
+                            catch { return Envelope(false, "strategy must be AutoTet|AutoHex|Mixed", null); }
+                        }
+                        if (args.ContainsKey("midside_nodes")) cmp.MidsideNodes = GetBool(args, "midside_nodes");
+                        if (args.ContainsKey("split_cylinder_edges"))
+                            cmp.SplitCylinderEdges = GetBool(args, "split_cylinder_edges");
+                        cmp.CylinderEdgeDivisions = (int)GetDoubleOrDefault(args, "cylinder_divisions", cmp.CylinderEdgeDivisions);
+                        if (args.ContainsKey("export_path"))
+                        {
+                            cmp.AutoExport = true;
+                            cmp.ExportPath = GetString(args, "export_path");
+                            if (args.ContainsKey("export_format"))
+                                cmp.ExportFormat = GetString(args, "export_format");
+                        }
+                        string cmErr;
+                        if (!cmp.Validate(out cmErr)) return Envelope(false, cmErr, null);
+                        // SC meshing/export commands (InitMeshSettings/SaveDYNA/...) are
+                        // ACTIVE-document scoped; meshing one doc while another is active
+                        // would silently mesh/export the wrong one. Fail fast instead.
+                        if (Window.ActiveWindow == null
+                            || Window.ActiveWindow.Document != designBody.Document)
+                            return Envelope(false,
+                                "the session body's document is not the ACTIVE window (SC meshing/export are active-document scoped) - activate it or call rebind_active_body", null);
+                        bool meshOk, exportOk;
+                        var cmPairs = ConformalMesh.ConformalMeshService.ExecuteWorkflow(
+                            ScanRootPart(designBody), cmp, out meshOk, out exportOk);
+                        var cmSb = new StringBuilder("[");
+                        for (int i = 0; i < cmPairs.Count; i++)
+                        {
+                            var pr6 = cmPairs[i];
+                            if (i > 0) cmSb.Append(", ");
+                            cmSb.Append("{\"body_a\": \"")
+                                .Append(EscapeStr(pr6.BodyA != null ? (pr6.BodyA.Name ?? "") : "")).Append("\"");
+                            cmSb.Append(", \"body_b\": \"")
+                                .Append(EscapeStr(pr6.BodyB != null ? (pr6.BodyB.Name ?? "") : "")).Append("\"");
+                            cmSb.Append(", \"type\": \"")
+                                .Append(pr6.Type.ToString().ToLowerInvariant()).Append("\"");
+                            cmSb.Append(", \"area_mm2\": ").Append(pr6.TotalAreaMm2.ToString("0.###", Inv));
+                            cmSb.Append("}");
+                        }
+                        cmSb.Append("]");
+                        string cmPayload = "{\"mesh_ok\": " + (meshOk ? "true" : "false") +
+                            ", \"export_ok\": " + (exportOk ? "true" : "false") +
+                            ", \"interfaces\": " + cmPairs.Count.ToString(Inv) +
+                            ", \"pairs\": " + cmSb.ToString() +
+                            ", \"log\": " + JsonStringArray(ConformalMesh.ConformalMeshService.DiagnosticLog) + "}";
+                        bool cmOk = meshOk && exportOk;
+                        return Envelope(cmOk, cmOk ? null
+                            : (!meshOk
+                                ? "conformal mesh failed at the meshing step - see log"
+                                : "mesh succeeded but the requested export was NOT written - see log"),
+                            cmPayload);
+                    }
+                    case "surface_laminate":
+                    {
+                        DesignBody sfBody = designBody;
+                        if (args.ContainsKey("body_name"))
+                        {
+                            string sfName = GetString(args, "body_name");
+                            sfBody = ResolveBodyByName(designBody.Parent as Part, sfName);
+                            if (sfBody == null) return Envelope(false, "body not found: " + sfName, null);
+                        }
+                        double[] sfSeed = GetDoubleArray(args, "seed_mm", 3);
+                        var sfFace = ResolveNearestPlanarFace(sfBody, sfSeed);
+                        if (sfFace == null)
+                            return Envelope(false,
+                                "no planar face found near seed_mm (surface_laminate needs a PLANAR face; seed a point on it)", null);
+                        var sfP = new Models.Laminate.SurfaceLaminateParameters();
+                        sfP.Layers = ParseLayers(args, "layers");
+                        if (args.ContainsKey("direction"))
+                        {
+                            string sfDir = GetString(args, "direction").Trim().ToLowerInvariant();
+                            if (sfDir == "reverse") sfP.Direction = Models.Laminate.OffsetDirection.Reverse;
+                            else if (sfDir == "normal") sfP.Direction = Models.Laminate.OffsetDirection.Normal;
+                            else return Envelope(false, "direction must be normal|reverse", null);
+                        }
+                        // The service stacks along the PLANE's DirZ, which is the face's OUTWARD
+                        // normal only when !IsReversed (the ModificationService sign idiom). Flip
+                        // so the tool's "normal" ALWAYS means outward — otherwise plies extrude
+                        // INTO the body on the ~half of faces that are reversed.
+                        if (sfFace.Shape.IsReversed)
+                            sfP.Direction = (sfP.Direction == Models.Laminate.OffsetDirection.Normal)
+                                ? Models.Laminate.OffsetDirection.Reverse
+                                : Models.Laminate.OffsetDirection.Normal;
+                        string sfErr;
+                        if (!sfP.Validate(out sfErr)) return Envelope(false, sfErr, null);
+                        var sfMade = new Laminate.SurfaceLaminateService().CreateSurfaceLaminate(
+                            sfBody.Parent as Part, sfFace, sfP);
+                        var sfNames = new List<string>();
+                        if (sfMade != null) foreach (var b in sfMade) sfNames.Add(b.Name ?? "(unnamed)");
+                        return Envelope(true, null, "{\"layers_created\": " + JsonStringArray(sfNames) +
+                            ", \"total_thickness_mm\": " + sfP.GetTotalThicknessMm().ToString("0.###", Inv) + "}");
                     }
 
                     default:
@@ -945,6 +1127,22 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
         // CAE tool-surface helpers (part/body resolution + payload builders)
         // ----------------------------------------------------------------
 
+        /// <summary>Document-scope Part for tools that SCAN the whole body tree
+        /// (detect_contacts / conformal_mesh): assembly bodies live in component-content
+        /// parts, so designBody.Parent alone sees only 1 body and the scan silently comes
+        /// up empty. MainPart (CollectBodies recurses components DOWN from it) with the
+        /// local Parent as fallback for bodies in internal parts not under MainPart.</summary>
+        private static Part ScanRootPart(DesignBody body)
+        {
+            try
+            {
+                if (body != null && body.Document != null && body.Document.MainPart != null)
+                    return body.Document.MainPart;
+            }
+            catch { }
+            return body != null ? body.Parent as Part : null;
+        }
+
         /// <summary>Active MainPart; optionally create a fresh document when none is open.</summary>
         private static Part ResolveActivePart(bool createIfNone)
         {
@@ -1034,6 +1232,48 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                             " (expected e.g. gauge_length_mm, gauge_width_mm, thickness_mm, ...)");
                 }
             }
+        }
+
+        /// <summary>Nearest PLANAR DesignFace to a 3D seed (mm) — the surface_laminate face-
+        /// addressing scheme (the proven add_*_on_face seed idiom, restricted to planes).
+        /// Projections landing OUTSIDE the face's bbox (+0.5mm margin) are heavily penalized
+        /// so a distant coplanar plane can't shadow the face the seed actually sits on.</summary>
+        private static DesignFace ResolveNearestPlanarFace(DesignBody body, double[] seedMm)
+        {
+            if (body == null || seedMm == null || seedMm.Length < 3) return null;
+            var seed = Geometry.Point.Create(seedMm[0] / 1000.0, seedMm[1] / 1000.0, seedMm[2] / 1000.0);
+            DesignFace best = null;
+            double bestScore = double.MaxValue;
+            double bestArea = double.MaxValue;
+            foreach (var df in body.Faces)
+            {
+                try
+                {
+                    var plane = df.Shape.Geometry as Geometry.Plane;
+                    if (plane == null) continue;
+                    var ev = plane.ProjectPoint(seed);
+                    if (ev == null) continue;
+                    var pp = ev.Point;
+                    double dx = pp.X - seed.X, dy = pp.Y - seed.Y, dz = pp.Z - seed.Z;
+                    double d = Math.Sqrt(dx * dx + dy * dy + dz * dz);
+                    var bb = df.Shape.GetBoundingBox(Geometry.Matrix.Identity);
+                    const double m = 0.0005; // 0.5mm bbox margin
+                    bool inside = pp.X >= bb.MinCorner.X - m && pp.X <= bb.MaxCorner.X + m
+                        && pp.Y >= bb.MinCorner.Y - m && pp.Y <= bb.MaxCorner.Y + m
+                        && pp.Z >= bb.MinCorner.Z - m && pp.Z <= bb.MaxCorner.Z + m;
+                    double score = d + (inside ? 0.0 : 1.0); // 1m penalty off-face
+                    double area;
+                    try { area = df.Shape.Area; } catch { area = double.MaxValue; }
+                    // near-equal scores = coplanar faces whose bboxes both cover the seed
+                    // (pocket+island, L-regions): prefer the SMALLER face — the one the seed
+                    // actually sits on — instead of first-enumerated-wins.
+                    bool better = score < bestScore - 1e-9
+                        || (Math.Abs(score - bestScore) <= 1e-9 && area < bestArea);
+                    if (better) { bestScore = score; bestArea = area; best = df; }
+                }
+                catch { }
+            }
+            return best;
         }
 
         private static string JsonStringArray(IEnumerable<string> items)

@@ -813,3 +813,46 @@ T1 lenses 2/2, dV=58.905 (= 2*pi*2.5^2*1.5). T2 punch dV=49.480 (= pi*1.5^2*7). 
 dV=2.827 (= 6*pi*0.25*0.6). T4 S01 corners dV=61.805 (= (4-pi)*9*8). T5 writer/parser round-trip
 (lenses/front_punch/on_back survive, 0 warnings) + rejection of lens-outside-plateau and
 punch-outside-pocket. G17_PASS ALL=True (5/5).
+
+## Licensed-seat wave: mesh_with_gmsh / conformal_mesh / surface_laminate (2026-07-03, 43 -> 46)
+
+Directive: assume Student-blocked features work (deployment target = a licensed server); verify
+everything else code-level. All three deferred tools are now wired; the MSI packages Libs\gmsh
+(gmsh.exe + gmsh-4.15.dll, MSI 195->238MB, File-table verified via COM query).
+
+**Live probe result that reshapes the license map:** conformal_mesh's SC meshing commands
+(InitMeshSettings/CreateMesh/SaveDYNA) WORK on this Student seat - g18 meshed a 3-body stack
+(MultiZone, 3 mapped bodies) and exported a 2.1M-line .k with 3 *PART blocks. Only
+mesh_with_gmsh is truly license-gated (its step 1 = part.Export STEP), and it degrades
+gracefully (success:false + full DiagnosticLog, never a throw). 46 tools: 45 fully functional
+under Student, 1 awaiting the licensed seat.
+
+**Adversarial review (3 lenses x refute-verify, 15 raw -> 9 confirmed) - all fixed:**
+1. (critical) GmshElementType.Tet10 was 9, but MSH type 9 is Tri6 (Tet10=11): with
+   midside_nodes=true every quadratic tet was silently DROPPED -> success:true with
+   volume_elements:0 and a nodes-only .k. Fixed enum + parser whitelist (+11).
+2. growth_rate was advertised+validated but read by NOTHING -> now drives
+   Mesh.CharacteristicLengthMax = size*rate^6 (default-preserving: 1.3^6=4.83 ~ old *5.0).
+3. GmshKFileWriter collapsed multi-body meshes into one *PART with the FIRST body's material ->
+   per-EntityTag *PART/*SECTION/*MAT (pid = volume tag, title = body name, per-part ELFORM).
+4. (major) conformal_mesh/detect_contacts scanned designBody.Parent - for component-nested
+   assembly bodies (exactly what import_step binds) that part holds 1 body and the scan came up
+   empty with a misleading error -> ScanRootPart (Document.MainPart, Parent fallback).
+5. (major) SC meshing/export are ACTIVE-document scoped; a stale active window would mesh/export
+   the WRONG document -> conformal_mesh fails fast when session doc != active window.
+6. (major) ExportMesh swallowed failures (void + catch-to-log) -> returns bool, ExecuteWorkflow
+   gained an out exportSucceeded, payload gained export_ok, success = mesh_ok && export_ok.
+   g18 runtime-verified: export_ok:true + file exists.
+7. 120s marshaller timeout would abandon long licensed-seat meshes mid-run (gmsh CLI alone
+   allows 300s) -> LongRunningTools {mesh_with_gmsh, conformal_mesh} get 600s.
+8. (major) surface_laminate "normal" stacked along plane DirZ, which points INTO the body on
+   IsReversed faces (~half of all faces) -> dispatcher flips Direction per Shape.IsReversed
+   (the ModificationService sign idiom), so "normal" always means OUTWARD.
+9. ResolveNearestPlanarFace tie on coplanar faces (bbox can't reject boundary-outside
+   projections) -> near-equal scores tie-break to the SMALLER-area face.
+
+**Gate g18** (headless): tools/list=46; surface_laminate 2 plies with contact areas EXACTLY
+10489.05mm2 (slab top area) x2; conformal_mesh interfaces=2 + mesh_ok + export_ok + real .k
+(3 *PART); mesh_with_gmsh graceful degrade under Student. Static: all 46 schemas parse as
+valid JSON (reflection-loaded ToToolsArrayJson -> ConvertFrom-Json), MSI File table carries
+gmsh. G18_PASS ALL=True.

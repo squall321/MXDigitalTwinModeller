@@ -39,6 +39,11 @@
                         <Directory Id="INSTALLFOLDER" Name="V252">
                             <!-- Claude Desktop MCP stdio bridge (ships beside the Add-In DLL). -->
                             <Directory Id="McpBridgeDir" Name="mcp_bridge" />
+                            <!-- Bundled Gmsh for mesh_with_gmsh (GmshCliEngine resolves
+                                 <AddInDir>\Libs\gmsh\gmsh.exe relative to the DLL). -->
+                            <Directory Id="LibsDir" Name="Libs">
+                                <Directory Id="GmshDir" Name="gmsh" />
+                            </Directory>
                         </Directory>
                     </Directory>
                 </Directory>
@@ -118,6 +123,23 @@
             <Component Id="McpBridgeReadme" Guid="*">
                 <File Id="mcp_bridge_README.md" Name="README.md"
                       Source="$(ProjectDir)\tools\mcp_bridge\README.md"
+                      KeyPath="yes" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- ================================================================ -->
+        <!-- Bundled Gmsh (mesh_with_gmsh MCP tool + Gmsh Mesher dialog)       -->
+        <!-- ================================================================ -->
+
+        <ComponentGroup Id="GmshComponents" Directory="GmshDir">
+            <Component Id="GmshExe" Guid="*">
+                <File Id="gmsh.exe"
+                      Source="$(ProjectDir)\Libs\gmsh\gmsh.exe"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="GmshDll" Guid="*">
+                <File Id="gmsh_4.15.dll" Name="gmsh-4.15.dll"
+                      Source="$(ProjectDir)\Libs\gmsh\gmsh-4.15.dll"
                       KeyPath="yes" />
             </Component>
         </ComponentGroup>
@@ -340,6 +362,7 @@
                  Description="SpaceClaim Add-In for composite specimen modeling">
             <ComponentGroupRef Id="SpaceClaimComponents" />
             <ComponentGroupRef Id="McpBridgeComponents" />
+            <ComponentGroupRef Id="GmshComponents" />
         </Feature>
 
         <Feature Id="MechanicalFeature" Title="Mechanical ACT Extension" Level="1"

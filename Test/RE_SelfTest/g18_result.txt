@@ -1,0 +1,6 @@
+T0 True
+T1 True
+T2 True
+T3 True
+PROBE conformal_mesh_under_student=True gmsh_step_export_under_student=False
+G18_PASS ALL=True (4/4)

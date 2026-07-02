@@ -159,7 +159,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.GmshMesher
                 i++;
 
                 // Check if this is a supported element type
-                bool isSupported = elemType == 2 || elemType == 4 || elemType == 5 || elemType == 9;
+                // (MSH codes: 2=Tri3, 4=Tet4, 5=Hex8, 9=Tri6, 11=Tet10 — 9 was previously
+                // mistaken for Tet10, silently dropping all quadratic tets.)
+                bool isSupported = elemType == 2 || elemType == 4 || elemType == 5
+                    || elemType == 9 || elemType == 11;
 
                 for (int e = 0; e < numElemsInBlock && i < lines.Length; e++, i++)
                 {

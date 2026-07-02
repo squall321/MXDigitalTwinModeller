@@ -43,6 +43,31 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ConformalMesh
         /// </summary>
         public static List<InterfacePairInfo> ExecuteWorkflow(Part part, ConformalMeshParameters p)
         {
+            bool meshOk;
+            return ExecuteWorkflow(part, p, out meshOk);
+        }
+
+        /// <summary>
+        /// Conformal Mesh 전체 워크플로우 실행 + 메쉬 성공 여부 반환 (MCP 래퍼가
+        /// 로그 substring 대신 신뢰할 수 있는 성공 신호를 받도록 하는 오버로드).
+        /// </summary>
+        public static List<InterfacePairInfo> ExecuteWorkflow(Part part, ConformalMeshParameters p,
+            out bool meshSucceeded)
+        {
+            bool exportOk;
+            return ExecuteWorkflow(part, p, out meshSucceeded, out exportOk);
+        }
+
+        /// <summary>
+        /// 전체 워크플로우 + 메쉬/내보내기 성공 신호 둘 다 반환. exportSucceeded 는
+        /// AutoExport 가 꺼져 있으면 true(요청 없음=실패 아님), 요청됐으면 파일이
+        /// 실제로 생성됐을 때만 true.
+        /// </summary>
+        public static List<InterfacePairInfo> ExecuteWorkflow(Part part, ConformalMeshParameters p,
+            out bool meshSucceeded, out bool exportSucceeded)
+        {
+            meshSucceeded = false;
+            exportSucceeded = !p.AutoExport; // no export requested = nothing to fail
             DiagnosticLog = new List<string>();
             Log("=== Conformal Mesh Workflow 시작 ===");
 
@@ -93,13 +118,15 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ConformalMesh
 
             // Step 9: 메쉬 생성
             bool meshOk = GenerateConformalMesh(part, bodies, p);
+            meshSucceeded = meshOk;
             Log(meshOk ? "메쉬 생성 완료" : "[ERROR] 메쉬 생성 실패");
 
-            // Step 10: 내보내기
+            // Step 10: 내보내기 — 성공 신호를 위로 전달 (silent-failure 방지)
             if (p.AutoExport && meshOk && !string.IsNullOrEmpty(p.ExportPath))
             {
-                ExportMesh(p.ExportPath, p.ExportFormat);
-                Log(string.Format("내보내기: {0}", p.ExportPath));
+                exportSucceeded = ExportMesh(p.ExportPath, p.ExportFormat);
+                Log(string.Format(exportSucceeded ? "내보내기 완료: {0}" : "[ERROR] 내보내기 실패: {0}",
+                    p.ExportPath));
             }
 
             Log("=== Conformal Mesh Workflow 완료 ===");
@@ -719,9 +746,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ConformalMesh
         // ================================================================
 
         /// <summary>
-        /// 메쉬를 파일로 내보낸다.
+        /// 메쉬를 파일로 내보낸다. 성공(파일이 실제로 생성됨) 여부를 반환 — 예외는
+        /// 로그로만 삼키던 기존 동작을 유지하되, 호출자가 성공 신호를 받을 수 있게 함.
         /// </summary>
-        public static void ExportMesh(string path, string format)
+        public static bool ExportMesh(string path, string format)
         {
             try
             {
@@ -772,10 +800,18 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ConformalMesh
                         Log(string.Format("[WARN] 제어카드 삽입: {0}", ctrlEx.Message));
                     }
                 }
+
+                if (!File.Exists(path))
+                {
+                    Log(string.Format("[ERROR] 내보내기 파일이 생성되지 않음: {0}", path));
+                    return false;
+                }
+                return true;
             }
             catch (Exception ex)
             {
                 Log(string.Format("[ERROR] 내보내기 실패: {0}", ex.Message));
+                return false;
             }
         }
 

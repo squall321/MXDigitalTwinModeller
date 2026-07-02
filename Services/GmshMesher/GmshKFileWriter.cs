@@ -40,21 +40,51 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.GmshMesher
             }
             sb.AppendLine("$");
 
-            // --- Determine part/material from SpaceClaim bodies ---
-            int pid = 1;
-            int secId = 1;
-            int mid = 1;
-            double density = 7.85e-9;  // tonne/mm³ (steel default)
-            double elasticMod = 210000; // MPa
-            double poisson = 0.3;
+            // --- Per-body parts: one *PART/*SECTION/*MAT per distinct gmsh volume tag ---
+            // Gmsh volume tags are 1-based in STEP import order (== part body order, the same
+            // assumption body_overrides uses), so tag t maps to part body index t-1. Previously
+            // everything collapsed into pid=1 with the FIRST body's material — a physically
+            // wrong deck for multi-material assemblies.
+            var volumeTags = new List<int>();
+            foreach (var elem in meshData.VolumeElements)
+                if (!volumeTags.Contains(elem.EntityTag)) volumeTags.Add(elem.EntityTag);
+            volumeTags.Sort();
+            if (volumeTags.Count == 0) volumeTags.Add(1); // degenerate: keep a valid deck shape
 
-            // Try to get material from first body
+            var tagToPid = new Dictionary<int, int>();
+            for (int t = 0; t < volumeTags.Count; t++) tagToPid[volumeTags[t]] = t + 1;
+
+            var partBodies = new List<DesignBody>();
             if (part != null)
             {
-                try
+                try { foreach (var b in part.Bodies) partBodies.Add(b); } catch { }
+            }
+
+            // Per-part ELFORM from that part's own elements (10=Tet4, 1=Hex8, 16=Tet10)
+            var pidHasTet10 = new Dictionary<int, bool>();
+            var pidHasHex8 = new Dictionary<int, bool>();
+            bool hasTet10 = false;
+            foreach (var elem in meshData.VolumeElements)
+            {
+                int p2 = tagToPid[elem.EntityTag];
+                if (elem.Type == GmshElementType.Tet10) { pidHasTet10[p2] = true; hasTet10 = true; }
+                if (elem.Type == GmshElementType.Hex8) pidHasHex8[p2] = true;
+            }
+
+            foreach (var tag in volumeTags)
+            {
+                int pid2 = tagToPid[tag];
+                double density = 7.85e-9;   // tonne/mm³ (steel default)
+                double elasticMod = 210000; // MPa
+                double poisson = 0.3;
+                string partTitle = "GmshPart_" + pid2.ToString(CultureInfo.InvariantCulture);
+                int bodyIdx = tag - 1;
+                if (bodyIdx >= 0 && bodyIdx < partBodies.Count)
                 {
-                    foreach (var body in part.Bodies)
+                    try
                     {
+                        var body = partBodies[bodyIdx];
+                        if (!string.IsNullOrEmpty(body.Name)) partTitle = body.Name;
                         double dens;
                         string matName = MaterialService.ReadBodyMaterialName(body, out dens);
                         if (matName != null)
@@ -67,52 +97,38 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.GmshMesher
                                 elasticMod = cached[1];
                                 poisson = cached[2];
                             }
-                            break;
                         }
                     }
+                    catch { }
                 }
-                catch { }
+
+                int elform = 10;
+                if (pidHasHex8.ContainsKey(pid2)) elform = 1;
+                if (pidHasTet10.ContainsKey(pid2)) elform = 16;
+
+                sb.AppendLine("*PART");
+                sb.AppendLine("$                                                                     title");
+                sb.AppendLine(partTitle);
+                sb.AppendLine("$      pid     secid       mid     eosid      hgid      grav    adpopt      tmid");
+                sb.AppendFormat("{0,10}{1,10}{2,10}         0         0         0         0         0",
+                    pid2, pid2, pid2);
+                sb.AppendLine();
+                sb.AppendLine("$");
+
+                sb.AppendLine("*SECTION_SOLID");
+                sb.AppendLine("$    secid    elform       aet");
+                sb.AppendFormat("{0,10}{1,10}         0", pid2, elform);
+                sb.AppendLine();
+                sb.AppendLine("$");
+
+                sb.AppendLine("*MAT_ELASTIC");
+                sb.AppendLine("$      mid        ro         e        pr        da        db  not used");
+                sb.AppendFormat(CultureInfo.InvariantCulture,
+                    "{0,10}{1,10:G6}{2,10:G6}{3,10:G6}          0.0          0.0          0.0",
+                    pid2, density, elasticMod, poisson);
+                sb.AppendLine();
+                sb.AppendLine("$");
             }
-
-            // Determine ELFORM based on element types present
-            int elformSolid = 10; // Tet4 default
-            bool hasTet10 = false;
-            bool hasHex8 = false;
-
-            foreach (var elem in meshData.VolumeElements)
-            {
-                if (elem.Type == GmshElementType.Tet10) hasTet10 = true;
-                if (elem.Type == GmshElementType.Hex8) hasHex8 = true;
-            }
-
-            if (hasHex8) elformSolid = 1;
-            if (hasTet10) elformSolid = 16;
-
-            // --- *PART ---
-            sb.AppendLine("*PART");
-            sb.AppendLine("$                                                                     title");
-            sb.AppendLine("GmshPart");
-            sb.AppendLine("$      pid     secid       mid     eosid      hgid      grav    adpopt      tmid");
-            sb.AppendFormat("{0,10}{1,10}{2,10}         0         0         0         0         0",
-                pid, secId, mid);
-            sb.AppendLine();
-            sb.AppendLine("$");
-
-            // --- *SECTION_SOLID ---
-            sb.AppendLine("*SECTION_SOLID");
-            sb.AppendLine("$    secid    elform       aet");
-            sb.AppendFormat("{0,10}{1,10}         0", secId, elformSolid);
-            sb.AppendLine();
-            sb.AppendLine("$");
-
-            // --- *MAT_ELASTIC ---
-            sb.AppendLine("*MAT_ELASTIC");
-            sb.AppendLine("$      mid        ro         e        pr        da        db  not used");
-            sb.AppendFormat(CultureInfo.InvariantCulture,
-                "{0,10}{1,10:G6}{2,10:G6}{3,10:G6}          0.0          0.0          0.0",
-                mid, density, elasticMod, poisson);
-            sb.AppendLine();
-            sb.AppendLine("$");
 
             // --- *ELEMENT_SOLID ---
             if (meshData.VolumeElements.Count > 0)
@@ -128,10 +144,11 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.GmshMesher
 
                 foreach (var elem in meshData.VolumeElements)
                 {
+                    int epid = tagToPid[elem.EntityTag];
                     if (elem.Type == GmshElementType.Tet4)
                     {
                         sb.AppendFormat("{0,8}{1,8}{2,8}{3,8}{4,8}{5,8}{6,8}{7,8}{8,8}{9,8}",
-                            elem.Id, pid,
+                            elem.Id, epid,
                             elem.NodeIds[0], elem.NodeIds[1], elem.NodeIds[2], elem.NodeIds[3],
                             0, 0, 0, 0);
                         sb.AppendLine();
@@ -139,7 +156,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.GmshMesher
                     else if (elem.Type == GmshElementType.Hex8)
                     {
                         sb.AppendFormat("{0,8}{1,8}{2,8}{3,8}{4,8}{5,8}{6,8}{7,8}{8,8}{9,8}",
-                            elem.Id, pid,
+                            elem.Id, epid,
                             elem.NodeIds[0], elem.NodeIds[1], elem.NodeIds[2], elem.NodeIds[3],
                             elem.NodeIds[4], elem.NodeIds[5], elem.NodeIds[6], elem.NodeIds[7]);
                         sb.AppendLine();
@@ -148,7 +165,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.GmshMesher
                     {
                         // Long format: 10 nodes
                         sb.AppendFormat("{0,8}{1,8}{2,8}{3,8}{4,8}{5,8}{6,8}{7,8}{8,8}{9,8}",
-                            elem.Id, pid,
+                            elem.Id, epid,
                             elem.NodeIds[0], elem.NodeIds[1], elem.NodeIds[2], elem.NodeIds[3],
                             elem.NodeIds[4], elem.NodeIds[5], elem.NodeIds[6], elem.NodeIds[7]);
                         sb.AppendLine();
@@ -166,7 +183,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.GmshMesher
             {
                 sb.AppendLine("*ELEMENT_SHELL");
                 sb.AppendLine("$      eid     pid      n1      n2      n3      n4");
-                int shellPid = pid + 1;
+                int shellPid = volumeTags.Count + 1;
 
                 foreach (var elem in meshData.SurfaceElements)
                 {

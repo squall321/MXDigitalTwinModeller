@@ -165,6 +165,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Mcp
         {
             "get_feature_graph", "find_features_by_type",
             "validate_body", "measure_body", "fea_freeze", "detect_contacts",
+            "mesh_with_gmsh",   // external meshing: temp/.k files only, no geometry mutation
         };
 
         /// <summary>C3: tools that build/bind their own session body (or need none at all) —
@@ -178,10 +179,21 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Mcp
             "generate_tensile_specimen", "generate_laminate",
         };
 
+        /// <summary>Long-running CAE tools get a 10-minute marshaller budget: a licensed-seat
+        /// CreateMesh / gmsh.exe run (its own CLI timeout is 300s) can exceed the default 120s,
+        /// which would return a timeout error to the client while the mesh silently completes
+        /// on the main thread — and a retry would re-mesh the already-mutated document.</summary>
+        private static readonly System.Collections.Generic.HashSet<string> LongRunningTools =
+            new System.Collections.Generic.HashSet<string>
+        {
+            "mesh_with_gmsh", "conformal_mesh",
+        };
+
         private string ExecuteTool(string toolName, string argsJson)
         {
             bool readOnly = ReadOnlyTools.Contains(toolName);
             bool selfBinds = SelfBindTools.Contains(toolName);
+            int timeoutMs = LongRunningTools.Contains(toolName) ? 600000 : 120000;
 
             return ApiThreadMarshaller.Run(delegate
             {
@@ -209,7 +221,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Mcp
                 if (!dispatched)
                     return LlmToolDispatcherEnvelopeError("no active body: " + (bindErr ?? "bind failed"));
                 return result;
-            });
+            }, timeoutMs);
         }
 
         // ---- small JSON-RPC envelope helpers ----

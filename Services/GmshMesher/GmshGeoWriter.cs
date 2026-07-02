@@ -28,12 +28,15 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.GmshMesher
             sb.AppendLine();
             sb.AppendLine();
 
-            // Global mesh settings
+            // Global mesh settings. The size ceiling is driven by GrowthRate: sizes grow
+            // geometrically away from boundaries, so over ~6 layers the ceiling is
+            // size * rate^6 (the previous hardcoded *5.0 equals the 1.3 default: 1.3^6=4.83).
+            double maxFactor = System.Math.Pow(p.GrowthRate, 6.0);
             sb.AppendFormat(CultureInfo.InvariantCulture,
                 "Mesh.CharacteristicLengthMin = {0:G6};", globalSizeM * 0.1);
             sb.AppendLine();
             sb.AppendFormat(CultureInfo.InvariantCulture,
-                "Mesh.CharacteristicLengthMax = {0:G6};", globalSizeM * 5.0);
+                "Mesh.CharacteristicLengthMax = {0:G6};", globalSizeM * maxFactor);
             sb.AppendLine();
             sb.AppendLine();
 
