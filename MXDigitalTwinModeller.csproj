@@ -514,7 +514,7 @@
        new version; it flows to the MSI (via -d Version=) which drives MajorUpgrade, so an
        install over an older build upgrades in place automatically. -->
   <PropertyGroup>
-    <MXVersion>1.4.0</MXVersion>
+    <MXVersion>1.5.0</MXVersion>
   </PropertyGroup>
 
   <Target Name="BuildInstaller" AfterTargets="ClearWorkbenchRibbonCache">

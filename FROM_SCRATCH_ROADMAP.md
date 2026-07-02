@@ -762,3 +762,29 @@ the tray floor), fea_freeze parity + step-downgrade, get_parameters->parse_spec 
 override), bending rig (6 bodies, span 132), laminate 3-ply + detect_contacts (2 planar, 5000mm2),
 simplify Layer_2, slab cut_void dV=-400 + apply_operations batch dV=-400, laminate_body 2 plies with
 session surviving delete_original, rebind. import_step is interactive-only (documented g16b manual).
+
+## Release 1.5.0 (2026-07-02)
+
+MXVersion 1.4.0 -> 1.5.0 for the 43-tool surface. Rationale: WiX MajorUpgrade does not replace
+files on a SAME-version install, so shipping the 43-tool DLL under 1.4.0 would leave existing
+1.4.0 installs un-upgradeable. One csproj value bumps DLL + MSI ProductVersion together.
+
+Deliberate skip, recorded so a future audit doesn't reopen it: VoidCutService.ExecuteBatch (CSV
+multi-cut) stays UNWIRED as an MCP tool — apply_operations([{cut_void,...}, ...]) already covers
+batch cutting through the existing surface (g16 T11 proved it), and a CSV file argument adds no
+LLM capability.
+
+**Release-gate results (2026-07-03):**
+- **Gate g16b** (`g16b_import_step.py`, GUI SC via /RunScript - NOT /Headless): import_step on
+  as1-oc-214.stp -> bound "nut" (graph: 2 holes/3 walls), measure 664.448mm3, then cut_void
+  corner-clip dV=-24.0 EXACT (4x2x3 box overlap) proving the mod chain targets the IMPORT, not the
+  stale pre-import session body. G16B_PASS ALL=True. Two probe lessons: (a) the nut's bbox center
+  is its BORE - a d2 through-drill there is a silent no-op (dV=0); (b) AddHole THROUGH the nut's
+  chamfer/thread geometry fails "Result may become non-manifold" - a geometry-class limit, use an
+  overlap-box cut_void for mutation smoke tests on imported parts. The /Headless-only translator
+  hang does NOT occur in GUI+/RunScript mode.
+- **Live full-relay E2E** (`run_e2e_bridge.ps1`, the SHIPPED path: plain GUI SC -> handshake ->
+  stdio bridge exe -> loopback HTTP): tools/list = 43; generate_tensile_specimen ASTM_D638_TypeI
+  {thickness_mm:4} built 5 bodies live (specimen + 4 grips), measure_body [4,19,165]mm bbox
+  (override echoed), validate_body pass:true with the volume-only degrade note. The Claude Desktop
+  user path is verified for the new CAE surface.

@@ -1,0 +1,4 @@
+T1 import=True (rebound=True)
+T2 measure_on_import=True
+T3 mod_targets_import=True
+G16B_PASS ALL=True

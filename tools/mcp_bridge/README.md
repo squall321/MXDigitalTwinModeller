@@ -96,14 +96,25 @@ open SpaceClaim and retry. No need to restart Claude Desktop.
 ## Tools exposed
 
 The bridge exposes whatever `LlmToolRegistry.GetAllTools()` lists — the full
-set, including:
+set (43 tools as of v1.5.0), including:
 
 - `generate_phone_from_spec` — full from-scratch spec (curved back, lens-on-
   curved holes, flank ports, grille, buttons). **Use this for anything richer
   than a flat shell.**
 - `generate_phone` — quick flat uniform-wall shell from a few scalars.
-- `set_camera_height` and the modification tools (`change_*`, `add_*`,
-  `move_*`, `mirror_*`, …) for editing an existing body.
+- `get_parameters` / `set_parameters` — read the session's parametric design
+  and patch ANY field + regenerate (supersedes the older `set_camera_height`,
+  which remains for back-compat).
+- `parse_spec` — dry-run spec lint (no geometry) before generating.
+- The modification tools (`change_*`, `add_*`, `move_*`, `mirror_*`,
+  `apply_operations` batch, …) for editing an existing body.
+- Kernel-truth checks: `validate_body`, `measure_body`, and `fea_freeze`
+  (writes the FEA-handoff `.scdocx` with a volume/bbox fingerprint).
+- CAE tools beyond phones: `generate_tensile_specimen` (26 ASTM/ISO
+  standards), `generate_laminate`, `laminate_body`, `cut_void`,
+  `simplify_bodies`, `create_bending_fixture`, `detect_contacts`.
+- Session control: `rebind_active_body`, `import_step` (interactive
+  SpaceClaim sessions only).
 
 ## Security
 
