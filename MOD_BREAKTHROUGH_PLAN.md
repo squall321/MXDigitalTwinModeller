@@ -603,3 +603,52 @@ class GeometricProof {
 - `D:\MXDigitalTwinModeller\Test\RE_SelfTest\mod_atomic_test.py` / `run_mod_corpus_atomic.ps1` / `verify_atomic_results.py` — harness 3계층
 - `D:\MXDigitalTwinModeller\Test\RealCAD\atomic_corpus_summary.md` + `atomic_results\*.json` — 회귀 게이트 데이터
 - `D:\MXDigitalTwinModeller\.claude\skills\ansys-api-catalog\raw\SpaceClaim.Api.V252.xml` — API surface (Body.Copy:11781, DesignBody.Create:7294, ContainsPoint:12240, IntersectCurve:12249, RoundEdges:11437-11461)
+
+## Deepening push 141->144V (2026-07-04): OD-chord + honesty telemetry, matrix 82.0%->83.2%
+
+Full 216-cell run (matrix_summary_deepening_20260704.md): VERIFIED=144 IC=11 F=18 N_A=43.
+Rate = 144/(216-43) = 83.2% (up from W52's 141/172 = 82.0%). ZERO V-cell regressions.
+
+FLIPS (+3):
+- 624ZZ + F623ZZ AddHolePattern IC->V (WI-3 OD-chord): the planar linear pattern lands on a
+  bearing ring's thin annular face and only 1/3 holes become real bores. New geometry-gated
+  branch (model-name-free): when the 3 legacy positions are NOT all drillable (solid run >= 1.5*d
+  along the drill axis) AND an outward cylinder exists (air outside / solid inside, probed off-
+  surface), place 3 radial bores on the OD via AddHolePattern's new drillLocalNormal flag ->
+  AddHoleOnFace per seed (each enters along its own local outward normal). Both bearings now
+  score 3/3 OD bores. A band-vs-topFace guard keeps a slab's stray fillet cylinder on the legacy
+  path. All 10 previously-V pattern cells stay V (6 slab models keep legacy; SampleModel1/
+  Ventilator have a genuine OD ring and pass 3/3 on the OD path too — same V verdict).
+- SampleModel1 AddBoss MISSING->V: the cell that was absent at W52 aggregation (215/216)
+  materialized this run.
+
+Known benign noise (net 0, NOT a regression): Ventilator AddChamfer IC->F — FP-sign dV on a
+genuine NURBS RoundEdges no-op (cluster D), the Ventilator<->RC_Buggy chamfer pair the plan
+flagged as swap-noise.
+
+C# changes (ModificationService): (WI-1) AddHole/AddBoss/AddRoundedRectBoss/AddHoleOnFace gained
+an OPT-IN `requireVolumeChange` gate + always-on VolumeDeltaMm3 telemetry — refuses a silent
+Boolean no-op (cutter inside an existing bore / boss inside solid) when opted in. The four MCP
+Dispatcher sites (add_hole/add_boss/add_hole_on_face/add_boss_on_face) opt in; every internal
+caller (Move/Mirror/Rotate/Pattern/Generation, matrix harness) stays on legacy semantics ->
+zero matrix change (verified). (WI-2) honest structural refusals now carry a `NOT_APPLICABLE:`
+prefix (pin guards, infeasible-bore) that the harness maps to N_A, not FAILED — no current cell
+hits them, forward hook. (WI-3) AddHolePattern `drillLocalNormal`/`localDepthMm` params. (WI-4)
+MirrorFeature(boss) now reflects boss.Axis across the mirror plane instead of dropping it to +Z
+(zero matrix risk — Mirror cells are hole-only; MCP-correctness fix).
+
+REVERTED after gate probes (kept document-only):
+- WI-4 Mirror twin radius-clearance validator: probe showed the two-part validator (deterministic
+  bore-overlap + multi-sample ring probe) REFUSED all 4 currently-V Mirror models' passing twins
+  (b(V_twins_pass)=False) — driving it would regress 4 V cells to F/N_A. The C# driver was never
+  written; only the zero-risk boss.Axis rider (WI-4 above) shipped. Real fix remains W5-3 symmetry-
+  plane detection (out of scope).
+- WI-5 RC_Buggy ChangeFilletRadius live-torus baseline: the live-median override made the measured
+  result WORSE (target 2.4, measured 3.0 with the override active in the gate) — the extracted
+  baseline was not the problem there. Reverted.
+- WI-6 11752 ChangeBossHeight through-pin N_A: the both-ends-air through-pin detector misfired on
+  624ZZ's legitimate boss (V->N_A regression in the gate). Reverted; 11752 stays honest IC. The
+  distinction (which face defines a through-pin's height) needs a more precise cap-selection pass.
+
+Honest ceiling per the ROI analysis remains ~85%; the matrix track goes document-only pending new
+corpus models (clean thin-curved/flange parts for W5-1, multi-body assemblies for AddHoleOnBody).

@@ -1,0 +1,20 @@
+=== P1 OD-chord (624ZZ) ===
+P1 OD: R=6.500 band=4.600 axis=(0.00,0.00,1.00)
+P1 seed0 op=True bore=True dd=0.0
+P1 seed1 op=True bore=True dd=8.00593208497e-16
+P1 seed2 op=True bore=True dd=5.26390912686e-15
+P1 d=1.53 found=3/3 cyl 0->3 => GO
+=== P2 Mirror twin clearance ===
+P2 samplemodel2: legacy_off=120.0 valid_off=-120.0 legacy_passes_validator=False
+P2 nist_ctc_01: legacy_off=50.0 valid_off=None legacy_passes_validator=False
+P2 as1_pe_203: legacy_off=508.0 valid_off=None legacy_passes_validator=False
+P2 F623ZZ_bearing: legacy_off=4.5 valid_off=None legacy_passes_validator=False
+P2 SampleModel1: legacy_off=20.0 valid_off=None legacy_passes_validator=False
+P2 624ZZ_bearing: legacy_off=6.0 valid_off=None legacy_passes_validator=False
+P2 boxy_with_diamsize: legacy_off=39.0 valid_off=None legacy_passes_validator=False
+P2 decision: a(boxy_live)=False b(V_twins_pass)=False c(NA_refused)=True
+=== P3 11752 ChangeBossHeight ===
+P3 boss B1 D=17.145 H=0.000 base=(-550.98,0.00,0.00) axis=(0.00,-1.00,0.00)
+P3 default path: ok=True measured=19.5516383956 msg= hint=
+P3 useBoolean path: ok=True measured=12.3758191978 msg= hint=
+PROBE_DONE p1_go=True p2=(False, False, True)

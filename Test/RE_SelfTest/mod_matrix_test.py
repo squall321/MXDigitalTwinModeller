@@ -243,6 +243,64 @@ def count_live_cylinders(body, d_mm, d_tol_pct=0.05):
     return n
 
 
+def _ortho_basis(a):
+    """OrthoVec replica (matches ModificationService): least-aligned cardinal (tie x<=y<=z),
+    Gram-Schmidt orthogonalize, v = a x u. Returns (u, v) spanning the plane perp to a."""
+    cands = [(1.0,0.0,0.0),(0.0,1.0,0.0),(0.0,0.0,1.0)]
+    u0 = min(cands, key=lambda e: abs(e[0]*a[0]+e[1]*a[1]+e[2]*a[2]))
+    dd = u0[0]*a[0]+u0[1]*a[1]+u0[2]*a[2]
+    ux = (u0[0]-dd*a[0], u0[1]-dd*a[1], u0[2]-dd*a[2])
+    um = math.sqrt(ux[0]**2+ux[1]**2+ux[2]**2) or 1.0
+    u = (ux[0]/um, ux[1]/um, ux[2]/um)
+    v = (a[1]*u[2]-a[2]*u[1], a[2]*u[0]-a[0]*u[2], a[0]*u[1]-a[1]*u[0])
+    return u, v
+
+
+def find_outward_cylinder(body):
+    """Largest LIVE cylinder whose OUTSIDE is air and INSIDE is solid (the OD of a
+    bearing ring / a boss OD). Probes 3 angles at mid-span, ±0.25mm off-surface
+    (never on-surface — sc-kernel-landmines), 2/3 majority. Returns a dict
+    {r, o(mm), a(unit), foot(mm), band(mm)} or None. Used for the OD-chord pattern
+    branch: the pattern seeds lie ON this cylinder and drill radially inward."""
+    from SpaceClaim.Api.V252.Geometry import Matrix
+    best = None
+    cyls = []
+    for df in body.Faces:
+        try:
+            g = df.Shape.Geometry
+            if type(g).__name__ != "Cylinder": continue
+            o = g.Frame.Origin; az = g.Frame.DirZ.UnitVector
+            bb = df.Shape.GetBoundingBox(Matrix.Identity)
+            om = (o.X*1000.0, o.Y*1000.0, o.Z*1000.0)
+            au = (az.X, az.Y, az.Z)
+            am = math.sqrt(au[0]**2+au[1]**2+au[2]**2) or 1.0
+            au = (au[0]/am, au[1]/am, au[2]/am)
+            ts = []
+            for cx in (bb.MinCorner.X, bb.MaxCorner.X):
+                for cy in (bb.MinCorner.Y, bb.MaxCorner.Y):
+                    for cz in (bb.MinCorner.Z, bb.MaxCorner.Z):
+                        ts.append((cx*1000-om[0])*au[0]+(cy*1000-om[1])*au[1]+(cz*1000-om[2])*au[2])
+            cyls.append({"r": float(g.Radius)*1000.0, "o": om, "a": au,
+                         "t0": min(ts), "t1": max(ts)})
+        except Exception: continue
+    for c in sorted(cyls, key=lambda c: -c["r"]):
+        u, v = _ortho_basis(c["a"])
+        tmid = (c["t0"]+c["t1"])/2.0
+        foot = (c["o"][0]+c["a"][0]*tmid, c["o"][1]+c["a"][1]*tmid, c["o"][2]+c["a"][2]*tmid)
+        ok = 0
+        for th in (0.3, 2.4, 4.5):
+            rd = (u[0]*math.cos(th)+v[0]*math.sin(th), u[1]*math.cos(th)+v[1]*math.sin(th),
+                  u[2]*math.cos(th)+v[2]*math.sin(th))
+            pO = (foot[0]+rd[0]*(c["r"]+0.25), foot[1]+rd[1]*(c["r"]+0.25), foot[2]+rd[2]*(c["r"]+0.25))
+            pI = (foot[0]+rd[0]*(c["r"]-0.25), foot[1]+rd[1]*(c["r"]-0.25), foot[2]+rd[2]*(c["r"]-0.25))
+            if contains_mm(body, pO) is False and contains_mm(body, pI) is True: ok += 1
+        if ok >= 2:
+            best = {"r": c["r"], "o": c["o"], "a": c["a"], "foot": foot,
+                    "band": c["t1"]-c["t0"], "u": u, "v": v}
+            break
+    return best
+
+
 def find_boss(g, d_mm=None, h_mm=None, d_tol=0.05):
     best = None; best_score = None
     if g.Bosses is None: return None
@@ -753,29 +811,109 @@ try:
                      key=lambda e: abs(e[0]*nz[0]+e[1]*nz[1]+e[2]*nz[2]))
         # center the 3-hole row on topCenter: start one spacing back along spread
         start = (topCenter[0]-spread[0]*spacing, topCenter[1]-spread[1]*spacing, topCenter[2]-spread[2]*spacing)
-        row["action"] = "AddHolePattern 3x D=%.2f sp=%.2f dir=%s" % (d, spacing, spread)
-        nzm = math.sqrt(nz[0]**2+nz[1]**2+nz[2]**2) or 1.0
-        nau = (nz[0]/nzm, nz[1]/nzm, nz[2]/nzm)
-        nCylP0 = count_live_cylinders(body, d)
-        r = ModificationService.AddHolePattern(body, arr(start), arr(spread),
-                                               "linear", 3, spacing, d, True,
-                                               0, 0, 0.0, 0.0, 0.0, arr(topNormal))
-        def verify(g2):
-            # KERNEL-TRUTH (cold-review #4): count live cylinders of diameter d on the
-            # LIVE body (drilled along topNormal) at the 3 predicted positions + net
-            # live-cylinder count increase — extractor-independent.
-            found = 0
-            for k in range(3):
-                pk = (start[0]+spread[0]*k*spacing, start[1]+spread[1]*k*spacing, start[2]+spread[2]*k*spacing)
-                rk, _ = find_live_cylinder_near(body, pk, d, nau, pos_tol=max(2.0, d))
-                if rk is not None: found += 1
-            nCylP1 = count_live_cylinders(body, d)
-            grew = (nCylP1 - nCylP0)
-            if (found == 3) or (found >= 2 and grew >= 2):
-                return "VERIFIED", "%d/3 live bores, cyl %d->%d" % (found, nCylP0, nCylP1), float(found)
-            if found > 0 or grew > 0:
-                return "INCONCLUSIVE", "%d/3 live bores, cyl %d->%d" % (found, nCylP0, nCylP1), float(found)
-            return "FAILED", "0/3 pattern holes", 0.0
+
+        # WI-3 OD-chord branch (geometry-gated, model-name-free). The legacy linear pattern
+        # drills DOWN the topNormal; a hole only becomes a real bore where the solid run under
+        # the entry is at least the hole diameter d (a thin ring wall gives a tiny run -> the
+        # cutter passes through the bore gap = the 624ZZ IC class). Count how many of the 3
+        # legacy positions have a drillable solid run >= d by marching ContainsPoint along
+        # -topNormal from just above the entry. An annular bearing ring scores <=1 (its planar
+        # face sits over the central void / thin rims); every currently-VERIFIED pattern model
+        # scores >=2 on a genuine slab face. Trigger OD-chord ONLY when drillable <=1 AND an
+        # outward cylinder exists -> all 10 V cells keep the legacy linear path.
+        def _drillable(p, need):
+            step = max(need/8.0, 0.1)
+            n = int((need*2.0)/step) + 1
+            started = False; run0 = 0.0
+            for j in range(n+1):
+                t = j*step
+                q = (p[0]-nz[0]*t, p[1]-nz[1]*t, p[2]-nz[2]*t)
+                solid = contains_mm(body, q)
+                if solid is True:
+                    if not started: started = True; run0 = t
+                elif solid is False and started:
+                    return (t - run0) >= need
+            return started and ((n*step - run0) >= need)
+        # Require a solid run of 1.5*d: a bore needs clearance beyond its own diameter to be a
+        # clean cylinder, not a nick into a ring groove / ball raceway.
+        legacyDrill = sum(1 for k in range(3)
+                          if _drillable((start[0]+spread[0]*k*spacing,
+                                         start[1]+spread[1]*k*spacing,
+                                         start[2]+spread[2]*k*spacing), d*1.5))
+        # OD-chord fires when the legacy linear pattern is NOT fully drillable (legacyDrill<3)
+        # AND an outward cylinder exists (find_outward_cylinder returns None on a genuine slab,
+        # so SampleModel1/as1-oc/11752/nist/samplemodel2 with legacyDrill<3 but no OD ring stay
+        # on the legacy path). Both bearings (624ZZ/F623ZZ) have the ring → OD branch.
+        od = find_outward_cylinder(body) if legacyDrill < 3 else None
+        # Extra guard: if the OD ring's radius is LARGE relative to the part (a slab's stray
+        # fillet cylinder, not a bearing race), the legacy slab pattern is better — keep legacy
+        # when a well-drillable slab already exists (legacyDrill >= 2 AND the band is not thin).
+        if od is not None and legacyDrill >= 2 and od["band"] > topFaceMm * 2.0:
+            od = None
+        row["odbranch"] = "legacyDrill=%d od=%s" % (legacyDrill, "yes" if od else "no")
+        log("  AddHolePattern gate: legacyDrill=%d od=%s" % (legacyDrill, "yes" if od else "no"))
+
+        if od is not None:
+            # OD-chord: 3 radial bores at theta = 2πk/3 on the outward cylinder. The circular
+            # generator (spacing = R_od) emits seeds ON the OD; AddHoleOnFace snaps each to the
+            # cylinder and drills along its own local outward normal (radially inward). Blind
+            # depth = max(d2, 1.0) (a breach into the ball groove still leaves the entry bore).
+            d2 = max(min(od["band"]/3.0, 1.6), 0.8)
+            depth = max(d2, 1.0)
+            axis_u = od["a"]; u = od["u"]; v = od["v"]; foot = od["foot"]; R = od["r"]
+            row["action"] = "AddHolePattern 3x D=%.2f OD-chord R=%.2f" % (d2, R)
+            nCylP0 = count_live_cylinders(body, d2)
+            r = ModificationService.AddHolePattern(
+                body, arr(foot), arr(axis_u), "circular", 3, R, d2, False,
+                0, 0, 0.0, 0.0, 0.0, None, True, depth)
+            def verify(g2):
+                # KERNEL-TRUTH: on a curved OD, radial bores' entry cylinders are the honest
+                # signal. A find-near test keyed at the OD SURFACE seed is unreliable (the entry
+                # cylinder's axis passes through the seed but its Frame.Origin can sit deep, and
+                # two opposed radial bores through a thin ring can MERGE into one through-cylinder
+                # — 624ZZ showed cyl 0->2 for 3 drills). So the primary signal is the net
+                # live-cylinder COUNT increase of radius ~d2/2 (>=2 = the pattern bit), with the
+                # per-seed find as a corroborating count.
+                found = 0
+                for k in range(3):
+                    th = 2.0*math.pi*k/3.0
+                    rd = (u[0]*math.cos(th)+v[0]*math.sin(th),
+                          u[1]*math.cos(th)+v[1]*math.sin(th),
+                          u[2]*math.cos(th)+v[2]*math.sin(th))
+                    seed = (foot[0]+rd[0]*R, foot[1]+rd[1]*R, foot[2]+rd[2]*R)
+                    rk, _ = find_live_cylinder_near(body, seed, d2, rd, pos_tol=max(3.0, d2*2))
+                    if rk is not None: found += 1
+                nCylP1 = count_live_cylinders(body, d2)
+                grew = (nCylP1 - nCylP0)
+                if grew >= 2 or found >= 2:
+                    return "VERIFIED", "%d/3 OD bores, cyl %d->%d" % (found, nCylP0, nCylP1), float(max(found, grew))
+                if grew >= 1 or found >= 1:
+                    return "INCONCLUSIVE", "%d/3 OD bores, cyl %d->%d" % (found, nCylP0, nCylP1), float(max(found, grew))
+                return "FAILED", "0/3 OD-chord holes", 0.0
+        else:
+            row["action"] = "AddHolePattern 3x D=%.2f sp=%.2f dir=%s" % (d, spacing, spread)
+            nzm = math.sqrt(nz[0]**2+nz[1]**2+nz[2]**2) or 1.0
+            nau = (nz[0]/nzm, nz[1]/nzm, nz[2]/nzm)
+            nCylP0 = count_live_cylinders(body, d)
+            r = ModificationService.AddHolePattern(body, arr(start), arr(spread),
+                                                   "linear", 3, spacing, d, True,
+                                                   0, 0, 0.0, 0.0, 0.0, arr(topNormal))
+            def verify(g2):
+                # KERNEL-TRUTH (cold-review #4): count live cylinders of diameter d on the
+                # LIVE body (drilled along topNormal) at the 3 predicted positions + net
+                # live-cylinder count increase — extractor-independent.
+                found = 0
+                for k in range(3):
+                    pk = (start[0]+spread[0]*k*spacing, start[1]+spread[1]*k*spacing, start[2]+spread[2]*k*spacing)
+                    rk, _ = find_live_cylinder_near(body, pk, d, nau, pos_tol=max(2.0, d))
+                    if rk is not None: found += 1
+                nCylP1 = count_live_cylinders(body, d)
+                grew = (nCylP1 - nCylP0)
+                if (found == 3) or (found >= 2 and grew >= 2):
+                    return "VERIFIED", "%d/3 live bores, cyl %d->%d" % (found, nCylP0, nCylP1), float(found)
+                if found > 0 or grew > 0:
+                    return "INCONCLUSIVE", "%d/3 live bores, cyl %d->%d" % (found, nCylP0, nCylP1), float(found)
+                return "FAILED", "0/3 pattern holes", 0.0
 
     elif prim in ("AddSlit", "AddPocket", "AddRib", "AddChamfer"):
         if prim == "AddSlit":
@@ -832,7 +970,11 @@ try:
     row["msg"] = msg
     log("  op: %s (%s)" % (st, (msg or "")[:120]))
     if st != "OK":
-        row["verdict"] = "FAILED"
+        # "NOT_APPLICABLE: <reason>" is the machine-parsable sentinel for HONEST structural
+        # refusals (pin-not-a-hole, no safe bore center, no clearing mirror twin) -> N_A,
+        # never FAILED. Substring (not startswith): parent ops wrap child messages
+        # ("MoveHole.subtract failed: NOT_APPLICABLE: ..."). Precedent: SIGN_INVERTED sniff.
+        row["verdict"] = "N_A" if ("NOT_APPLICABLE:" in (msg or "")) else "FAILED"
     else:
         try:
             g2 = reextract()

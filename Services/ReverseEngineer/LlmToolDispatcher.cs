@@ -113,7 +113,12 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         double[] pos = GetDoubleArray(args, "position_mm", 3);
                         double dia = GetDouble(args, "diameter_mm");
                         double h = GetDouble(args, "height_mm");
-                        var r = ModificationService.AddBoss(designBody, pos, dia, h);
+                        // requireVolumeChange: the MCP surface opts INTO the volume-gate so a
+                        // silent Boolean no-op (boss inside solid / cutter inside a bore) is an
+                        // honest failure instead of success:true with zero effect. Internal
+                        // callers (Move/Mirror/Pattern/Generation) stay on legacy semantics.
+                        var r = ModificationService.AddBoss(designBody, pos, dia, h,
+                            requireVolumeChange: true);
                         return EnvelopeFromResult(r);
                     }
                     case "add_hole":
@@ -122,7 +127,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         double dia = GetDouble(args, "diameter_mm");
                         bool through = GetBool(args, "through");
                         double depth = GetDoubleOrDefault(args, "depth_mm", 0.0);
-                        var r = ModificationService.AddHole(designBody, pos, dia, through, depth);
+                        var r = ModificationService.AddHole(designBody, pos, dia, through, depth,
+                            requireVolumeChange: true);
                         return EnvelopeFromResult(r);
                     }
                     case "add_slit":
@@ -153,7 +159,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         double[] seed = GetDoubleArray(args, "seed_mm", 3);
                         double dia = GetDouble(args, "diameter_mm");
                         double depth = GetDouble(args, "depth_mm");
-                        var r = ModificationService.AddHoleOnFace(designBody, seed, dia, depth);
+                        var r = ModificationService.AddHoleOnFace(designBody, seed, dia, depth,
+                            requireVolumeChange: true);
                         return EnvelopeFromResult(r);
                     }
                     case "add_slit_on_face":
@@ -181,7 +188,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         double[] seed = GetDoubleArray(args, "seed_mm", 3);
                         double dia = GetDouble(args, "diameter_mm");
                         double h = GetDouble(args, "height_mm");
-                        var r = ModificationService.AddBossOnFace(designBody, seed, dia, h);
+                        var r = ModificationService.AddBossOnFace(designBody, seed, dia, h,
+                            requireVolumeChange: true);
                         return EnvelopeFromResult(r);
                     }
                     case "add_rib":
@@ -1059,6 +1067,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             sb.Append("], ");
             int newEdges = (r.NewlyCreatedEdges != null) ? r.NewlyCreatedEdges.Count : 0;
             sb.Append("\"new_edge_count\": ").Append(newEdges.ToString(Inv));
+            // kernel-truth telemetry (always-on when the op measured it)
+            if (!double.IsNaN(r.VolumeDeltaMm3))
+                sb.Append(", \"volume_delta_mm3\": ").Append(r.VolumeDeltaMm3.ToString("0.###", Inv));
             sb.Append("}");
             return Envelope(r.Success, r.Success ? null : (r.ErrorMessage ?? "(no message)"), sb.ToString());
         }

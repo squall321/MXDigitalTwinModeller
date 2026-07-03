@@ -1001,7 +1001,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
         /// seedMm = a point ON or just outside the target face; diameterMm/depthMm in mm.
         /// </summary>
         public static ModificationResult AddHoleOnFace(
-            DesignBody designBody, double[] seedMm, double diameterMm, double depthMm)
+            DesignBody designBody, double[] seedMm, double diameterMm, double depthMm,
+            bool requireVolumeChange = false)
         {
             var result = new ModificationResult { Operation = "AddHoleOnFace", ModifiedBody = designBody };
             if (designBody == null) { result.ErrorMessage = "designBody is null"; return result; }
@@ -1035,6 +1036,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                 Body cutter = Body.ExtrudeProfile(profile, depthM + marginM);
 
                 var edgesBefore = CaptureEdges(designBody);
+                double volBefore = TryGetVolumeM3(designBody);
                 WriteBlock.ExecuteTask("AddHoleOnFace", () =>
                 {
                     Part part = designBody.Parent as Part;
@@ -1048,6 +1050,16 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                 });
                 var edgesAfter = CaptureEdges(designBody);
                 result.NewlyCreatedEdges = DiffEdges(edgesBefore, edgesAfter);
+                double dVhof = VolumeDeltaMm3(volBefore, TryGetVolumeM3(designBody));
+                result.VolumeDeltaMm3 = dVhof;
+                if (requireVolumeChange && !double.IsNaN(dVhof)
+                    && dVhof > -VolumeEpsMm3(volBefore))
+                {
+                    result.Success = false;
+                    result.ErrorMessage = "NO_EFFECT: AddHoleOnFace removed no material (dV=" +
+                        dVhof.ToString("0.000") + "mm3) - cutter engaged no solid";
+                    return result;
+                }
                 result.Success = true;
                 result.HintMessage = "entered along face normal (" +
                     nrm[0].ToString("0.##") + "," + nrm[1].ToString("0.##") + "," + nrm[2].ToString("0.##") + ")";
@@ -1109,13 +1121,14 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
         /// standing proud of a curved back). Delegates to AddBoss(axisDir=n).
         /// </summary>
         public static ModificationResult AddBossOnFace(
-            DesignBody designBody, double[] seedMm, double diameterMm, double heightMm)
+            DesignBody designBody, double[] seedMm, double diameterMm, double heightMm,
+            bool requireVolumeChange = false)
         {
             var result = new ModificationResult { Operation = "AddBossOnFace", ModifiedBody = designBody };
             double[] contactMm, n;
             if (!ResolveFaceNormal(designBody, seedMm, out contactMm, out n))
             { result.ErrorMessage = "no projectable face near seed"; return result; }
-            var r = AddBoss(designBody, contactMm, diameterMm, heightMm, n);
+            var r = AddBoss(designBody, contactMm, diameterMm, heightMm, n, requireVolumeChange);
             r.Operation = "AddBossOnFace";
             r.HintMessage = NormalHint(n);
             return r;
@@ -1160,7 +1173,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             double[] positionMm,
             double diameterMm,
             double heightMm,
-            double[] axisDir = null)
+            double[] axisDir = null,
+            bool requireVolumeChange = false)
         {
             var result = new ModificationResult
             {
@@ -1192,6 +1206,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             double[] bossAxisU = NormalizeVec3(axisDir);
 
             var edgesBefore = CaptureEdges(designBody);
+            double volBefore = TryGetVolumeM3(designBody);
 
             try
             {
@@ -1261,8 +1276,37 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             var edgesAfter = CaptureEdges(designBody);
             result.NewlyCreatedEdges = DiffEdges(edgesBefore, edgesAfter);
             if (baseFaceIdx >= 0) result.ModifiedFaceIndices.Add(baseFaceIdx);
+            // Volume-gate honesty (opt-in): a boss united entirely INTO existing material
+            // adds nothing — the Boolean "succeeds" silently. Telemetry is always-on.
+            double dVboss = VolumeDeltaMm3(volBefore, TryGetVolumeM3(designBody));
+            result.VolumeDeltaMm3 = dVboss;
+            if (requireVolumeChange && !double.IsNaN(dVboss)
+                && dVboss < VolumeEpsMm3(volBefore))
+            {
+                result.Success = false;
+                result.ErrorMessage = "NO_EFFECT: AddBoss added no material (dV=" +
+                    dVboss.ToString("0.000") + "mm3) - boss lies inside existing solid";
+                return result;
+            }
             result.Success = true;
             return result;
+        }
+
+        /// <summary>Volume delta across an op in mm³ (NaN-propagating).</summary>
+        private static double VolumeDeltaMm3(double volBeforeM3, double volAfterM3)
+        {
+            if (double.IsNaN(volBeforeM3) || double.IsNaN(volAfterM3)) return double.NaN;
+            return (volAfterM3 - volBeforeM3) * 1e9;
+        }
+
+        /// <summary>Gate threshold: 0.001mm³ absolute floor OR 1e-6 of the body — a 1mm pinhole
+        /// through a 0.5mm wall (~0.39mm³) passes; NURBS kernel noise (~1e-12mm³) never trips.
+        /// NEVER compare against the analytic cutter volume: through-cutters on hollow bodies
+        /// legitimately remove far less than πr²·depth.</summary>
+        private static double VolumeEpsMm3(double volBeforeM3)
+        {
+            double bodyMm3 = double.IsNaN(volBeforeM3) ? 0.0 : volBeforeM3 * 1e9;
+            return Math.Max(0.001, bodyMm3 * 1e-6);
         }
 
         // -------------------------------------------------------------------
@@ -1278,7 +1322,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
         /// </summary>
         public static ModificationResult AddRoundedRectBoss(
             DesignBody designBody, double[] positionMm, double widthMm, double lengthMm,
-            double heightMm, double cornerRadiusMm, double[] axisDir = null)
+            double heightMm, double cornerRadiusMm, double[] axisDir = null,
+            bool requireVolumeChange = false)
         {
             var result = new ModificationResult { Operation = "AddRoundedRectBoss", ModifiedBody = designBody };
             if (designBody == null) { result.ErrorMessage = "designBody is null"; return result; }
@@ -1299,6 +1344,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             double[] axisU = NormalizeVec3(axisDir) ?? new[] { 0.0, 0.0, 1.0 };
 
             var edgesBefore = CaptureEdges(designBody);
+            double volBefore = TryGetVolumeM3(designBody);
             try
             {
                 WriteBlock.ExecuteTask("AddRoundedRectBoss", () =>
@@ -1372,6 +1418,15 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
 
             var edgesAfter = CaptureEdges(designBody);
             result.NewlyCreatedEdges = DiffEdges(edgesBefore, edgesAfter);
+            double dVrr = VolumeDeltaMm3(volBefore, TryGetVolumeM3(designBody));
+            result.VolumeDeltaMm3 = dVrr;
+            if (requireVolumeChange && !double.IsNaN(dVrr) && dVrr < VolumeEpsMm3(volBefore))
+            {
+                result.Success = false;
+                result.ErrorMessage = "NO_EFFECT: AddRoundedRectBoss added no material (dV=" +
+                    dVrr.ToString("0.000") + "mm3) - plateau lies inside existing solid";
+                return result;
+            }
             result.Success = true;
             return result;
         }
@@ -1391,7 +1446,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             bool through,
             double depthMm = 0.0,
             double[] axisDir = null,
-            bool clampToWall = false)
+            bool clampToWall = false,
+            bool requireVolumeChange = false)
         {
             var result = new ModificationResult
             {
@@ -1469,7 +1525,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                 }
                 if (infeasible)
                 {
-                    result.ErrorMessage = "AddHole skipped: bore would leave < " +
+                    result.ErrorMessage = "NOT_APPLICABLE: AddHole skipped: bore would leave < " +
                         (MIN_WALL_M * 1000.0).ToString("0.0") + "mm wall (non-manifold tangency); no safe center";
                     return result;
                 }
@@ -1541,6 +1597,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             }
 
             var edgesBefore = CaptureEdges(designBody);
+            double volBefore = TryGetVolumeM3(designBody);
 
             try
             {
@@ -1592,6 +1649,18 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                 }
             }
             catch { /* best-effort */ }
+            // Volume-gate honesty (opt-in): a cutter entirely inside an existing bore/void
+            // removes nothing — observed live (as1 nut bore-centre drill, dV=0, g16b).
+            double dVhole = VolumeDeltaMm3(volBefore, TryGetVolumeM3(designBody));
+            result.VolumeDeltaMm3 = dVhole;
+            if (requireVolumeChange && !double.IsNaN(dVhole)
+                && dVhole > -VolumeEpsMm3(volBefore))
+            {
+                result.Success = false;
+                result.ErrorMessage = "NO_EFFECT: AddHole removed no material (dV=" +
+                    dVhole.ToString("0.000") + "mm3) - cutter engaged no solid (existing bore/void)";
+                return result;
+            }
             result.Success = true;
             return result;
         }
@@ -1936,7 +2005,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                     try { solidCore = designBody.Shape.ContainsPoint(corePt); } catch { }
                     if (solidCore)
                     {
-                        result.ErrorMessage = "target is a solid pin, not a hole (mis-extracted) — MoveHole not applicable";
+                        // NOT_APPLICABLE: machine-parsable sentinel — the harness maps it to an
+                        // honest N_A (structurally not applicable), never FAILED.
+                        result.ErrorMessage = "NOT_APPLICABLE: target is a solid pin, not a hole (mis-extracted) — MoveHole not applicable";
                         return result;
                     }
                 }
@@ -2483,7 +2554,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                             designBody.Shape.Transform(Matrix.CreateScale(1.0 / SCALE, scaleCenter))); }
                         catch { }
                     }
-                    result.ErrorMessage = "target is a solid pin, not a hole (mis-extracted) — RemoveHole not applicable";
+                    result.ErrorMessage = "NOT_APPLICABLE: target is a solid pin, not a hole (mis-extracted) — RemoveHole not applicable";
                     return result;
                 }
             }
@@ -2765,7 +2836,22 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                     return result;
                 }
 
-                var addRes = AddBoss(designBody, mirrored, boss.DiameterMm, boss.HeightMm);
+                // Preserve the boss's own axis, REFLECTED across the mirror plane — dropping
+                // it silently re-extruded the twin along legacy +Z (wrong for any non-vertical
+                // boss), and the unreflected axis is wrong when the axis has a component along
+                // the plane normal. (Matrix Mirror cells are hole-only: zero-matrix-risk fix.)
+                double[] twinAxis = null;
+                if (boss.Axis != null && boss.Axis.Length >= 3)
+                {
+                    double ad = Dot3(boss.Axis, n);
+                    twinAxis = new[]
+                    {
+                        boss.Axis[0] - 2.0 * ad * n[0],
+                        boss.Axis[1] - 2.0 * ad * n[1],
+                        boss.Axis[2] - 2.0 * ad * n[2],
+                    };
+                }
+                var addRes = AddBoss(designBody, mirrored, boss.DiameterMm, boss.HeightMm, twinAxis);
                 if (!addRes.Success)
                 {
                     result.ErrorMessage = "MirrorFeature(boss) AddBoss failed: " + addRes.ErrorMessage;
@@ -2809,7 +2895,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             double rowSpacing = 0.0,
             double colSpacing = 0.0,
             double depthMm = 0.0,
-            double[] drillAxis = null)
+            double[] drillAxis = null,
+            bool drillLocalNormal = false,
+            double localDepthMm = 0.0)
         {
             var result = new ModificationResult
             {
@@ -2901,10 +2989,17 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             }
 
             // Drill each hole. Aggregate ModifiedFaceIndices and propagate failure if ANY hole fails.
+            // drillLocalNormal (OD-chord/I-half): the seeds lie ON a curved face — each hole enters
+            // along its OWN local outward normal via AddHoleOnFace (radial bores on a cylinder OD),
+            // instead of one shared drillAxis. through is ignored; blind localDepthMm (default
+            // max(diameter, 1.0)mm). Legacy path is byte-identical when the flag is false.
             int succeeded = 0;
             foreach (var pos in positions)
             {
-                var addRes = AddHole(designBody, pos, diameterMm, through, through ? 0.0 : depthMm, drillAxis);
+                var addRes = drillLocalNormal
+                    ? AddHoleOnFace(designBody, pos, diameterMm,
+                        localDepthMm > 0 ? localDepthMm : Math.Max(diameterMm, 1.0))
+                    : AddHole(designBody, pos, diameterMm, through, through ? 0.0 : depthMm, drillAxis);
                 if (!addRes.Success)
                 {
                     result.ErrorMessage = "AddHolePattern[" + succeeded + "] failed: " + addRes.ErrorMessage;
@@ -4475,6 +4570,13 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             return false;
         }
 
+        /// <summary>Fail-open kernel volume read (m³): NaN on any failure so a poisoned body
+        /// can never turn into a false NO_EFFECT refusal in the volume gate.</summary>
+        private static double TryGetVolumeM3(DesignBody b)
+        {
+            try { return b.Shape.Volume; } catch { return double.NaN; }
+        }
+
         private static HashSet<Edge> CaptureEdges(DesignBody designBody)
         {
             var set = new HashSet<Edge>();
@@ -4861,6 +4963,15 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
         /// FeatureExtractor's criteria sometimes reject valid post-mod walls.
         /// </summary>
         public double MeasuredAfterMm { get; set; } = double.NaN;
+
+        /// <summary>
+        /// Kernel-truth volume change of the target body across the op (mm³), captured by
+        /// the Add* creation ops. Always-on telemetry: NaN when not measured/measurable.
+        /// The opt-in requireVolumeChange gate uses it to refuse silent Boolean no-ops
+        /// (e.g. a cutter entirely inside an existing bore removes nothing but the Boolean
+        /// "succeeds" — observed live on the as1 nut, g16b).
+        /// </summary>
+        public double VolumeDeltaMm3 { get; set; } = double.NaN;
 
         public ModificationResult()
         {
