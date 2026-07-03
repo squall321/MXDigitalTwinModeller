@@ -1,0 +1,44 @@
+{
+  "length_mm": 158.2,
+  "width_mm": 75.8,
+  "thickness_mm": 8.6,
+  "corner_r": 4.0,
+  "min_wall": 0.4,
+  "hollow_wall_mm": 0.6,
+
+  "back_bulge_mm": 0.6,
+  "edge_chamfer_mm": 0.3,
+  "edge_chamfer_filter": "top",
+
+  "pocket": { "enabled": true, "width_mm": 150, "length_mm": 68, "depth_mm": 1.0, "corner_r": 3 },
+  "front_punch": { "x_mm": 60, "y_mm": 0, "diameter_mm": 4 },
+
+  "camera": {
+    "x_mm": 55, "y_mm": 16,
+    "width_mm": 24, "length_mm": 42, "height_mm": 1.8, "corner_r": 8,
+    "lenses": [
+      { "x_mm": 0, "y_mm": -14, "diameter_mm": 9 },
+      { "x_mm": 0, "y_mm": 0, "diameter_mm": 9 },
+      { "x_mm": 0, "y_mm": 14, "diameter_mm": 9 }
+    ]
+  },
+
+  "grille": {
+    "origin_x_mm": -40, "origin_y_mm": -20,
+    "pitch_mm": 2, "rows": 1, "cols": 6, "hole_diameter_mm": 1,
+    "on_back": true
+  },
+
+  "ports_on_flank": true,
+  "ports": [
+    { "type": "usbc", "x_mm": 0, "y_mm": -36.5, "z_mm": 4.3, "width_mm": 9, "height_mm": 3.2, "on_face": "flank" }
+  ],
+
+  "buttons": [
+    { "x_mm": 40, "y_mm": 30, "z_mm": 0, "width_mm": 12, "height_mm": 3, "depth_mm": 0.8 }
+  ],
+
+  "pin_holes": [
+    { "x_mm": -25, "y_mm": -34, "diameter_mm": 1.2, "through": true }
+  ]
+}

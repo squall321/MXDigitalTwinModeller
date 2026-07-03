@@ -1,0 +1,4 @@
+IPHONE True
+GALAXY True
+MCP True
+G19_PASS ALL=True (3/3)

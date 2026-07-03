@@ -1,0 +1,39 @@
+{
+  "length_mm": 146.6,
+  "width_mm": 70.6,
+  "thickness_mm": 8.25,
+  "corner_r": 6.0,
+  "min_wall": 0.4,
+  "hollow_wall_mm": 0.6,
+
+  "pocket": { "enabled": true, "width_mm": 138, "length_mm": 62, "depth_mm": 1.0, "corner_r": 4 },
+  "front_punch": { "x_mm": 55, "y_mm": 0, "diameter_mm": 6 },
+
+  "camera": {
+    "x_mm": 48, "y_mm": 15,
+    "width_mm": 36, "length_mm": 36, "height_mm": 2.2, "corner_r": 10,
+    "lenses": [
+      { "x_mm": -8, "y_mm": -8, "diameter_mm": 12 },
+      { "x_mm": 8, "y_mm": -8, "diameter_mm": 12 },
+      { "x_mm": 0, "y_mm": 10, "diameter_mm": 12 }
+    ]
+  },
+
+  "ports_on_flank": true,
+  "ports": [
+    { "type": "usbc", "x_mm": 0, "y_mm": -34, "z_mm": 4.1, "width_mm": 9, "height_mm": 3.2, "on_face": "flank" }
+  ],
+
+  "antenna_slits": [
+    { "x_mm": -60, "y_mm": 34, "z_mm": 4.1, "length_mm": 8, "width_mm": 0.4, "depth_mm": 0.8, "on_flank": true },
+    { "x_mm": 60, "y_mm": -34, "z_mm": 4.1, "length_mm": 8, "width_mm": 0.4, "depth_mm": 0.8, "on_flank": true }
+  ],
+
+  "pin_holes": [
+    { "x_mm": 20, "y_mm": -33, "diameter_mm": 1.2, "through": true },
+    { "x_mm": 60, "y_mm": -20, "diameter_mm": 1.0, "through": true }
+  ],
+
+  "final_fillet_mm": 0.8,
+  "final_fillet_filter": "top"
+}

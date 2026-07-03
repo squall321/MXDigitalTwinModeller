@@ -856,3 +856,22 @@ under Student, 1 awaiting the licensed seat.
 (3 *PART); mesh_with_gmsh graceful degrade under Student. Static: all 46 schemas parse as
 valid JSON (reflection-loaded ToToolsArrayJson -> ConvertFrom-Json), MSI File table carries
 gmsh. G18_PASS ALL=True.
+
+## Preset library: iphone-like / galaxy-like (2026-07-03) - closes the last P5 deliverable
+
+Examples/presets/ now carries two COMPLETE reference specs + README:
+- iphone-like.json: flat back, 36x36 r10 plateau with a 3-lens triangle (d12), pocket +
+  front punch d6, flank USB-C, 2 flank antenna slits, 2 pinholes, final top fillet.
+- galaxy-like.json: curved back (bulge 0.6, 40-slab z-stack), 24x42 vertical 3-lens island,
+  BACK-face grille (1x6 blind), edge chamfer, flank USB-C, side button, pinhole.
+
+**Gate g19** (headless): both parse with 0 errors / 0 WARNINGS, generate end-to-end with every
+advertised stage firing (per-stage log asserted: S00a/S02/S04/S04b/S05/S05L/S07/S08-back/
+S09/S10/S11/S12), Tier-2 ValidationPass, vol 11278.6 / 12006.6 mm3; the same file content
+flows through the real MCP dispatcher (generate_phone_from_spec, warnings:[]). ALL=True 3/3.
+
+DELIBERATE CLOSURE of the unbuilt P5 "pattern library" (Services/ReverseEngineer/Generation/
+Patterns/): SUPERSEDED by spec presets. With the full spec surface exposed over MCP, reusable
+composition lives in JSON documents the LLM reads, patches (set_parameters), and combines -
+compiled C# pattern units would duplicate that with less flexibility. Recorded so future
+audits don't reopen it.
