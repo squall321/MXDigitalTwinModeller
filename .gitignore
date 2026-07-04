@@ -117,6 +117,8 @@ Mechanical/MXSimulator/postprocess/venv/
 Mechanical/MXSimulator/postprocess/.venv-pyansys/
 Mechanical/MXSimulator/postprocess/*_result.txt
 Mechanical/MXSimulator/postprocess/_probe_*.py
+Mechanical/MXSimulator/batch/*_result.txt
+Mechanical/MXSimulator/batch/dpf_sidecar.json
 
 # Gmsh SDK binaries (large, download separately)
 Libs/gmsh/*.exe

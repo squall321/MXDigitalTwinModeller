@@ -101,7 +101,7 @@ class SummaryTab(QWidget):
         # Table
         bodies = meta.get('bodies', [])
         cols = ['Rank', 'Body / NS', 'MaxDef [mm]', 'MaxVM [MPa]',
-                'P2P [mm]', 'RMS [mm]', 'Severity']
+                'P2P [mm]', 'RMS [mm]', 'StrainE [mJ]', 'Severity']
         self.table = QTableWidget(len(bodies), len(cols))
         self.table.setHorizontalHeaderLabels(cols)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -135,6 +135,8 @@ class SummaryTab(QWidget):
                 sev = '🟢 OK'
                 bg  = QColor(200, 240, 200)
 
+            se = b.get('strain_energy')
+            se_str = '{:.3g}'.format(float(se)) if se is not None else '—'
             vals = [
                 str(b.get('rank', i + 1)),
                 b.get('name', '?'),
@@ -142,6 +144,7 @@ class SummaryTab(QWidget):
                 '{:.2f}'.format(max_vm),
                 '{:.4f}'.format(p2p_val) if not np.isnan(p2p_val) else '—',
                 '{:.4f}'.format(rms_val) if not np.isnan(rms_val) else '—',
+                se_str,
                 sev,
             ]
             for j, val in enumerate(vals):
@@ -368,6 +371,116 @@ class FatigueTab(QWidget):
 
     def _save_png(self):
         p, _ = QFileDialog.getSaveFileName(self, "Save PNG", "fatigue.png", "PNG (*.png)")
+        if p:
+            self.pw.export_png(p)
+
+
+# ── Tab: Energy (elemental strain energy per body) ───────────────────
+class EnergyTab(QWidget):
+    """Ranked strain-energy bar chart. Reads per-body scalar `strain_energy` from metadata
+    (schema 2.0+ additive field). Degrades to a placeholder on older/absent data."""
+
+    def __init__(self, meta, base_dir, parent=None):
+        super().__init__(parent)
+        self.meta = meta
+        self.base_dir = base_dir
+        self._load_data()
+
+        lay = QVBoxLayout(self)
+        self.pw = PlotWidget(nrows=1, ncols=1)
+        lay.addWidget(self.pw)
+        self.summary_lbl = QLabel("")
+        lay.addWidget(self.summary_lbl)
+        row = QHBoxLayout()
+        b = QPushButton("Export PNG"); b.clicked.connect(self._save_png)
+        row.addWidget(b); row.addStretch()
+        lay.addLayout(row)
+        self._update()
+
+    def _load_data(self):
+        self.energy = []
+        for b in self.meta.get('bodies', []):
+            se = b.get('strain_energy')
+            if se is not None:
+                try:
+                    self.energy.append((b.get('name', '?'), float(se)))
+                except (ValueError, TypeError):
+                    pass
+        self.energy.sort(key=lambda x: x[1], reverse=True)
+
+    def _update(self, *_):
+        ax = self.pw.axes[0]; ax.cla()
+        if not self.energy:
+            ax.text(0.5, 0.5, "no strain_energy in metadata\n(re-export with ① after this build)",
+                    ha='center', va='center', transform=ax.transAxes)
+            self.summary_lbl.setText("")
+        else:
+            names = [n for n, _ in self.energy]
+            se = [s for _, s in self.energy]
+            total = sum(se) or 1.0
+            y = range(len(names))
+            ax.barh(list(y), se, color=COLORS[0], alpha=0.85, edgecolor='k', lw=0.5)
+            ax.set_yticks(list(y)); ax.set_yticklabels(names, fontsize=8)
+            for i, s in enumerate(se):
+                ax.text(s, i, "  {:.3g} ({:.0%})".format(s, s / total), va='center', fontsize=7)
+            unit = self.meta.get('units', {}).get('energy', 'mJ')
+            ax.set_xlabel("Strain Energy [{}]".format(unit))
+            ax.set_title("Strain energy by body")
+            ax.invert_yaxis()
+            ax.grid(True, axis='x', alpha=0.3)
+            self.summary_lbl.setText("Total = {:.4g} {}   over {} bodies".format(
+                total, unit, len(names)))
+        self.pw.draw()
+
+    def _save_png(self):
+        p, _ = QFileDialog.getSaveFileName(self, "Save PNG", "energy.png", "PNG (*.png)")
+        if p:
+            self.pw.export_png(p)
+
+
+# ── Tab: Reactions (global reaction forces per boundary condition) ────
+class ReactionsTab(QWidget):
+    """Grouped bar of Rx/Ry/Rz/|R| per reaction scope. Reads top-level `reactions` (a list of
+    {scope,x,y,z,mag}) — added by a future ForceReaction extraction. Placeholder when absent."""
+
+    def __init__(self, meta, base_dir, parent=None):
+        super().__init__(parent)
+        self.meta = meta
+        self.base_dir = base_dir
+        self.reactions = meta.get('reactions', []) or []
+
+        lay = QVBoxLayout(self)
+        self.pw = PlotWidget(nrows=1, ncols=1)
+        lay.addWidget(self.pw)
+        row = QHBoxLayout()
+        b = QPushButton("Export PNG"); b.clicked.connect(self._save_png)
+        row.addWidget(b); row.addStretch()
+        lay.addLayout(row)
+        self._update()
+
+    def _update(self, *_):
+        ax = self.pw.axes[0]; ax.cla()
+        if not self.reactions:
+            ax.text(0.5, 0.5, "no reaction data in metadata\n(reaction extraction is opt-in)",
+                    ha='center', va='center', transform=ax.transAxes)
+        else:
+            scopes = [r.get('scope', '?') for r in self.reactions]
+            comps = ['x', 'y', 'z', 'mag']
+            x = np.arange(len(scopes))
+            w = 0.2
+            for ci, c in enumerate(comps):
+                vals = [float(r.get(c, 0.0) or 0.0) for r in self.reactions]
+                ax.bar(x + (ci - 1.5) * w, vals, w, label=c.upper(),
+                       color=COLORS[ci % len(COLORS)])
+            ax.set_xticks(x); ax.set_xticklabels(scopes, fontsize=8)
+            unit = self.meta.get('units', {}).get('force', 'N')
+            ax.set_ylabel("Reaction force [{}]".format(unit))
+            ax.set_title("Reaction forces by scope")
+            ax.legend(fontsize=8); ax.grid(True, axis='y', alpha=0.3)
+        self.pw.draw()
+
+    def _save_png(self):
+        p, _ = QFileDialog.getSaveFileName(self, "Save PNG", "reactions.png", "PNG (*.png)")
         if p:
             self.pw.export_png(p)
 
@@ -645,6 +758,8 @@ class MainWindow(QMainWindow):
         tabs.addTab(FFTTab(meta, base_dir),              "〰  FFT")
         tabs.addTab(FRFTab(meta, base_dir),              "〜  FRF (Bode)")
         tabs.addTab(FatigueTab(meta, base_dir),          "🔩  Fatigue")
+        tabs.addTab(EnergyTab(meta, base_dir),           "⚡  Energy")
+        tabs.addTab(ReactionsTab(meta, base_dir),        "🎯  Reactions")
 
         central = QWidget()
         vbox = QVBoxLayout(central)

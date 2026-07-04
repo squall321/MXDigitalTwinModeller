@@ -1772,6 +1772,15 @@ class PostProcessDialog(Window):
             _btn("Browse...", lambda s, e: self.on_browse_force(s, e), 70),
         ))
 
+        # Phase-2 DPF sidecar opt-in (OFF by default; only works when .venv-pyansys exists).
+        self.dpf_cb = CheckBox()
+        self.dpf_cb.Content = "Run DPF deep analysis (modal / participation / strain-energy / hot-spots)"
+        self.dpf_cb.IsChecked = False
+        self.dpf_cb.ToolTip = ("Optional Phase-2 sidecar: reads the solved .rst with ansys-dpf-core "
+                               "(needs postprocess\\.venv-pyansys). Writes dpf_sidecar.json. Non-fatal.")
+        self.dpf_cb.Margin = Thickness(0, 2, 0, 2)
+        root.Children.Add(self.dpf_cb)
+
         # ── 4. Actions ────────────────────────────────────────────────────
         root.Children.Add(_hdr("4. Actions"))
 
@@ -1951,7 +1960,33 @@ class PostProcessDialog(Window):
                     stress.Name = "VM_" + body_name
                     stress.Location = sel
 
-                    pairs.append((body_name, deform, stress))
+                    # Phase-1 extension: directional deformation (X/Y/Z) + elemental strain
+                    # energy per body. Each wrapped so an API/enum miss just omits that metric
+                    # (the body keeps its Total Deformation + VM ranking, viewer shows '—').
+                    dirdefs = {}
+                    try:
+                        from Ansys.Mechanical.DataModel.Enums import CoordinateSystemAxisType as _AX
+                        _axes = (('x', _AX.XAxis), ('y', _AX.YAxis), ('z', _AX.ZAxis))
+                        for _k, _ax in _axes:
+                            dd = sol.AddDirectionalDeformation()
+                            dd.Name = "Dir%s_" % _k + body_name
+                            dd.NormalOrientation = _ax
+                            dd.Location = sel
+                            dirdefs[_k] = dd
+                    except Exception as _ed:
+                        self.log("  (dir-deform unavailable for {0}: {1})".format(body_name, str(_ed)[:80]))
+                        dirdefs = {}
+                    strain_e = None
+                    try:
+                        se = sol.AddElementalStrainEnergy()
+                        se.Name = "SE_" + body_name
+                        se.Location = sel
+                        strain_e = se
+                    except Exception as _es:
+                        self.log("  (strain-energy unavailable for {0}: {1})".format(body_name, str(_es)[:80]))
+                        strain_e = None
+
+                    pairs.append((body_name, deform, stress, dirdefs, strain_e))
                     self.log("  + {0}".format(body_name))
                 except Exception as ex:
                     self.log("  WARN {0}: {1}".format(body_name, str(ex)))
@@ -1972,16 +2007,29 @@ class PostProcessDialog(Window):
 
             # Rank by MaximumOfMaximumOverTime
             ranked = []
-            for ns_name, deform, stress in pairs:
+            for ns_name, deform, stress, dirdefs, strain_e in pairs:
                 max_def = self._safe_float(deform, 'MaximumOfMaximumOverTime')
                 max_vm  = self._safe_float(stress,  'MaximumOfMaximumOverTime')
-                ranked.append({
+                entry = {
                     'name':    ns_name,
                     'max_def': max_def,
                     'max_vm':  max_vm,
                     'deform':  deform,
                     'stress':  stress,
-                })
+                    'dirdefs': dirdefs,
+                    'strain_e': strain_e,
+                }
+                # directional deformation maxima (only when the results were added)
+                if dirdefs:
+                    dd = {}
+                    for _k in ('x', 'y', 'z'):
+                        if _k in dirdefs:
+                            dd[_k] = self._safe_float(dirdefs[_k], 'MaximumOfMaximumOverTime')
+                    if dd:
+                        entry['directional_def'] = dd
+                if strain_e is not None:
+                    entry['strain_energy'] = self._safe_float(strain_e, 'MaximumOfMaximumOverTime')
+                ranked.append(entry)
 
             ranked.sort(key=lambda x: x['max_def'], reverse=True)
             self._ranked = ranked[:top_n]
@@ -2051,13 +2099,36 @@ class PostProcessDialog(Window):
                 except Exception as ex:
                     self.log("  WARN export {0}: {1}".format(ns_name, str(ex)))
 
-                bodies_meta.append({
+                entry = {
                     'rank':    r.get('rank', 0),
                     'name':    ns_name,
                     'max_def': r['max_def'],
                     'max_vm':  r['max_vm'],
                     'csv':     csv_fname,
-                })
+                }
+                # Phase-1 additive fields (only when the results were extracted). Also export
+                # their time-histories (ExportToTextFile is safe for contour results).
+                if 'directional_def' in r:
+                    entry['directional_def'] = r['directional_def']
+                    dd = r.get('dirdefs') or {}
+                    for _k in ('x', 'y', 'z'):
+                        if _k in dd:
+                            fn = safe + "_def%s.txt" % _k.upper()
+                            try:
+                                dd[_k].ExportToTextFile(os.path.join(out_dir, fn))
+                                entry['csv_dir_' + _k] = fn
+                            except Exception:
+                                pass
+                if 'strain_energy' in r:
+                    entry['strain_energy'] = r['strain_energy']
+                    if r.get('strain_e') is not None:
+                        fn = safe + "_strainenergy.txt"
+                        try:
+                            r['strain_e'].ExportToTextFile(os.path.join(out_dir, fn))
+                            entry['csv_energy'] = fn
+                        except Exception:
+                            pass
+                bodies_meta.append(entry)
 
             # schema_version 2.0 (POSTPROCESS_IDEAS.md §10.4): a stable version marker + explicit
             # units + timestamp so the viewer AND a future PyAnsys/DPF sidecar can branch on the
@@ -2071,7 +2142,8 @@ class PostProcessDialog(Window):
                 'schema_version':  '2.0',
                 'generated_at':    _gen_at,
                 'source':          'MXSimulator PostProcessDialog',
-                'units':           {'deformation': 'mm', 'stress': 'MPa', 'frequency': 'Hz'},
+                'units':           {'deformation': 'mm', 'stress': 'MPa', 'frequency': 'Hz',
+                                    'energy': 'mJ', 'force': 'N'},
                 'analysis':        analysis_name,
                 'operating_freq_hz': float(self.freq_tb.Text.strip() or "100"),
                 'thresh_red_mm':   float(self.red_tb.Text.strip() or "0.30"),
@@ -2084,6 +2156,10 @@ class PostProcessDialog(Window):
             with open(meta_path, 'w', encoding='utf-8') as f:
                 json.dump(meta, f, indent=2, ensure_ascii=False)
             self.log("Written: metadata.json")
+
+            # Phase-2 DPF sidecar (opt-in, async, non-fatal). Reads the solved .rst with
+            # ansys-dpf-core in the .venv-pyansys and writes dpf_sidecar.json beside metadata.
+            self._run_dpf_sidecar(out_dir)
 
             # Launch viewer (exe preferred, python fallback)
             if not self._launch_viewer(meta_path):
@@ -2098,6 +2174,70 @@ class PostProcessDialog(Window):
             self.log(traceback.format_exc())
             self.status_lbl.Content = "Export error — see log."
             self.status_lbl.Foreground = Brushes.Red
+
+    def _run_dpf_sidecar(self, out_dir):
+        """Phase-2 deep analysis (POSTPROCESS_IDEAS.md §6): launch the DPF sidecar
+        (batch/mx_batch.py) in the .venv-pyansys to read the solved .rst and emit
+        dpf_sidecar.json (modal freqs / participation / strain-energy / MAC / hot-spots).
+
+        OPT-IN and fully NON-FATAL: only runs when the opt-in checkbox is ticked AND the venv +
+        script + a resolvable .rst all exist; any miss logs-and-returns so the existing export/
+        viewer flow is byte-identical when Phase-2 isn't available (end-user machines won't have
+        the .venv-pyansys unless a Phase-2 packaging step bundles it)."""
+        try:
+            cb = getattr(self, 'dpf_cb', None)
+            if cb is None or not cb.IsChecked:
+                return
+            py = os.path.join(self._POSTPROCESS_DIR, ".venv-pyansys", "Scripts", "python.exe")
+            script = os.path.join(os.path.dirname(self._POSTPROCESS_DIR), "batch", "mx_batch.py")
+            if not (os.path.isfile(py) and os.path.isfile(script)):
+                self.log("DPF sidecar skipped (.venv-pyansys or mx_batch.py absent — optional).")
+                return
+            rst = self._resolve_rst_path()
+            if not rst:
+                self.log("DPF sidecar skipped (no solved .rst found for this analysis).")
+                return
+            out = os.path.join(out_dir, "dpf_sidecar.json")
+            meta = os.path.join(out_dir, "metadata.json")
+            args = '"{0}" "{1}" "{2}" --merge "{3}"'.format(script, rst, out, meta)
+            System.Diagnostics.Process.Start(py, args)
+            self.log("DPF sidecar launched (async): dpf_sidecar.json")
+        except Exception as ex:
+            self.log("DPF sidecar launch failed (non-fatal): {0}".format(str(ex)))
+
+    def _resolve_rst_path(self):
+        """Best-effort locate the solved .rst for the picked analysis. Returns a path or None.
+        Tries the analysis/solution working directory; searches for file.rst / *.rst. Never
+        raises — an unresolved path just disables the (opt-in) sidecar."""
+        try:
+            analysis = self._get_selected_analysis()
+            wd = None
+            for obj in (analysis, getattr(analysis, 'Solution', None) if analysis else None):
+                if obj is None:
+                    continue
+                for attr in ('WorkingDir', 'SolverFilesDirectory', 'WorkingDirectory'):
+                    try:
+                        v = getattr(obj, attr, None)
+                        if v and os.path.isdir(str(v)):
+                            wd = str(v); break
+                    except Exception:
+                        pass
+                if wd:
+                    break
+            if not wd:
+                return None
+            # prefer the canonical file.rst, else the newest *.rst
+            cand = os.path.join(wd, "file.rst")
+            if os.path.isfile(cand):
+                return cand
+            rsts = [os.path.join(wd, f) for f in os.listdir(wd) if f.lower().endswith(".rst")]
+            rsts = [p for p in rsts if os.path.isfile(p)]
+            if rsts:
+                rsts.sort(key=lambda p: os.path.getmtime(p), reverse=True)
+                return rsts[0]
+        except Exception:
+            pass
+        return None
 
     def _launch_viewer(self, meta_path):
         """

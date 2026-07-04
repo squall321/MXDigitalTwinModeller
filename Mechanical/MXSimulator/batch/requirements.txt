@@ -1,0 +1,7 @@
+# Phase-2 DPF sidecar (mx_batch.py) — installed into .venv-pyansys
+# (see Mechanical\MXSimulator\postprocess\README_pyansys_probe.md for the license probe).
+ansys-dpf-core==0.16.1
+numpy>=1.24
+# scipy is OPTIONAL: it only enables the fast KD-tree hot-spot clustering path.
+# Without it mx_batch falls back to a numpy union-find (correct, slower on huge meshes).
+# scipy>=1.10
