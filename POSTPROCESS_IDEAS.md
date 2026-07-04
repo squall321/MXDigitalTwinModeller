@@ -505,10 +505,33 @@ DPF-over-.rst sidecar 로 착수**, ACT 확장이 `System.Diagnostics.Process` �
 입력 + Miner D·수명 요약). headless 검증 완료. `requirements.txt`+`rainflow>=3.2`, `build_viewer.bat`
 +`--hidden-import rainflow`.
 
+### Phase 2 DPF sidecar + Phase 1 popup/tab 확장 — DONE (2026-07-05)
+
+**Task A — Phase 2 DPF sidecar** (`Mechanical/MXSimulator/batch/mx_batch.py`, 순수 DPF+numpy, API 무관):
+solved `.rst` 를 ansys-dpf-core 로 읽어 `dpf_sidecar.json` 생성 — modal freqs / participation·effective
+mass(lumped-mass 시도, Student 시트는 unit-mass 폴백을 method 필드로 정직 표기) / strain-energy(static=실제 J
+via stiffness_matrix_energy, modal=per-mode 상대 SED) / MAC(1파일=self-MAC 검산, --rst2=cross) / stress
+hot-spot 클러스터(von Mises quantile → numpy union-find 기본, scipy KD-tree fast-path). 전 단계 try/except
+가드 + errors[] 로 부분실패도 정직 리포트. **GATE (`batch/selftest_mx_batch.py`, 번들 DPF 예제): GATE_OK** —
+modal 6모드 f1=253.62Hz, participation=unit_mass, self-MAC 대각~1, hotspot 59; static SE 실제 J. 모든 DPF
+연산자 호출 정확(errors[] 양쪽 비어있음). ACT 런처 `main.py _run_dpf_sidecar`+`_resolve_rst_path`+opt-in
+체크박스(기본 OFF, async, non-fatal, venv/script/.rst 부재 시 log-and-skip → 기존 플로우 무손상).
+
+**Task B — Phase 1 popup 확장 + Energy/Reactions 탭**:
+`main.py` per-body 추출에 DirectionalDeformation X/Y/Z + ElementalStrainEnergy 추가(각 try/except 가드, 랭킹은
+여전히 max_def). metadata 에 directional_def{x,y,z}+strain_energy per body + CSV 시계열, units 에 energy/force
+(schema 2.0 유지, additive). `visualizer.py` Energy 탭(strain-energy 랭킹 바) + Reactions 탭(Rx/Ry/Rz/|R| 그룹
+바, 미래 reactions[] 소비) + SummaryTab StrainE 컬럼. 전부 레거시/부재 필드에 placeholder degrade. **GATE
+(`postprocess/selftest_tabs.py`, QT offscreen): TABS_OK** — 7탭 × {2.0, legacy} + MainWindow, degrade 검증.
+
+**이월(라이브 Mechanical 콘솔 프로브 1회 필요)**: ForceReaction 추출 — enum 철자 2개(CoordinateSystemAxisType,
+LocationDefinitionMethod.BoundaryCondition) + FixedSupport BC lookup 이 미확정. 아직 미배선; Reactions 탭은
+데이터 준비만 완료.
+
 ### 다음 (미착수)
-- §10.3 LLM 리포터 스파이크 (`make_report(metadata) → report.md`)
-- Phase 1 나머지: popup 추출 확장 + Energy/Reactions 탭
-- **Phase 2**: `Mechanical/MXSimulator/batch/mx_batch.py` (DPF sidecar) — 위 프로브로 GREEN 확정
+- §10.3 LLM 리포터 스파이크 — ⚠️ **API 키 사용(제외 대상)**
+- ForceReaction 추출(위 라이브 프로브 후)
+- Phase 2 sidecar 를 엔드유저 MSI 에 번들(.venv-pyansys 또는 PyInstaller 사이드카)
 
 ---
 
