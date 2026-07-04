@@ -15,10 +15,13 @@ $viewerExe     = Join-Path $root "Mechanical\MXSimulator\postprocess\MXPostViewe
 $ppDir         = Join-Path $root "Mechanical\MXSimulator\postprocess"
 $calibratorExe = Join-Path $root "Mechanical\MXSimulator\calibration\MaterialCalibrator.exe"
 $calibDir      = Join-Path $root "Mechanical\MXSimulator\calibration"
+$bridgeDir     = Join-Path $root "tools\mcp_bridge"
+$bridgeExe     = Join-Path $bridgeDir "mxdtm_mcp_bridge.exe"
+$registerExe   = Join-Path $bridgeDir "register_claude_desktop.exe"
 $msiOut        = Join-Path $root "Installer\MXDigitalTwinModeller.msi"
 
 # ---- Step 1: MaterialCalibrator.exe (Material Twin) --------------------
-Write-Host "[1/4] Checking MaterialCalibrator.exe..." -ForegroundColor Yellow
+Write-Host "[1/5] Checking MaterialCalibrator.exe..." -ForegroundColor Yellow
 if (Test-Path $calibratorExe) {
     Write-Host "      Found: $calibratorExe" -ForegroundColor Green
 } else {
@@ -45,7 +48,7 @@ if (Test-Path $calibratorExe) {
 Write-Host ""
 
 # ---- Step 2: MXPostViewer.exe -------------------------------------------
-Write-Host "[2/4] Checking MXPostViewer.exe..." -ForegroundColor Yellow
+Write-Host "[2/5] Checking MXPostViewer.exe..." -ForegroundColor Yellow
 if (Test-Path $viewerExe) {
     Write-Host "      Found: $viewerExe" -ForegroundColor Green
 } else {
@@ -70,8 +73,38 @@ if (Test-Path $viewerExe) {
 }
 Write-Host ""
 
-# ---- Step 3: MSBuild (DLL + ACT deploy + WiX MSI) -----------------------
-Write-Host "[3/4] Building via MSBuild..." -ForegroundColor Yellow
+# ---- Step 3: MCP bridge EXEs (Claude Desktop stdio bridge + registrar) --
+# The MSI HARD-REQUIRES both EXEs (Installer\MXDigitalTwinModeller.wxs McpBridgeComponents),
+# so a bare MSBuild would skip the MSI without them. Python-free standalones (PyInstaller),
+# mirroring build_bridge.bat but non-interactive.
+Write-Host "[3/5] Checking MCP bridge EXEs..." -ForegroundColor Yellow
+if ((Test-Path $bridgeExe) -and (Test-Path $registerExe)) {
+    Write-Host "      Found: mxdtm_mcp_bridge.exe + register_claude_desktop.exe" -ForegroundColor Green
+} else {
+    Write-Host "      Not found. Building with PyInstaller..." -ForegroundColor Yellow
+    Push-Location $bridgeDir
+    try {
+        $py = (Get-Command python -ErrorAction Stop).Source
+        Write-Host "      Python: $py"
+        & $py -m pip install --upgrade pyinstaller -q
+        if ($LASTEXITCODE -ne 0) { throw "pip failed" }
+
+        & $py -m PyInstaller --onefile --console --name mxdtm_mcp_bridge mxdtm_mcp_bridge.py --noconfirm
+        if ($LASTEXITCODE -ne 0) { throw "bridge PyInstaller failed" }
+        & $py -m PyInstaller --onefile --console --name register_claude_desktop register_claude_desktop.py --noconfirm
+        if ($LASTEXITCODE -ne 0) { throw "registrar PyInstaller failed" }
+
+        Copy-Item "dist\mxdtm_mcp_bridge.exe" "mxdtm_mcp_bridge.exe" -Force
+        Copy-Item "dist\register_claude_desktop.exe" "register_claude_desktop.exe" -Force
+        Write-Host "      Built: both MCP bridge EXEs" -ForegroundColor Green
+    } finally {
+        Pop-Location
+    }
+}
+Write-Host ""
+
+# ---- Step 4: MSBuild (DLL + ACT deploy + WiX MSI) -----------------------
+Write-Host "[4/5] Building via MSBuild..." -ForegroundColor Yellow
 if (-not (Test-Path $msbuild)) {
     Write-Error "MSBuild not found: $msbuild"
     exit 1
@@ -86,8 +119,8 @@ if ($LASTEXITCODE -ne 0) {
 }
 Write-Host ""
 
-# ---- Step 4: Clear Workbench ribbon cache (for new buttons/icons) -------
-Write-Host "[4/4] Clearing Workbench ribbon cache..." -ForegroundColor Yellow
+# ---- Step 5: Clear Workbench ribbon cache (for new buttons/icons) -------
+Write-Host "[5/5] Clearing Workbench ribbon cache..." -ForegroundColor Yellow
 $cacheDir = Join-Path $env:APPDATA "Ansys\v252\Applets\DSApplet\en-us"
 foreach ($f in @("ExternalActions.xml", "ribbonLayout.xml", "RibbonState.xml")) {
     $p = Join-Path $cacheDir $f
@@ -95,8 +128,8 @@ foreach ($f in @("ExternalActions.xml", "ribbonLayout.xml", "RibbonState.xml")) 
 }
 Write-Host ""
 
-# ---- Step 5: Done -------------------------------------------------------
-Write-Host "[5/5] Build complete!" -ForegroundColor Green
+# ---- Done ---------------------------------------------------------------
+Write-Host "Build complete!" -ForegroundColor Green
 Write-Host ""
 if (Test-Path $msiOut) {
     $size = (Get-Item $msiOut).Length / 1MB
@@ -107,4 +140,7 @@ if (Test-Path $msiOut) {
 }
 Write-Host ""
 Write-Host "============================================================"
-Read-Host "Press Enter to exit"
+# Pause only in an interactive console (double-click); stays automation-safe in CI.
+if ([Environment]::UserInteractive -and $Host.Name -eq "ConsoleHost") {
+    try { Read-Host "Press Enter to exit" } catch {}
+}

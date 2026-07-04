@@ -527,7 +527,7 @@
       <CanBuildMsi Condition="'$(CalibratorExeExists)' == 'true' AND '$(ViewerExeExists)' == 'true'">true</CanBuildMsi>
     </PropertyGroup>
 
-    <Message Text="MSI build skipped: PyInstaller EXE(s) missing. Run build.ps1 (or build_calibrator.bat / build_viewer.bat) to build them first."
+    <Message Text="MSI build skipped: PyInstaller EXE(s) missing. Run build_release.ps1 (it builds MXPostViewer.exe, MaterialCalibrator.exe, the MCP bridge EXEs, then the MSI) - or the individual build_viewer.bat / build_calibrator.bat / tools\mcp_bridge\build_bridge.bat."
              Importance="high"
              Condition="'$(CanBuildMsi)' != 'true'" />
     <Message Text="  - MaterialCalibrator.exe: $(CalibratorExeExists)"

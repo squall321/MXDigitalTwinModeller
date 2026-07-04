@@ -1,84 +1,65 @@
 # MX Digital Twin Modeller
 
-복합재료 시편 모델링 및 시뮬레이션을 위한 ANSYS 확장 패키지
+폰 프론트-메탈 설계 + CAE 디지털 트윈을 위한 ANSYS 확장 패키지. **Claude Desktop에서
+자연어로 지시하면 실제 SpaceClaim 지오메트리가 생성·수정됩니다** (MCP 브리지).
 
-- **SpaceClaim Add-In**: 시편 모델링, 메쉬, 접촉 검출, Conformal Mesh
-- **Mechanical ACT Extension**: 하중 정의 및 시뮬레이션 설정
+- **SpaceClaim Add-In**: 무에서 폰 생성(곡면 back/멀티렌즈/플랭크 포트/그릴/버튼/안테나),
+  피처 수정, CAE 시편·메싱·라미네이트, 역설계(FeatureGraph)
+- **MCP 서버**: 46개 LLM 도구를 Claude Desktop에 노출 (stdio 브리지)
+- **Mechanical ACT Extension**: 접촉면 검출, 모달 해석, 시나리오, 포스트프로세스, 물성 캘리브레이션
 
-**멀티버전 지원**: SpaceClaim V251/V252, Mechanical V252
+**대상 환경**: SpaceClaim / ANSYS **v252** (Student 시트에서 45/46 도구 가동; `mesh_with_gmsh`만
+STEP-export 라이선스 필요). 현재 버전 **1.5.0**.
 
 ## 기능
 
-### SpaceClaim Add-In
+### 무에서 폰 생성 (13스테이지 S00–S12)
 
-- **시편 모델링**: 인장(26종), 굽힘, 압축, CAI, 피로, 접합, 적층 시편
-- **메쉬**: 방향별 사이징, 배치 메쉬, 곡률/근접 크기 함수
-- **접촉 검출**: 평면/원통/에지 접촉, Named Selection 자동 생성
-- **Conformal Mesh**: STEP 임포트 → 계면 검출 → Share Topology → 메쉬 → .k 내보내기
-- **일괄 파이프라인**: Simplify → Material → Contact → Mesh → Export
-- **IronPython 스크립트**: 16개 개별 기능 + pipeline.py (PyAnsys 통합)
+한 개 JSON spec → 슬랩 → 곡면 back → 중공 셸 → 코너 라운딩 → 엣지 챔퍼 → 디스플레이 포켓 →
+전면 펀치홀 → 카메라 섬(+멀티렌즈) → 마운팅 홀 → USB-C 플랭크 포트 → back 그릴 → 버튼 →
+안테나 슬릿 → 마이크 핀홀 → 최종 필렛. 프리셋: `Examples/presets/{iphone,galaxy}-like.json`.
+
+### CAE
+
+- **인장 시편 26종** (ASTM/ISO/IPC/DMA), 3점 벤딩 리그, Gmsh/Conformal 메싱, 라미네이트
+  (생성/슬라이스/면기반), cut_void, simplify, 접촉 검출
+- **역설계**: 수입 CAD → 홀/보스/슬릿/필렛/벽/패턴/대칭 FeatureGraph (mod-matrix 검증율 ~83%)
 
 ### Mechanical ACT Extension
 
-- **MXSimulator 탭**: 하중 정의 및 시뮬레이션 설정
-- **Cap Vibration**: 캡 진동 하중 자동 설정 (WPF 대화상자)
+- 접촉면 자동 검출·명명, 모달 해석, 시나리오 생성, 포스트프로세스 뷰어(MXPostViewer),
+  물성 캘리브레이터(MaterialCalibrator)
 
-## 설치 방법
+## 설치 (엔드유저)
 
-### 1. 환경 설정
+`Installer\MXDigitalTwinModeller.msi` 를 실행하면 다음이 한 번에 설치됩니다:
 
-`.env.example` 파일을 `.env`로 복사하고 실제 환경에 맞게 경로를 수정하세요.
+- SpaceClaim Add-In (`...\AddIns\MXDigitalTwinModeller\V252\`)
+- Claude Desktop MCP 브리지 (Python-free exe) + **자동 등록**
+- 번들 Gmsh, Mechanical ACT 확장, 포스트프로세스 뷰어, 물성 캘리브레이터
 
-```ini
-# SpaceClaim V251 경로
-SPACECLAIM_V251_INSTALL_PATH=C:\Program Files\ANSYS Inc\v251\SpaceClaim
-SPACECLAIM_V251_API_PATH=C:\Program Files\ANSYS Inc\v251\SpaceClaim\Api\V251\bin\x64\Debug
-SPACECLAIM_V251_EXE=C:\Program Files\ANSYS Inc\v251\SpaceClaim\SpaceClaim.exe
+설치 후 Claude Desktop 재시작 → SpaceClaim 실행 → 자연어로 설계 (별도 Python/JSON 편집 불필요).
 
-# SpaceClaim V252 경로
-SPACECLAIM_V252_INSTALL_PATH=C:\Program Files\ANSYS Inc\v252\SpaceClaim
-SPACECLAIM_V252_API_PATH=C:\Program Files\ANSYS Inc\v252\SpaceClaim\Api\V252\bin\x64\Debug
-SPACECLAIM_V252_EXE=C:\Program Files\ANSYS Inc\v252\SpaceClaim\SpaceClaim.exe
+## 빌드 (개발자)
 
-# AddIn 출력 경로
-ADDIN_OUTPUT_PATH_V251=C:\ProgramData\SpaceClaim\AddIns\MXDigitalTwinModeller\V251
-ADDIN_OUTPUT_PATH_V252=C:\ProgramData\SpaceClaim\AddIns\MXDigitalTwinModeller\V252
+전체 릴리스(EXE들 + MSI):
+
+```powershell
+.\build_release.ps1
 ```
 
-### 2. 빌드
+이 스크립트가 PyInstaller로 MXPostViewer.exe / MaterialCalibrator.exe / MCP 브리지 exe 2개를
+(없으면) 빌드한 뒤 MSBuild로 DLL + ACT 배포 + WiX MSI 를 생성합니다. **⚠️ 빌드 전 SpaceClaim을
+닫으세요** (DLL 잠금).
 
-Visual Studio 2022에서 솔루션을 열고 빌드 구성을 선택합니다.
+DLL만 빠르게:
 
-#### 빌드 구성:
-- **Debug-V251**: V251용 디버그 빌드 → `ADDIN_OUTPUT_PATH_V251`
-- **Release-V251**: V251용 릴리즈 빌드 → `ADDIN_OUTPUT_PATH_V251`
-- **Debug-V252**: V252용 디버그 빌드 → `ADDIN_OUTPUT_PATH_V252`
-- **Release-V252**: V252용 릴리즈 빌드 → `ADDIN_OUTPUT_PATH_V252`
+```powershell
+MSBuild MXDigitalTwinModeller.csproj /p:Configuration=Debug /p:Platform=AnyCPU
+```
 
-**기본 구성**: Debug-V252
-
-### 3. SpaceClaim에서 확인
-
-해당 버전의 SpaceClaim을 실행하고 Ribbon에서 "MX Modeller" 탭을 확인합니다.
-
-## 개발 환경 설정
-
-### Visual Studio 2022
-
-1. .NET Framework 4.7.2 설치
-2. 빌드 구성 선택 (Debug-V251 또는 Debug-V252)
-3. 디버그 프로파일 선택:
-   - **SpaceClaim V251 Debug**: V251에서 디버깅
-   - **SpaceClaim V252 Debug**: V252에서 디버깅
-
-`launchSettings.json`에 두 가지 프로파일이 설정되어 있습니다.
-
-### 디버깅
-
-1. 빌드 구성 선택 (예: Debug-V252)
-2. 디버그 프로파일 선택 (예: SpaceClaim V252 Debug)
-3. F5를 누르면 해당 버전의 SpaceClaim이 실행되고 AddIn이 로드됩니다
-4. 중단점을 설정하여 디버깅할 수 있습니다
+빌드 구성은 **Debug / Release** 두 가지이며 **v252 전용**입니다 (csproj의 `MXVersion` 한 값이
+DLL + MSI ProductVersion 을 함께 구동 → 이 값만 올리면 in-place 업그레이드).
 
 ## 프로젝트 구조
 
