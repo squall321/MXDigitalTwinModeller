@@ -468,4 +468,48 @@ resp = client.messages.create(
 
 ---
 
+## 진행 기록 (2026-07-05)
+
+### §10.1 / §10.5 PyAnsys/DPF Student 라이선스 프로브 — 결정: **Phase 2 GREEN (DPF-over-.rst)**
+
+ANSYS Student v252 / Python 3.13.7 에서 실측 (`postprocess/pyansys_probe.ps1` + `pyansys_probe2.py`,
+전체 결과는 `postprocess/README_pyansys_probe.md`):
+
+| 단계 | 결과 |
+|---|---|
+| venv + `pip install ansys-mechanical-core ansys-dpf-core ansys-dpf-post` | ✅ **Python 3.13 cp313 wheel 존재** (3.13 gap 없음). dpf-core 0.16.1 |
+| `import ansys.dpf.core` | ✅ |
+| **DPF 로컬 서버 기동** | ✅ `Ans.Dpf.Grpc.exe` (v252\aisol\bin\winx64), server_version 10.0 |
+| **DPF .rst 필드 읽기** (변위/응력) | ✅ static.rst → 81 노드 disp, 64 stress 엔티티 |
+| `launch_mechanical(version=252)` | ❌ "v252 does not support secure transport, update to SP03+" |
+
+**핵심**: Phase 2 (modal participation / strain-energy field / MAC / hot-spot)는 전부 DPF 로 solved
+`.rst` 를 읽는 것 → 이 시트에서 **작동**. launch_mechanical(라이브 PyMechanical 세션)만 SP03 벽에
+막히는데 Phase 2 엔 불필요(사용자가 Mechanical/ACT 로 이미 solve 한 결과파일을 읽음). 결정: **Phase 2 를
+DPF-over-.rst sidecar 로 착수**, ACT 확장이 `System.Diagnostics.Process` 로 launch(MXPostViewer 패턴),
+`.venv-pyansys` 부재 시 popup-only 로 우아하게 폴백(opt-in).
+
+### §10.4 metadata schema_version 2.0 — DONE
+`main.py` PostProcessDialog export 에 `schema_version:"2.0"` + `generated_at`(ISO8601) + `units`
++ `source` 추가. `runner.py` 가 schema_version 을 읽어 미래 major 버전은 best-effort 경고 로드.
+
+### §10.2 fatigue quick-win (rainflow + Miner) — DONE
+`postprocess/analyzer.py`:
+- `rainflow_count(signal, nbins)` — 검증된 `rainflow` PyPI 패키지(ASTM E1049) 우선, 부재 시 번들
+  `_rainflow_astm` 폴백. **폴백을 rainflow 패키지와 1:1 대조 검증**(랜덤워크 500pt: 135 엔트리·모든
+  range 동일, Miner D 완전 일치). ⚠️ **fatpack 은 채택 안 함** — 그 사이클 세트가 ASTM E1049 와 달라
+  Miner D 가 ~16x 틀림(실측).
+- `damage_miner(ranges, counts, A, m, endurance)` — power-law S-N `N=A·S^-m` Miner 누적손상.
+  검증: 1000 cyc @100MPa (N=1e6) → D=1e-3, repeats=1000 정확.
+`postprocess/visualizer.py`: **Fatigue 탭** 추가(rainflow 히스토그램 + S-N 상수/scale/endurance/bins
+입력 + Miner D·수명 요약). headless 검증 완료. `requirements.txt`+`rainflow>=3.2`, `build_viewer.bat`
++`--hidden-import rainflow`.
+
+### 다음 (미착수)
+- §10.3 LLM 리포터 스파이크 (`make_report(metadata) → report.md`)
+- Phase 1 나머지: popup 추출 확장 + Energy/Reactions 탭
+- **Phase 2**: `Mechanical/MXSimulator/batch/mx_batch.py` (DPF sidecar) — 위 프로브로 GREEN 확정
+
+---
+
 *End of document.*

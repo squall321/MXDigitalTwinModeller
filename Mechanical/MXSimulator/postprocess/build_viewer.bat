@@ -10,7 +10,9 @@ if errorlevel 1 (
     pause & exit /b 1
 )
 
-echo Installing / upgrading PyInstaller...
+echo Installing runtime deps + PyInstaller...
+python -m pip install -r requirements.txt -q
+if errorlevel 1 ( echo requirements install failed. & pause & exit /b 1 )
 python -m pip install --upgrade pyinstaller -q
 if errorlevel 1 ( echo pip failed. & pause & exit /b 1 )
 
@@ -22,6 +24,7 @@ python -m PyInstaller ^
     --name MXPostViewer ^
     --hidden-import scipy.signal ^
     --hidden-import scipy.fft ^
+    --hidden-import rainflow ^
     runner.py
 
 if errorlevel 1 (

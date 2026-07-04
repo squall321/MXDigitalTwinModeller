@@ -114,6 +114,9 @@ Mechanical/MXSimulator/postprocess/dist/
 Mechanical/MXSimulator/postprocess/*.spec
 Mechanical/MXSimulator/postprocess/MXPostViewer.exe
 Mechanical/MXSimulator/postprocess/venv/
+Mechanical/MXSimulator/postprocess/.venv-pyansys/
+Mechanical/MXSimulator/postprocess/*_result.txt
+Mechanical/MXSimulator/postprocess/_probe_*.py
 
 # Gmsh SDK binaries (large, download separately)
 Libs/gmsh/*.exe

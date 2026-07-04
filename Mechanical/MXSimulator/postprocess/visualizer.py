@@ -10,7 +10,7 @@ from PyQt5.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QTabWidget,
     QTableWidget, QTableWidgetItem, QComboBox, QPushButton, QLabel,
     QCheckBox, QFileDialog, QHeaderView, QAbstractItemView, QSplitter,
-    QSizePolicy, QGroupBox,
+    QSizePolicy, QGroupBox, QLineEdit,
 )
 from PyQt5.QtCore import Qt
 from PyQt5.QtGui import QColor, QFont
@@ -23,6 +23,7 @@ import matplotlib.ticker as ticker
 from analyzer import (
     parse_ansys_export, compute_fft, compute_frf, coherence,
     extract_modal_params, rms, peak_to_peak,
+    rainflow_count, damage_miner,
 )
 
 COLORS = plt.rcParams['axes.prop_cycle'].by_key()['color']
@@ -245,6 +246,128 @@ class TimeHistTab(QWidget):
 
     def _save_png(self):
         p, _ = QFileDialog.getSaveFileName(self, "Save PNG", "time_history.png", "PNG (*.png)")
+        if p:
+            self.pw.export_png(p)
+
+
+# ── Tab: Fatigue (rainflow + Miner) ──────────────────────────────────
+class FatigueTab(QWidget):
+    """Rainflow cycle histogram + Miner's-rule cumulative damage for a body's response
+    time-history. The signal is the same deformation CSV the other tabs use; treat its
+    amplitude as the fatigue-driving quantity and apply a power-law S-N curve N = A*S^-m.
+    Defaults are placeholders — the user enters the real S-N constants + a stress-scale."""
+
+    def __init__(self, meta, base_dir, parent=None):
+        super().__init__(parent)
+        self.meta = meta
+        self.base_dir = base_dir
+        self._load_data()
+
+        lay = QVBoxLayout(self)
+
+        # body selector
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Body:"))
+        self.body_cb = QComboBox()
+        for b in meta.get('bodies', []):
+            self.body_cb.addItem(b['name'])
+        self.body_cb.currentIndexChanged.connect(self._update)
+        row.addWidget(self.body_cb)
+        row.addStretch()
+        lay.addLayout(row)
+
+        # S-N / scaling controls
+        p = QGroupBox("S-N curve  N = A · S^(−m)   and signal→stress scale")
+        pr = QHBoxLayout(p)
+        def _field(label, default, w=80):
+            pr.addWidget(QLabel(label))
+            e = QLineEdit(default); e.setMaximumWidth(w)
+            e.editingFinished.connect(self._update)
+            pr.addWidget(e); return e
+        self.scale_tb = _field("scale (stress/unit):", "1.0")
+        self.A_tb     = _field("A:", "1e12")
+        self.m_tb     = _field("m:", "3.0")
+        self.endur_tb = _field("endurance:", "0.0")
+        self.bins_tb  = _field("bins:", "16", 50)
+        pr.addStretch()
+        lay.addWidget(p)
+
+        self.pw = PlotWidget(nrows=1, ncols=1)
+        lay.addWidget(self.pw)
+
+        self.summary_lbl = QLabel("")
+        f = QFont(); f.setBold(True)
+        self.summary_lbl.setFont(f)
+        lay.addWidget(self.summary_lbl)
+
+        btn_row = QHBoxLayout()
+        b = QPushButton("Export PNG")
+        b.clicked.connect(self._save_png)
+        btn_row.addWidget(b); btn_row.addStretch()
+        lay.addLayout(btn_row)
+
+        self._update()
+
+    def _load_data(self):
+        self.body_data = {}
+        for b in self.meta.get('bodies', []):
+            p = os.path.join(self.base_dir, b.get('csv', ''))
+            if os.path.exists(p):
+                try:
+                    t, v = parse_ansys_export(p)
+                    self.body_data[b['name']] = (t, v)
+                except Exception:
+                    pass
+
+    def _f(self, tb, default):
+        try:
+            return float(tb.text().strip())
+        except (ValueError, AttributeError):
+            return default
+
+    def _update(self, *_):
+        ax = self.pw.axes[0]
+        ax.cla()
+        name = self.body_cb.currentText()
+        if name not in self.body_data:
+            ax.set_title("no data"); self.pw.draw(); return
+
+        _, v = self.body_data[name]
+        scale = self._f(self.scale_tb, 1.0)
+        A     = self._f(self.A_tb, 1e12)
+        m     = self._f(self.m_tb, 3.0)
+        endur = self._f(self.endur_tb, 0.0)
+        nbins = int(self._f(self.bins_tb, 16))
+
+        stress = np.asarray(v, dtype=float) * scale
+        rc = rainflow_count(stress, nbins=nbins)
+        if rc['ranges'].size == 0:
+            ax.set_title("no closed cycles"); self.pw.draw(); return
+
+        dmg = damage_miner(rc['ranges'], rc['counts'], A, m,
+                           endurance=(endur if endur > 0 else None))
+
+        edges = rc.get('bin_edges')
+        bc = rc.get('bin_counts')
+        if edges is not None and bc is not None:
+            centers = 0.5 * (edges[:-1] + edges[1:])
+            width = (edges[1] - edges[0]) * 0.9
+            ax.bar(centers, bc, width=width, color=COLORS[0], alpha=0.8, edgecolor='k', lw=0.5)
+        ax.set_xlabel("Stress range S  [scaled units]")
+        ax.set_ylabel("Cycle count  n")
+        ax.set_title("Rainflow histogram — {}  ({})".format(name, rc['method']))
+        ax.grid(True, alpha=0.3)
+
+        D = dmg['D']
+        life = dmg['repeats_to_failure']
+        life_s = ("{:.3g} block repeats".format(life) if life != float('inf') else "∞ (all below endurance)")
+        self.summary_lbl.setText(
+            "Miner damage D = {:.4g}   →   life ≈ {}   |   total cycles = {:.1f}, method = {}".format(
+                D, life_s, float(rc['counts'].sum()), rc['method']))
+        self.pw.draw()
+
+    def _save_png(self):
+        p, _ = QFileDialog.getSaveFileName(self, "Save PNG", "fatigue.png", "PNG (*.png)")
         if p:
             self.pw.export_png(p)
 
@@ -521,6 +644,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(TimeHistTab(meta, base_dir),         "📈  Time History")
         tabs.addTab(FFTTab(meta, base_dir),              "〰  FFT")
         tabs.addTab(FRFTab(meta, base_dir),              "〜  FRF (Bode)")
+        tabs.addTab(FatigueTab(meta, base_dir),          "🔩  Fatigue")
 
         central = QWidget()
         vbox = QVBoxLayout(central)

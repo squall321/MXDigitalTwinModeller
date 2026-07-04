@@ -22,6 +22,17 @@ def main():
     with open(meta_path, 'r', encoding='utf-8') as f:
         meta = json.load(f)
 
+    # schema_version (POSTPROCESS_IDEAS.md §10.4). Absent = legacy 1.x (pre-2.0 exports).
+    # This viewer understands the 2.x envelope; a newer MAJOR is loaded best-effort with a warning.
+    sv = str(meta.get('schema_version', '1.0'))
+    try:
+        major = int(sv.split('.')[0])
+    except (ValueError, IndexError):
+        major = 1
+    if major > 2:
+        print("WARNING: metadata schema_version {0} is newer than this viewer (2.x); "
+              "loading best-effort — some fields may be ignored.".format(sv))
+
     base_dir = os.path.dirname(meta_path)
 
     # Add this folder to sys.path so visualizer/analyzer can be imported

@@ -2059,7 +2059,19 @@ class PostProcessDialog(Window):
                     'csv':     csv_fname,
                 })
 
+            # schema_version 2.0 (POSTPROCESS_IDEAS.md §10.4): a stable version marker + explicit
+            # units + timestamp so the viewer AND a future PyAnsys/DPF sidecar can branch on the
+            # schema without guessing. Consumers must read schema_version and degrade gracefully
+            # on an unknown one. Field semantics unchanged from 1.x; only the envelope grew.
+            try:
+                _gen_at = System.DateTime.Now.ToString("o")
+            except Exception:
+                _gen_at = ""
             meta = {
+                'schema_version':  '2.0',
+                'generated_at':    _gen_at,
+                'source':          'MXSimulator PostProcessDialog',
+                'units':           {'deformation': 'mm', 'stress': 'MPa', 'frequency': 'Hz'},
                 'analysis':        analysis_name,
                 'operating_freq_hz': float(self.freq_tb.Text.strip() or "100"),
                 'thresh_red_mm':   float(self.red_tb.Text.strip() or "0.30"),
