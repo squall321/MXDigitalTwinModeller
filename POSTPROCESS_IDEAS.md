@@ -524,14 +524,23 @@ modal 6모드 f1=253.62Hz, participation=unit_mass, self-MAC 대각~1, hotspot 5
 바, 미래 reactions[] 소비) + SummaryTab StrainE 컬럼. 전부 레거시/부재 필드에 placeholder degrade. **GATE
 (`postprocess/selftest_tabs.py`, QT offscreen): TABS_OK** — 7탭 × {2.0, legacy} + MainWindow, degrade 검증.
 
-**이월(라이브 Mechanical 콘솔 프로브 1회 필요)**: ForceReaction 추출 — enum 철자 2개(CoordinateSystemAxisType,
-LocationDefinitionMethod.BoundaryCondition) + FixedSupport BC lookup 이 미확정. 아직 미배선; Reactions 탭은
-데이터 준비만 완료.
+### ForceReaction 추출 — DONE (2026-07-05, defensive 배선)
+
+라이브 프로브 대신 **번들 `Ansys.ACT.WB1.xml`(v252)** 로 API 확정: `Solution.AddForceReaction` 존재,
+결과 읽기는 base `ProbeResults.ResultProbe.XAxis` 상속, `.By`/`.Extraction` 스코핑 속성 확인,
+`Analysis.GetChildren(DataModelObjectCategory.FixedSupport, True)` 로 BC 열거. **미확정이던 것**(enum 철자
+`LocationDefinitionMethod.BoundaryCondition`, BC 스코핑 property, 결과 attr 철자)은 XML 에 열거값이 없어
+**여러 후보를 try/except 로 시도하는 defensive 코드**로 처리 — 사용자 실제 solved 모델에서 맞는 조합이 걸리고
+전부 실패하면 log-and-skip(zero regression). `main.py`: `_find_support_bcs`(FixedSupport/Displacement/
+Remote/Frictionless/Cylindrical 카테고리 열거) + `_add_reaction_probes`(BC별 AddForceReaction, 스코핑 3방식
+시도) + `_read_reaction`/`_read_quantity`(X/Y/ZAxis|Maximum* 여러 attr 시도, MISSING≠0 구분). metadata 에
+top-level `reactions:[{scope,x,y,z,mag}]` 추가. ReactionsTab 이 이제 실데이터를 렌더(selftest 재검증 TABS_OK).
+⚠️ 실 solved 모델에서 최초 실행 시 어느 후보가 맞는지 로그로 확인 필요(그때 불필요 후보 제거해 슬림화 가능).
 
 ### 다음 (미착수)
 - §10.3 LLM 리포터 스파이크 — ⚠️ **API 키 사용(제외 대상)**
-- ForceReaction 추출(위 라이브 프로브 후)
 - Phase 2 sidecar 를 엔드유저 MSI 에 번들(.venv-pyansys 또는 PyInstaller 사이드카)
+- Phase 3: 파라메트릭 DOE + 서로게이트 (API 무관, numpy/scipy)
 
 ---
 

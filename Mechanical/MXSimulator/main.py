@@ -1852,6 +1852,107 @@ class PostProcessDialog(Window):
             return []
         return [k.strip() for k in raw.split(',') if k.strip()]
 
+    def _find_support_bcs(self, analysis):
+        """Return boundary-condition objects that carry reaction forces (fixed/displacement/
+        remote supports). Iterates the analysis tree by DataModelObjectCategory; unknown
+        categories on a given version are skipped."""
+        bcs = []
+        cats = []
+        for nm in ("FixedSupport", "Displacement", "RemoteDisplacement",
+                   "FrictionlessSupport", "CylindricalSupport", "Support"):
+            try:
+                cats.append(getattr(DataModelObjectCategory, nm))
+            except Exception:
+                pass
+        for cat in cats:
+            try:
+                found = analysis.GetChildren(cat, True)
+                for b in found:
+                    bcs.append(b)
+            except Exception:
+                pass
+        return bcs
+
+    def _add_reaction_probes(self, analysis, sol):
+        """Add a ForceReaction probe per support BC (defensive across API versions).
+        Returns a list of (scope_name, probe) to read after EvaluateAllResults(). Each add is
+        guarded; a version whose enum/scoping differs simply yields fewer/no probes."""
+        results = []
+        bcs = self._find_support_bcs(analysis)
+        if not bcs:
+            self.log("  (no support BCs found for reactions)")
+            return results
+        for bc in bcs:
+            try:
+                fr = sol.AddForceReaction()
+                bc_name = getattr(bc, "Name", "BC")
+                fr.Name = "Reaction_" + bc_name
+                # scope the reaction to this BC — property name varies by version, so try each.
+                scoped = False
+                for prop in ("BoundaryConditionSelection", "BoundaryCondition", "LocationMethod"):
+                    try:
+                        if prop == "LocationMethod":
+                            from Ansys.Mechanical.DataModel.Enums import LocationDefinitionMethod as _LDM
+                            try:
+                                fr.LocationMethod = _LDM.BoundaryCondition
+                            except Exception:
+                                continue
+                            fr.BoundaryConditionSelection = bc
+                            scoped = True
+                            break
+                        else:
+                            setattr(fr, prop, bc)
+                            scoped = True
+                            break
+                    except Exception:
+                        continue
+                if not scoped:
+                    # last resort: leave default scoping; the probe still evaluates something
+                    self.log("  (reaction scope prop unknown for {0}; using default)".format(bc_name))
+                results.append((bc_name, fr))
+                self.log("  + Reaction @ {0}".format(bc_name))
+            except Exception as ex:
+                self.log("  (reaction add failed for a BC: {0})".format(str(ex)[:80]))
+        return results
+
+    def _read_quantity(self, obj, attr):
+        """Read a numeric result attribute, distinguishing MISSING (None) from present.
+        (Unlike _safe_float which maps failure to 0.0.)"""
+        try:
+            val = getattr(obj, attr)
+        except Exception:
+            return None
+        try:
+            return float(val)
+        except Exception:
+            pass
+        try:
+            return float(str(val).split()[0])
+        except Exception:
+            return None
+
+    def _read_reaction(self, probe):
+        """Read Rx/Ry/Rz (+ magnitude) from a ForceReaction probe. Attribute names vary; tries
+        the common ResultProbe readers and returns a dict or None when nothing is readable."""
+        comps = {}
+        for key, attrs in (("x", ("XAxis", "MaximumXAxis", "FX")),
+                           ("y", ("YAxis", "MaximumYAxis", "FY")),
+                           ("z", ("ZAxis", "MaximumZAxis", "FZ"))):
+            for a in attrs:
+                v = self._read_quantity(probe, a)
+                if v is not None:
+                    comps[key] = v
+                    break
+        if not comps:
+            # some versions expose only a Total/Maximum magnitude
+            mag = self._read_quantity(probe, "Maximum")
+            if mag is not None:
+                return {"x": 0.0, "y": 0.0, "z": 0.0, "mag": mag}
+            return None
+        x = comps.get("x", 0.0); y = comps.get("y", 0.0); z = comps.get("z", 0.0)
+        mag = (x * x + y * y + z * z) ** 0.5
+        return {"x": x, "y": y, "z": z, "mag": mag}
+
     def _safe_float(self, result_obj, attr):
         """Safely extract a float from a Quantity-like result attribute."""
         try:
@@ -1990,6 +2091,17 @@ class PostProcessDialog(Window):
                     self.log("  + {0}".format(body_name))
                 except Exception as ex:
                     self.log("  WARN {0}: {1}".format(body_name, str(ex)))
+
+            # Phase-1: reaction force per fixed/boundary support (global, not per-body).
+            # ForceReaction reads reactions at a BC — WB1.xml confirms Solution.AddForceReaction
+            # + the .By/.Extraction scoping + inherited ResultProbe.X/Y/ZAxis readers, but the
+            # enum member spellings and the BC-scoping property vary by version, so every step
+            # is defensive: a miss just yields no reactions[] (viewer shows a placeholder).
+            self._reaction_results = []
+            try:
+                self._reaction_results = self._add_reaction_probes(analysis, sol)
+            except Exception as ex:
+                self.log("  (reactions unavailable: {0})".format(str(ex)[:100]))
 
             if not pairs:
                 self.log("ERROR: Could not add any results.")
@@ -2130,6 +2242,16 @@ class PostProcessDialog(Window):
                             pass
                 bodies_meta.append(entry)
 
+            # Reaction forces (global, per support BC) — read the probes added in ①.
+            reactions_meta = []
+            for scope_name, probe in getattr(self, '_reaction_results', []) or []:
+                rd = self._read_reaction(probe)
+                if rd is not None:
+                    rd['scope'] = scope_name
+                    reactions_meta.append(rd)
+            if reactions_meta:
+                self.log("  Reactions: {0} scope(s)".format(len(reactions_meta)))
+
             # schema_version 2.0 (POSTPROCESS_IDEAS.md §10.4): a stable version marker + explicit
             # units + timestamp so the viewer AND a future PyAnsys/DPF sidecar can branch on the
             # schema without guessing. Consumers must read schema_version and degrade gracefully
@@ -2150,6 +2272,7 @@ class PostProcessDialog(Window):
                 'thresh_yellow_mm': float(self.yellow_tb.Text.strip() or "0.10"),
                 'force_csv':       self.force_tb.Text.strip(),
                 'bodies':          bodies_meta,
+                'reactions':       reactions_meta,
             }
 
             meta_path = os.path.join(out_dir, "metadata.json")
