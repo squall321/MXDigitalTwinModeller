@@ -60,6 +60,7 @@
                                 <Directory Id="MechanicalBinDir"    Name="bin" />
                                 <Directory Id="MechanicalImagesDir" Name="images" />
                                 <Directory Id="PostProcessDir"      Name="postprocess" />
+                                <Directory Id="BatchDir"            Name="batch" />
                                 <Directory Id="CalibrationDir"      Name="calibration">
                                     <Directory Id="CalibrationUtilsDir" Name="utils" />
                                 </Directory>
@@ -272,6 +273,11 @@
                       Source="$(ProjectDir)\Mechanical\MXSimulator\postprocess\visualizer.py"
                       KeyPath="yes" />
             </Component>
+            <Component Id="SweepAnalyzerPy" Guid="*">
+                <File Id="sweep_analyzer.py"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\postprocess\sweep_analyzer.py"
+                      KeyPath="yes" />
+            </Component>
 
             <!-- Setup helpers (for environments without the exe) -->
             <Component Id="RequirementsTxt" Guid="*">
@@ -287,6 +293,34 @@
             <Component Id="BuildViewerBat" Guid="*">
                 <File Id="build_viewer.bat"
                       Source="$(ProjectDir)\Mechanical\MXSimulator\postprocess\build_viewer.bat"
+                      KeyPath="yes" />
+            </Component>
+        </ComponentGroup>
+
+        <!-- ================================================================ -->
+        <!-- Phase-2 DPF sidecar (source + requirements; venv is a post-install -->
+        <!-- step — DPF needs the local ANSYS install, so nothing to bundle).   -->
+        <!-- ================================================================ -->
+
+        <ComponentGroup Id="BatchComponents" Directory="BatchDir">
+            <Component Id="MxBatchPy" Guid="*">
+                <File Id="mx_batch.py"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\batch\mx_batch.py"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="MxBatchSelftest" Guid="*">
+                <File Id="selftest_mx_batch.py"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\batch\selftest_mx_batch.py"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="MxBatchReq" Guid="*">
+                <File Id="batch_requirements.txt" Name="requirements.txt"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\batch\requirements.txt"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="MxBatchReadme" Guid="*">
+                <File Id="batch_README.md" Name="README.md"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\batch\README.md"
                       KeyPath="yes" />
             </Component>
         </ComponentGroup>
@@ -374,6 +408,7 @@
             <Feature Id="PostProcessFeature" Title="Post-Process Viewer" Level="1"
                      Description="Standalone PyQt5 viewer for FFT / FRF post-processing (MXPostViewer.exe)">
                 <ComponentGroupRef Id="PostProcessComponents" />
+                <ComponentGroupRef Id="BatchComponents" />
             </Feature>
             <Feature Id="MaterialTwinFeature" Title="Material Twin Calibration" Level="1"
                      Description="Material property calibration from experimental data (MaterialCalibrator.exe)">

@@ -537,10 +537,31 @@ Remote/Frictionless/Cylindrical 카테고리 열거) + `_add_reaction_probes`(BC
 top-level `reactions:[{scope,x,y,z,mag}]` 추가. ReactionsTab 이 이제 실데이터를 렌더(selftest 재검증 TABS_OK).
 ⚠️ 실 solved 모델에서 최초 실행 시 어느 후보가 맞는지 로그로 확인 필요(그때 불필요 후보 제거해 슬림화 가능).
 
+### Phase-3 sweep 슬라이스 + sidecar MSI 패키징 — DONE (2026-07-06)
+
+**Phase 3 API-무관 슬라이스** (`postprocess/sweep_analyzer.py`, 순수 numpy, scipy optional):
+계획의 Phase 3(P1 민감도/P2 DOE surrogate/P3 Pareto)은 원래 PyAnsys 로 여러 파라메트릭 solve 를 돌리는
+무거운 작업이지만, **사용자가 이미 가진 결과 세트(metadata.json 스윕)에 대한 분석**은 순수 계산이다. 이 슬라이스는:
+- `sensitivity(cases)` — (metric,param)별 ∂y/∂x 최소제곱 slope + 무차원 elasticity. **상수 입력은
+  intercept 와 공선이라 fit artefact 방지 위해 명시적으로 slope 0 처리**(std<1e-12 컬럼 제외).
+- `pareto_front(cases, objectives)` — min/max 목적함수 다목적 비지배 케이스.
+- `response_surface(cases, metric, degree=2)` — 2차(부족 시 1차 폴백) 최소제곱 RSM + r².
+- `analyze_sweep` — 한 번에 번들(JSON 직렬화). **GATE (`selftest_sweep.py`, 해석해 알려진 스윕): SWEEP_OK** —
+  ∂(max_def)/∂rib=-0.1000 정확, RSM r²=1.00000, Pareto argmin(vm) front 포함.
+DOE driver(라이브 solve)와 llm_advisor(API)만 미착수/제외.
+
+**Phase 2 sidecar MSI 패키징** — ⚠️ **venv 번들은 잘못된 모델**: `.venv-pyansys` 는 239MB 인데다 DPF 는
+로컬 ANSYS 설치(`Ans.Dpf.Grpc.exe`)가 있어야만 동작(서버가 번들 아님) → PyInstaller 로 얼려도 ANSYS 의존
+제거 안 됨. 정답 = **batch/ 소스 + requirements.txt 를 MSI 에 넣고 post-install venv 안내**. `Installer/
+MXDigitalTwinModeller.wxs` 에 `BatchDir` + `BatchComponents`(mx_batch.py/selftest/requirements.txt/README.md)
++ Feature ref 추가, `sweep_analyzer.py` 도 PostProcessComponents 에 추가. MSI 재빌드 검증(File 테이블에 존재).
+`batch/README.md` 가 one-time venv 셋업(`python -m venv .venv-pyansys` + `pip install -r requirements.txt`)
+안내. ACT 다이얼로그의 "Run DPF deep analysis" 체크박스가 그 venv 를 찾으면 자동 실행.
+
 ### 다음 (미착수)
 - §10.3 LLM 리포터 스파이크 — ⚠️ **API 키 사용(제외 대상)**
-- Phase 2 sidecar 를 엔드유저 MSI 에 번들(.venv-pyansys 또는 PyInstaller 사이드카)
-- Phase 3: 파라메트릭 DOE + 서로게이트 (API 무관, numpy/scipy)
+- Phase 3 DOE driver(라이브 파라메트릭 solve, ansys-mechanical-core 필요 → SP03 secure-gRPC 벽) + sweep 뷰어 탭
+- sweep_analyzer 를 뷰어에 Sweep 탭으로 노출(여러 metadata.json 폴더 로드)
 
 ---
 
