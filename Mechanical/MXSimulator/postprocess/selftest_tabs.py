@@ -44,7 +44,8 @@ legacy = {  # a pre-2.0 metadata with none of the new fields
     'force_csv': '', 'bodies': [{'rank': 1, 'name': 'Old', 'max_def': 0.2, 'max_vm': 80.0, 'csv': ''}],
 }
 
-TABS = [V.SummaryTab, V.TimeHistTab, V.FFTTab, V.FRFTab, V.FatigueTab, V.EnergyTab, V.ReactionsTab]
+TABS = [V.SummaryTab, V.TimeHistTab, V.FFTTab, V.FRFTab, V.FatigueTab, V.EnergyTab, V.ReactionsTab,
+        V.SweepTab]
 
 for T in TABS:
     w = T(meta, HERE)

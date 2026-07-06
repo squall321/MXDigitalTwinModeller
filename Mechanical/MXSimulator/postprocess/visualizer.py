@@ -485,6 +485,139 @@ class ReactionsTab(QWidget):
             self.pw.export_png(p)
 
 
+# ── Tab: Sweep (parameter-sweep sensitivity / Pareto / RSM) ──────────
+class SweepTab(QWidget):
+    """Load a folder of result cases (each a subfolder with metadata.json + optional params.json)
+    and show sensitivity (∂metric/∂param), a Pareto front for two chosen metrics, and the response-
+    surface r² per metric. Pure numpy via sweep_analyzer — no live solve, no API."""
+
+    def __init__(self, meta, base_dir, parent=None):
+        super().__init__(parent)
+        self.meta = meta
+        self.base_dir = base_dir
+        self.cases = []
+        self.analysis = None
+
+        lay = QVBoxLayout(self)
+        row = QHBoxLayout()
+        b = QPushButton("Open sweep folder…")
+        b.clicked.connect(self._open_folder)
+        row.addWidget(b)
+        row.addWidget(QLabel("Pareto X:"))
+        self.xm_cb = QComboBox(); self.xm_cb.currentIndexChanged.connect(self._update)
+        row.addWidget(self.xm_cb)
+        row.addWidget(QLabel("Y:"))
+        self.ym_cb = QComboBox(); self.ym_cb.currentIndexChanged.connect(self._update)
+        row.addWidget(self.ym_cb)
+        row.addStretch()
+        lay.addLayout(row)
+
+        self.pw = PlotWidget(nrows=1, ncols=3)
+        lay.addWidget(self.pw)
+        self.summary_lbl = QLabel("Open a sweep folder (subfolders each with metadata.json + optional params.json).")
+        lay.addWidget(self.summary_lbl)
+
+        # if the current result's folder is itself a sweep root, auto-load its parent
+        try:
+            self._try_load(os.path.dirname(base_dir))
+        except Exception:
+            pass
+        self._update()
+
+    def _open_folder(self):
+        d = QFileDialog.getExistingDirectory(self, "Select sweep folder", self.base_dir)
+        if d:
+            self._try_load(d)
+            self._update()
+
+    def _try_load(self, root):
+        try:
+            import sweep_analyzer as SA
+            entries = SA.scan_sweep_dir(root)
+            cases = SA.load_cases(entries) if entries else []
+        except Exception as ex:
+            self.summary_lbl.setText("load failed: {}".format(ex)); return
+        if len(cases) < 2:
+            return  # need at least two cases to be a sweep; keep the placeholder
+        self.cases = cases
+        metric_keys = sorted({k for c in cases for k in c["metrics"]})
+        for cb in (self.xm_cb, self.ym_cb):
+            cb.blockSignals(True); cb.clear(); cb.addItems(metric_keys); cb.blockSignals(False)
+        if len(metric_keys) >= 2:
+            self.xm_cb.setCurrentIndex(0); self.ym_cb.setCurrentIndex(1)
+
+    def _update(self, *_):
+        axes = self.pw.axes
+        for ax in axes:
+            ax.cla()
+        if len(self.cases) < 2:
+            axes[0].text(0.5, 0.5, "no sweep loaded\n(need ≥2 cases)", ha='center', va='center',
+                         transform=axes[0].transAxes)
+            for ax in axes[1:]:
+                ax.set_axis_off()
+            self.pw.draw(); return
+
+        import sweep_analyzer as SA
+        cases = self.cases
+        param_keys = sorted({k for c in cases for k in c["params"]})
+        metric_keys = sorted({k for c in cases for k in c["metrics"]})
+
+        # (1) sensitivity heat-ish bars: elasticity of each metric wrt each param
+        sens = SA.sensitivity(cases)
+        ax = axes[0]
+        if param_keys:
+            npar = len(param_keys)
+            width = 0.8 / max(len(metric_keys), 1)
+            xpos = np.arange(npar)
+            for mi, mk in enumerate(metric_keys):
+                vals = [sens.get(mk, {}).get(pk, {}).get('elasticity', 0.0) for pk in param_keys]
+                ax.bar(xpos + mi * width, vals, width, label=mk)
+            ax.set_xticks(xpos + 0.4 - width / 2)
+            ax.set_xticklabels(param_keys, fontsize=7, rotation=20)
+            ax.set_ylabel("elasticity  (%/%)"); ax.set_title("Sensitivity")
+            ax.legend(fontsize=6); ax.grid(True, axis='y', alpha=0.3)
+        else:
+            ax.text(0.5, 0.5, "no params.json\n(sensitivity needs inputs)", ha='center', va='center',
+                    transform=ax.transAxes)
+
+        # (2) Pareto scatter for the two chosen metrics (both minimised)
+        ax = axes[1]
+        xm = self.xm_cb.currentText(); ym = self.ym_cb.currentText()
+        if xm and ym and xm != ym:
+            xs = [c["metrics"].get(xm, float('nan')) for c in cases]
+            ys = [c["metrics"].get(ym, float('nan')) for c in cases]
+            front, dom = SA.pareto_front(cases, {xm: 'min', ym: 'min'})
+            ax.scatter([xs[i] for i in dom], [ys[i] for i in dom], c='lightgray', s=25, label='dominated')
+            ax.scatter([xs[i] for i in front], [ys[i] for i in front], c=COLORS[1], s=45,
+                       edgecolor='k', label='Pareto', zorder=3)
+            ax.set_xlabel(xm); ax.set_ylabel(ym); ax.set_title("Pareto (min/min)")
+            ax.legend(fontsize=6); ax.grid(True, alpha=0.3)
+        else:
+            ax.text(0.5, 0.5, "pick two distinct metrics", ha='center', va='center',
+                    transform=ax.transAxes)
+
+        # (3) response-surface r² per metric
+        ax = axes[2]
+        r2s = []
+        for mk in metric_keys:
+            rs = SA.response_surface(cases, mk)
+            r2s.append((mk, rs.get('r2', float('nan')), rs.get('degree', 0)))
+        if r2s:
+            names = [m for m, _, _ in r2s]
+            vals = [r if r == r else 0.0 for _, r, _ in r2s]
+            ax.barh(range(len(names)), vals, color=COLORS[2], alpha=0.85, edgecolor='k', lw=0.5)
+            ax.set_yticks(range(len(names))); ax.set_yticklabels(names, fontsize=7)
+            for i, (_, r, deg) in enumerate(r2s):
+                ax.text(min(max(r, 0), 1), i, "  r²={:.3f} (d{})".format(r, deg), va='center', fontsize=6)
+            ax.set_xlim(0, 1.05); ax.set_xlabel("R²"); ax.set_title("Response surface fit")
+            ax.invert_yaxis(); ax.grid(True, axis='x', alpha=0.3)
+
+        self.summary_lbl.setText("{} cases | {} params | {} metrics".format(
+            len(cases), len(param_keys), len(metric_keys)))
+        self.pw.fig.tight_layout()
+        self.pw.draw()
+
+
 # ── Tab 3: FFT ────────────────────────────────────────────────────────
 class FFTTab(QWidget):
     def __init__(self, meta, base_dir, parent=None):
@@ -760,6 +893,7 @@ class MainWindow(QMainWindow):
         tabs.addTab(FatigueTab(meta, base_dir),          "🔩  Fatigue")
         tabs.addTab(EnergyTab(meta, base_dir),           "⚡  Energy")
         tabs.addTab(ReactionsTab(meta, base_dir),        "🎯  Reactions")
+        tabs.addTab(SweepTab(meta, base_dir),            "📐  Sweep")
 
         central = QWidget()
         vbox = QVBoxLayout(central)

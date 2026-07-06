@@ -44,6 +44,43 @@ def metrics_from_metadata(meta):
     return out
 
 
+def scan_sweep_dir(root):
+    """Discover sweep cases under a directory. Each case is a subfolder that holds a
+    metadata.json and (optionally) a params.json mapping input design variables to values:
+        root/
+          case_rib1.0/ metadata.json  params.json {"rib_mm":1.0,"wall_mm":0.6}
+          case_rib1.5/ metadata.json  params.json {...}
+    A metadata.json directly in root also counts (params.json beside it if present). Returns the
+    `entries` list load_cases() consumes. Cases without a params.json are still included with an
+    empty params dict (they contribute metrics but no sensitivity)."""
+    entries = []
+
+    def _add(meta_path, name):
+        params = {}
+        pj = os.path.join(os.path.dirname(meta_path), "params.json")
+        if os.path.isfile(pj):
+            try:
+                with open(pj, "r", encoding="utf-8") as f:
+                    params = json.load(f)
+            except Exception:
+                params = {}
+        entries.append({"metadata": meta_path, "params": params, "name": name})
+
+    root_meta = os.path.join(root, "metadata.json")
+    if os.path.isfile(root_meta):
+        _add(root_meta, os.path.basename(root.rstrip("/\\")) or "root")
+    try:
+        for sub in sorted(os.listdir(root)):
+            d = os.path.join(root, sub)
+            if os.path.isdir(d):
+                mp = os.path.join(d, "metadata.json")
+                if os.path.isfile(mp):
+                    _add(mp, sub)
+    except Exception:
+        pass
+    return entries
+
+
 def load_cases(entries):
     """Build case dicts from (metadata_path, params) pairs.
     `entries`: list of {"metadata": path, "params": {name: value}} (or {"metrics": {...}} inline).
