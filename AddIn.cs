@@ -17,6 +17,7 @@ using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Simulation;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Pipeline;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.ConformalMesh;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.VoidCut;
+using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.Package;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.GmshMesher;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Commands.ReverseEngineer;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.TensileTest;
@@ -75,6 +76,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller
 
             // 보이드 컷
             new VoidCutCommand(),
+
+            // 패키지 임포트 (볼맵 → 솔더볼/수지/레이어 스택)
+            new ImportPackageCommand(),
 
             // 메쉬 설정 그룹
             new CommandCapsule("MXDigitalTwinModeller.MeshGroup", "Mesh"),
@@ -273,6 +277,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller
                     <button id=""MXDigitalTwinModeller.VoidCut""
                             size=""large""
                             command=""MXDigitalTwinModeller.VoidCut""/>
+                    <button id=""MXDigitalTwinModeller.ImportPackage""
+                            size=""large""
+                            command=""MXDigitalTwinModeller.ImportPackage""/>
                 </group>
                 <group id=""MXDigitalTwinModeller.MeshGroup"" command=""MXDigitalTwinModeller.MeshGroup"">
                     <button id=""MXDigitalTwinModeller.Material""

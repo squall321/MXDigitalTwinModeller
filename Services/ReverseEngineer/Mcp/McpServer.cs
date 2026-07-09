@@ -177,6 +177,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Mcp
             "parse_spec", "get_parameters", "set_parameters",
             "rebind_active_body", "import_step",
             "generate_tensile_specimen", "generate_laminate",
+            "parse_package_file", "generate_package_from_file",
         };
 
         /// <summary>Long-running CAE tools get a 10-minute marshaller budget: a licensed-seat
@@ -187,6 +188,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Mcp
             new System.Collections.Generic.HashSet<string>
         {
             "mesh_with_gmsh", "conformal_mesh",
+            "generate_package_from_file",   // thousands of ball instances + chunked Booleans
         };
 
         private string ExecuteTool(string toolName, string argsJson)

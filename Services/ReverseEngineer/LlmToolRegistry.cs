@@ -472,6 +472,36 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                       "}, \"required\": [\"thickness_mm\"]}}" +
                     "}, \"required\": [\"width_mm\", \"length_mm\", \"layers\"]}"),
 
+                new ToolDef(
+                    "parse_package_file",
+                    "Parse a package description file (*Layer blocks with Location/Length/Thickness, " +
+                    "'Cylinder,x,y,r' solder-ball-map entries, 'Box,x,y,w,h' embedded dies; Mesh* keys " +
+                    "are filtered out) and return the layer-stack summary WITHOUT building any geometry - " +
+                    "the dry-run lint for generate_package_from_file. See Examples/packages/*.txt.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"path\": {\"type\": \"string\", \"description\": \"Absolute path to a package description .txt file\"}" +
+                    "}, \"required\": [\"path\"]}"),
+
+                new ToolDef(
+                    "generate_package_from_file",
+                    "Build the full IC-PACKAGE CAD stack from a package description file: bottom-up " +
+                    "layers (PCB/substrate/EMC...), solder-joint layers instanced from the embedded " +
+                    "ball map (ONE body per ball), embedded dies (Box entries), and per inclusion layer " +
+                    "an optional 'resin' MATRIX body = layer slab MINUS all inclusions via Boolean " +
+                    "(underfill / molding compound). ball_shape 'cylinder' = straight joint as exported; " +
+                    "'barrel' = convex reflowed joint whose radius follows a circular arc bulging at " +
+                    "mid-height. Mesh* settings in the file are ignored for CAD. Layers stack in file " +
+                    "order; the session binds to the cheapest created body (a plain slab). " +
+                    "NOTE: thousands of balls build in one call - expect tens of seconds.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"path\": {\"type\": \"string\", \"description\": \"Absolute path to a package description .txt file\"}, " +
+                      "\"ball_shape\": {\"type\": \"string\", \"enum\": [\"cylinder\", \"barrel\"], \"description\": \"Solder-joint shape (default cylinder)\"}, " +
+                      "\"barrel_bulge_ratio\": {\"type\": \"number\", \"description\": \"Barrel mid-height radius / pad radius (> 1, default 1.25)\"}, " +
+                      "\"barrel_slices\": {\"type\": \"integer\", \"description\": \"Stacked-disc slices approximating the barrel arc (default 8)\"}, " +
+                      "\"fill_matrix\": {\"type\": \"boolean\", \"description\": \"Create the resin matrix body per inclusion layer (default true)\"}, " +
+                      "\"layer_filter\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"Only build these layer names (z stacking stays true); omit for all\"}" +
+                    "}, \"required\": [\"path\"]}"),
+
                 // ---- CAE mutators on existing bodies -------------------------
                 new ToolDef(
                     "laminate_body",

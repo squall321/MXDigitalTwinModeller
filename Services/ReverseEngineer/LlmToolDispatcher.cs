@@ -42,6 +42,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             "parse_spec", "get_parameters", "set_parameters",          // pure spec/param tools
             "rebind_active_body", "import_step",                       // session binding
             "generate_tensile_specimen", "generate_laminate",          // CAE from-scratch generators
+            "parse_package_file", "generate_package_from_file",        // package-stack generators
         };
 
         /// <summary>
@@ -620,6 +621,80 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                             JsonStringArray(lamNames) +
                             ", \"total_thickness_mm\": " + lamP.GetTotalThicknessMm().ToString("0.###", Inv) +
                             ", \"interfaces\": " + (lamBodies.Count - 1).ToString(Inv) + "}");
+                    }
+                    case "parse_package_file":
+                    {
+                        string ppfPath = GetString(args, "path");
+                        Models.Package.PackageSpec ppf;
+                        try { ppf = Package.PackageFileParser.ParseFile(ppfPath); }
+                        catch (Exception ex)
+                        { return Envelope(false, "package parse failed: " + ex.Message, null); }
+                        return Envelope(true, null, PackageSummaryJson(ppf, ppfPath));
+                    }
+                    case "generate_package_from_file":
+                    {
+                        string gpfPath = GetString(args, "path");
+                        Models.Package.PackageSpec gpf;
+                        try { gpf = Package.PackageFileParser.ParseFile(gpfPath); }
+                        catch (Exception ex)
+                        { return Envelope(false, "package parse failed: " + ex.Message, null); }
+
+                        var gpo = new Models.Package.PackageGenOptions();
+                        if (args.ContainsKey("ball_shape"))
+                            gpo.BallShape = GetString(args, "ball_shape");
+                        if (!string.Equals(gpo.BallShape, "cylinder", StringComparison.OrdinalIgnoreCase)
+                            && !string.Equals(gpo.BallShape, "barrel", StringComparison.OrdinalIgnoreCase))
+                            return Envelope(false, "ball_shape must be cylinder|barrel", null);
+                        if (args.ContainsKey("barrel_bulge_ratio"))
+                            gpo.BarrelBulgeRatio = GetDouble(args, "barrel_bulge_ratio");
+                        if (args.ContainsKey("barrel_slices"))
+                            gpo.BarrelSlices = (int)GetDouble(args, "barrel_slices");
+                        if (args.ContainsKey("fill_matrix"))
+                            gpo.FillMatrix = GetBool(args, "fill_matrix");
+                        if (args.ContainsKey("layer_filter") && args["layer_filter"] is List<object> gpFilter)
+                        {
+                            gpo.LayerFilter = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                            foreach (var o in gpFilter)
+                                if (o is string fs && fs.Length > 0) gpo.LayerFilter.Add(fs);
+                        }
+
+                        Part gpPart = ResolveActivePart(true);
+                        if (gpPart == null)
+                            return Envelope(false, "no active part and could not create a document", null);
+                        DesignBody gpBound;
+                        var gpRes = new Package.PackageGenerationService()
+                            .BuildStack(gpPart, gpf, gpo, out gpBound);
+                        if (!gpRes.Success)
+                            return Envelope(false, gpRes.Error ?? "package build failed", null);
+                        if (gpBound != null)
+                        {
+                            string gpErr = Mcp.SessionContext.Instance.BindBody(gpBound, null, null);
+                            if (gpErr != null) return Envelope(false, gpErr, null);
+                        }
+
+                        var gpSb = new System.Text.StringBuilder();
+                        gpSb.Append("{\"generated\": true, \"file\": \"").Append(EscapeStr(gpfPath))
+                            .Append("\", \"total_bodies\": ").Append(gpRes.TotalBodies.ToString(Inv))
+                            .Append(", \"total_thickness_mm\": ")
+                            .Append(gpRes.TotalThicknessMm.ToString("0.###", Inv))
+                            .Append(", \"ball_shape\": \"").Append(EscapeStr(gpo.BallShape.ToLowerInvariant()))
+                            .Append("\", \"bound_body\": \"").Append(EscapeStr(gpRes.BoundBodyName ?? ""))
+                            .Append("\", \"per_layer\": [");
+                        for (int i = 0; i < gpRes.Layers.Count; i++)
+                        {
+                            var l = gpRes.Layers[i];
+                            if (i > 0) gpSb.Append(", ");
+                            gpSb.Append("{\"name\": \"").Append(EscapeStr(l.Name ?? ""))
+                                .Append("\", \"z_base_mm\": ").Append(l.ZBaseMm.ToString("0.###", Inv))
+                                .Append(", \"thickness_mm\": ").Append(l.ThicknessMm.ToString("0.###", Inv))
+                                .Append(", \"balls\": ").Append(l.BallBodies.ToString(Inv))
+                                .Append(", \"boxes\": ").Append(l.BoxBodies.ToString(Inv))
+                                .Append(", \"matrix\": ").Append(l.MatrixCreated ? "true" : "false")
+                                .Append(", \"skipped\": ").Append(l.Skipped ? "true" : "false")
+                                .Append("}");
+                        }
+                        gpSb.Append("], \"warnings\": ").Append(JsonStringArray(gpf.Warnings)).Append("}");
+                        return Envelope(true, null, gpSb.ToString());
                     }
 
                     // ---- CAE mutators on existing bodies ---------------------
@@ -1318,6 +1393,40 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
         // ----------------------------------------------------------------
         // Argument extraction
         // ----------------------------------------------------------------
+        /// <summary>Layer-stack summary for parse_package_file (no geometry).</summary>
+        private static string PackageSummaryJson(Models.Package.PackageSpec spec, string path)
+        {
+            var zb = spec.ComputeZBasesMm();
+            int totalBalls = 0, totalBoxes = 0;
+            var sb = new System.Text.StringBuilder();
+            sb.Append("{\"file\": \"").Append(EscapeStr(path ?? ""))
+              .Append("\", \"layers\": [");
+            for (int i = 0; i < spec.Layers.Count; i++)
+            {
+                var l = spec.Layers[i];
+                totalBalls += l.Balls.Count;
+                totalBoxes += l.Boxes.Count;
+                if (i > 0) sb.Append(", ");
+                sb.Append("{\"name\": \"").Append(EscapeStr(l.Name ?? ""))
+                  .Append("\", \"z_base_mm\": ").Append(zb[i].ToString("0.###", Inv))
+                  .Append(", \"thickness_mm\": ").Append(l.ThicknessMm.ToString("0.###", Inv))
+                  .Append(", \"size_mm\": [").Append(l.LenXMm.ToString("0.###", Inv))
+                  .Append(", ").Append(l.LenYMm.ToString("0.###", Inv))
+                  .Append("], \"location_mm\": [").Append(l.LocXMm.ToString("0.###", Inv))
+                  .Append(", ").Append(l.LocYMm.ToString("0.###", Inv))
+                  .Append("], \"balls\": ").Append(l.Balls.Count.ToString(Inv))
+                  .Append(", \"boxes\": ").Append(l.Boxes.Count.ToString(Inv))
+                  .Append(", \"mesh_keys\": ").Append(JsonStringArray(l.MeshOptions.Keys))
+                  .Append("}");
+            }
+            sb.Append("], \"total_thickness_mm\": ")
+              .Append(spec.GetTotalThicknessMm().ToString("0.###", Inv))
+              .Append(", \"total_balls\": ").Append(totalBalls.ToString(Inv))
+              .Append(", \"total_boxes\": ").Append(totalBoxes.ToString(Inv))
+              .Append(", \"warnings\": ").Append(JsonStringArray(spec.Warnings)).Append("}");
+            return sb.ToString();
+        }
+
         private static string GetString(Dictionary<string, object> args, string key)
         {
             if (!args.ContainsKey(key) || args[key] == null)
