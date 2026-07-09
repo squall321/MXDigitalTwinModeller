@@ -69,16 +69,42 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Fastener
                     double[] d = { cyl.Frame.DirZ.X, cyl.Frame.DirZ.Y, cyl.Frame.DirZ.Z };
                     double rMm = cyl.Radius * 1000;
 
-                    // axial span from the face bbox corners projected on the axis
-                    Box bb;
-                    try { bb = df.Shape.GetBoundingBox(Matrix.Identity); }
-                    catch { continue; }
+                    // axial span: circular-edge CENTERS project exactly onto the axis —
+                    // a face BBOX is world-axis-aligned, so its corners overestimate the
+                    // span for any tilted hole (up to ~2r error at 45°). BBox corners
+                    // remain the fallback for faces without two circular rim edges.
                     double tmin = double.MaxValue, tmax = double.MinValue;
-                    foreach (var c in BoxCorners(bb))
+                    int rims = 0;
+                    try
                     {
-                        double t = Dot(new[] { c[0] - o[0], c[1] - o[1], c[2] - o[2] }, d);
-                        if (t < tmin) tmin = t;
-                        if (t > tmax) tmax = t;
+                        foreach (var de in df.Edges)
+                        {
+                            var circ = de.Shape.Geometry as Circle;
+                            if (circ == null) continue;
+                            double t = Dot(new[]
+                            {
+                                circ.Frame.Origin.X * 1000 - o[0],
+                                circ.Frame.Origin.Y * 1000 - o[1],
+                                circ.Frame.Origin.Z * 1000 - o[2],
+                            }, d);
+                            if (t < tmin) tmin = t;
+                            if (t > tmax) tmax = t;
+                            rims++;
+                        }
+                    }
+                    catch { rims = 0; }
+                    if (rims < 2 || tmax - tmin < 1e-6)
+                    {
+                        Box bb;
+                        try { bb = df.Shape.GetBoundingBox(Matrix.Identity); }
+                        catch { continue; }
+                        tmin = double.MaxValue; tmax = double.MinValue;
+                        foreach (var c in BoxCorners(bb))
+                        {
+                            double t = Dot(new[] { c[0] - o[0], c[1] - o[1], c[2] - o[2] }, d);
+                            if (t < tmin) tmin = t;
+                            if (t > tmax) tmax = t;
+                        }
                     }
                     if (tmax - tmin < 1e-6) continue;
 
@@ -186,6 +212,19 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Fastener
             }
             if (hi - lo < 0.05) return null;
 
+            // the kernel's Cylinder.Frame.DirZ sign is arbitrary — normalize so the
+            // dominant component is positive, making bottom/top (and thus the HEAD side,
+            // which generates at the top) deterministic for identical geometry.
+            double[] dir = { refF.Dir[0], refF.Dir[1], refF.Dir[2] };
+            int dom = 0;
+            for (int k = 1; k < 3; k++)
+                if (Math.Abs(dir[k]) > Math.Abs(dir[dom])) dom = k;
+            if (dir[dom] < 0)
+            {
+                for (int k = 0; k < 3; k++) dir[k] = -dir[k];
+                double nlo = -hi; hi = -lo; lo = nlo;
+            }
+
             var site = new FastenerSite
             {
                 HoleDiaMm = 2 * refF.RadiusMm,
@@ -194,8 +233,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Fastener
             };
             for (int k = 0; k < 3; k++)
             {
-                site.AxisDir[k] = refF.Dir[k];
-                site.AxisPointMm[k] = refF.Origin[k] + refF.Dir[k] * lo;
+                site.AxisDir[k] = dir[k];
+                site.AxisPointMm[k] = refF.Origin[k] + dir[k] * lo;
             }
             foreach (var f in group)
                 if (!site.BodyNames.Contains(f.Body.Name ?? "")) site.BodyNames.Add(f.Body.Name ?? "");
