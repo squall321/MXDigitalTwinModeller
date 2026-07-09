@@ -647,15 +647,36 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                             return Envelope(false, "ball_shape must be cylinder|barrel", null);
                         if (args.ContainsKey("barrel_bulge_ratio"))
                             gpo.BarrelBulgeRatio = GetDouble(args, "barrel_bulge_ratio");
+                        if (string.Equals(gpo.BallShape, "barrel", StringComparison.OrdinalIgnoreCase)
+                            && gpo.BarrelBulgeRatio <= 1.0)
+                            return Envelope(false,
+                                "barrel_bulge_ratio must be > 1.0 for barrel balls", null);
                         if (args.ContainsKey("barrel_slices"))
-                            gpo.BarrelSlices = (int)GetDouble(args, "barrel_slices");
+                        {
+                            double gpSl = GetDouble(args, "barrel_slices");
+                            if (gpSl != Math.Floor(gpSl) || gpSl < 3 || gpSl > 64)
+                                return Envelope(false,
+                                    "barrel_slices must be an integer in [3, 64]", null);
+                            gpo.BarrelSlices = (int)gpSl;
+                        }
                         if (args.ContainsKey("fill_matrix"))
                             gpo.FillMatrix = GetBool(args, "fill_matrix");
-                        if (args.ContainsKey("layer_filter") && args["layer_filter"] is List<object> gpFilter)
+                        // a malformed filter must fail loudly: silently building ALL layers
+                        // instead of the one the caller asked for is a multi-thousand-body,
+                        // minutes-long mistake that cannot be undone over MCP.
+                        if (args.ContainsKey("layer_filter") && args["layer_filter"] != null)
                         {
+                            if (!(args["layer_filter"] is List<object> gpFilter))
+                                return Envelope(false,
+                                    "layer_filter must be an array of layer-name strings", null);
                             gpo.LayerFilter = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
                             foreach (var o in gpFilter)
-                                if (o is string fs && fs.Length > 0) gpo.LayerFilter.Add(fs);
+                            {
+                                if (!(o is string fs) || fs.Length == 0)
+                                    return Envelope(false,
+                                        "layer_filter items must be non-empty strings", null);
+                                gpo.LayerFilter.Add(fs);
+                            }
                         }
 
                         Part gpPart = ResolveActivePart(true);
@@ -693,8 +714,104 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                                 .Append(", \"skipped\": ").Append(l.Skipped ? "true" : "false")
                                 .Append("}");
                         }
-                        gpSb.Append("], \"warnings\": ").Append(JsonStringArray(gpf.Warnings)).Append("}");
+                        gpSb.Append("], \"log\": ").Append(JsonStringArray(gpRes.Log))
+                            .Append(", \"warnings\": ").Append(JsonStringArray(gpf.Warnings)).Append("}");
                         return Envelope(true, null, gpSb.ToString());
+                    }
+
+                    // ---- fastening design (bolt/rivet on concentric hole pairs) ----
+                    case "suggest_fastener":
+                    {
+                        var sfnSvc = new Fastener.FastenerGenerationService();
+                        Part sfnPart = ScanRootPart(designBody);
+                        if (sfnPart == null) return Envelope(false, "no part to scan", null);
+                        var sfnSites = sfnSvc.DetectSites(sfnPart);
+                        double[] sfnSeed = args.ContainsKey("seed_mm")
+                            ? GetDoubleArray(args, "seed_mm", 3) : null;
+                        var sfnSb = new System.Text.StringBuilder();
+                        sfnSb.Append("{\"sites\": [");
+                        for (int i = 0; i < sfnSites.Count; i++)
+                        {
+                            if (i > 0) sfnSb.Append(", ");
+                            sfnSb.Append(FastenerSiteJson(sfnSites[i], sfnSeed));
+                        }
+                        sfnSb.Append("], \"site_count\": ").Append(sfnSites.Count.ToString(Inv))
+                             .Append("}");
+                        return Envelope(true, null, sfnSb.ToString());
+                    }
+                    case "add_fastener":
+                    {
+                        double[] afSeed = GetDoubleArray(args, "seed_mm", 3);
+                        string afType = args.ContainsKey("type") ? GetString(args, "type") : "bolt";
+                        var afSpec = new Models.Fastener.FastenerSpec();
+                        if (string.Equals(afType, "rivet", StringComparison.OrdinalIgnoreCase))
+                        {
+                            afSpec.Type = Models.Fastener.FastenerType.Rivet;
+                            afSpec.Head = Models.Fastener.HeadStyle.Dome;
+                        }
+                        else if (!string.Equals(afType, "bolt", StringComparison.OrdinalIgnoreCase))
+                            return Envelope(false, "type must be bolt|rivet", null);
+                        if (args.ContainsKey("head"))
+                        {
+                            var afHead = ParseHeadStyle(GetString(args, "head"));
+                            if (afHead == null)
+                                return Envelope(false,
+                                    "head must be hex|socket_cap|pan|countersunk|dome|flat", null);
+                            afSpec.Head = afHead.Value;
+                        }
+                        if (args.ContainsKey("thread"))
+                        {
+                            string afTh = GetString(args, "thread").ToLowerInvariant();
+                            if (afTh == "rings") afSpec.Thread.Style = Models.Fastener.ThreadStyle.CosmeticRings;
+                            else if (afTh == "simplified") afSpec.Thread.Style = Models.Fastener.ThreadStyle.Simplified;
+                            else if (afTh == "none") afSpec.Thread.Style = Models.Fastener.ThreadStyle.None;
+                            else return Envelope(false, "thread must be rings|simplified|none", null);
+                        }
+                        if (args.ContainsKey("nominal_d_mm")) afSpec.NominalDMm = GetDouble(args, "nominal_d_mm");
+                        if (args.ContainsKey("length_mm")) afSpec.LengthMm = GetDouble(args, "length_mm");
+                        if (args.ContainsKey("pitch_mm")) afSpec.Thread.PitchMm = GetDouble(args, "pitch_mm");
+                        if (args.ContainsKey("with_nut")) afSpec.WithNut = GetBool(args, "with_nut");
+                        if (args.ContainsKey("with_washer")) afSpec.WithWasher = GetBool(args, "with_washer");
+
+                        var afSvc = new Fastener.FastenerGenerationService();
+                        Part afPart = ScanRootPart(designBody);
+                        if (afPart == null) return Envelope(false, "no part to scan", null);
+                        List<Models.Fastener.FastenerSite> afAll;
+                        var afSite = afSvc.FindNearestSite(afPart, afSeed, out afAll);
+                        if (afSite == null)
+                            return Envelope(false,
+                                "no fastening site (coaxial cylindrical hole faces) found in the part", null);
+                        double afDist = Fastener.FastenerGenerationService.SeedDistance(afSite, afSeed);
+                        double afMaxDist = Math.Max(2 * afSite.HoleDiaMm, 5.0);
+                        if (afDist > afMaxDist)
+                            return Envelope(false, string.Format(Inv,
+                                "seed is {0:0.##}mm from the nearest site axis (> {1:0.##}mm) — " +
+                                "{2} site(s) exist; call suggest_fastener to list them",
+                                afDist, afMaxDist, afAll.Count), null);
+
+                        string afPrefix = args.ContainsKey("name_prefix")
+                            ? GetString(args, "name_prefix") : "Fastener";
+                        var afRes = afSvc.Generate(afPart, afSite, afSpec, afPrefix);
+                        if (!afRes.Success)
+                            return Envelope(false, afRes.Error ?? "fastener generation failed", null);
+
+                        var afSb = new System.Text.StringBuilder();
+                        afSb.Append("{\"generated\": true, \"type\": \"")
+                            .Append(afSpec.Type == Models.Fastener.FastenerType.Rivet ? "rivet" : "bolt")
+                            .Append("\", \"head\": \"").Append(afSpec.Head.ToString().ToLowerInvariant())
+                            .Append("\", \"bodies_created\": ").Append(JsonStringArray(afRes.BodiesCreated))
+                            .Append(", \"site\": ").Append(FastenerSiteJson(afSite, afSeed))
+                            .Append(", \"dims_mm\": {");
+                        bool afFirst = true;
+                        foreach (var kv in afRes.DimsMm)
+                        {
+                            if (!afFirst) afSb.Append(", ");
+                            afFirst = false;
+                            afSb.Append("\"").Append(EscapeStr(kv.Key)).Append("\": ")
+                                .Append(kv.Value.ToString("0.####", Inv));
+                        }
+                        afSb.Append("}}");
+                        return Envelope(true, null, afSb.ToString());
                     }
 
                     // ---- CAE mutators on existing bodies ---------------------
@@ -704,7 +821,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         if (args.ContainsKey("body_name"))
                         {
                             string lbName = GetString(args, "body_name");
-                            lbTarget = ResolveBodyByName(designBody.Parent as Part, lbName);
+                            lbTarget = ResolveBodyByName(ScanRootPart(designBody), lbName);
                             if (lbTarget == null) return Envelope(false, "body not found: " + lbName, null);
                         }
                         var slP = new Models.Laminate.SolidLaminateParameters();
@@ -775,7 +892,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         double cvOff = GetDoubleOrDefault(args, "offset_mm", 0.0);
                         bool cvNS = args.ContainsKey("create_named_selection")
                             && GetBool(args, "create_named_selection");
-                        Part cvPart = designBody.Parent as Part;
+                        Part cvPart = ScanRootPart(designBody);
                         var cvTargets = new List<DesignBody>();
                         if (args.ContainsKey("target_body_names")
                             && args["target_body_names"] is List<object> cvTn && cvTn.Count > 0)
@@ -855,7 +972,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         if (args.ContainsKey("body_name"))
                         {
                             string bfName = GetString(args, "body_name");
-                            bfTarget = ResolveBodyByName(designBody.Parent as Part, bfName);
+                            bfTarget = ResolveBodyByName(ScanRootPart(designBody), bfName);
                             if (bfTarget == null) return Envelope(false, "body not found: " + bfName, null);
                         }
                         var bfSvc = new BendingFixture.BendingFixtureService();
@@ -1062,7 +1179,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         if (args.ContainsKey("body_name"))
                         {
                             string sfName = GetString(args, "body_name");
-                            sfBody = ResolveBodyByName(designBody.Parent as Part, sfName);
+                            sfBody = ResolveBodyByName(ScanRootPart(designBody), sfName);
                             if (sfBody == null) return Envelope(false, "body not found: " + sfName, null);
                         }
                         double[] sfSeed = GetDoubleArray(args, "seed_mm", 3);
@@ -1393,6 +1510,73 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
         // ----------------------------------------------------------------
         // Argument extraction
         // ----------------------------------------------------------------
+        private static Models.Fastener.HeadStyle? ParseHeadStyle(string s)
+        {
+            switch ((s ?? "").ToLowerInvariant())
+            {
+                case "hex": return Models.Fastener.HeadStyle.Hex;
+                case "socket_cap": case "socket": return Models.Fastener.HeadStyle.SocketCap;
+                case "pan": return Models.Fastener.HeadStyle.Pan;
+                case "countersunk": case "csk": return Models.Fastener.HeadStyle.Countersunk;
+                case "dome": case "button": return Models.Fastener.HeadStyle.Dome;
+                case "flat": return Models.Fastener.HeadStyle.Flat;
+                default: return null;
+            }
+        }
+
+        /// <summary>One fastening site + parametric design recommendations — the data the
+        /// LLM uses to GUIDE the fastening-design conversation (bolt vs rivet, head trade-
+        /// offs, auto ISO dims). Rationale strings are the machine-readable design notes.</summary>
+        private static string FastenerSiteJson(Models.Fastener.FastenerSite s, double[] seedMm)
+        {
+            var sb = new System.Text.StringBuilder();
+            sb.Append("{\"hole_d_mm\": ").Append(s.HoleDiaMm.ToString("0.###", Inv))
+              .Append(", \"grip_mm\": ").Append(s.GripMm.ToString("0.###", Inv))
+              .Append(", \"faces\": ").Append(s.FaceCount.ToString(Inv))
+              .Append(", \"bodies\": ").Append(JsonStringArray(s.BodyNames))
+              .Append(", \"axis_point_mm\": [").Append(s.AxisPointMm[0].ToString("0.###", Inv))
+              .Append(", ").Append(s.AxisPointMm[1].ToString("0.###", Inv))
+              .Append(", ").Append(s.AxisPointMm[2].ToString("0.###", Inv))
+              .Append("], \"axis_dir\": [").Append(s.AxisDir[0].ToString("0.####", Inv))
+              .Append(", ").Append(s.AxisDir[1].ToString("0.####", Inv))
+              .Append(", ").Append(s.AxisDir[2].ToString("0.####", Inv)).Append("]");
+            if (seedMm != null)
+                sb.Append(", \"seed_distance_mm\": ").Append(
+                    Fastener.FastenerGenerationService.SeedDistance(s, seedMm).ToString("0.###", Inv));
+
+            sb.Append(", \"recommendations\": [");
+            double n = Models.Fastener.IsoMetricThread.AutoNominalForHole(s.HoleDiaMm);
+            bool first = true;
+            if (n > 0)
+            {
+                double pitch = Models.Fastener.IsoMetricThread.CoarsePitchFor(n);
+                double autoLen = s.GripMm + 0.8 * n + 2 * pitch;
+                sb.Append("{\"type\": \"bolt\", \"designation\": \"M").Append(n.ToString("0.#", Inv))
+                  .Append("\", \"nominal_d_mm\": ").Append(n.ToString("0.###", Inv))
+                  .Append(", \"pitch_mm\": ").Append(pitch.ToString("0.###", Inv))
+                  .Append(", \"auto_length_mm\": ").Append(autoLen.ToString("0.###", Inv))
+                  .Append(", \"heads\": [\"hex\", \"socket_cap\", \"pan\", \"countersunk\"]")
+                  .Append(", \"with_nut\": true")
+                  .Append(", \"rationale\": \"serviceable/reusable joint; nut needs access to both sides; ")
+                  .Append("hex = wrench access, socket_cap = compact radial space, countersunk = flush surface\"}");
+                first = false;
+            }
+            double shank = s.HoleDiaMm * 0.98;
+            if (!first) sb.Append(", ");
+            sb.Append("{\"type\": \"rivet\", \"shank_d_mm\": ").Append(shank.ToString("0.###", Inv))
+              .Append(", \"tail_dia_mm\": ").Append((1.6 * shank).ToString("0.###", Inv))
+              .Append(", \"tail_h_mm\": ").Append((0.6 * shank).ToString("0.###", Inv))
+              .Append(", \"heads\": [\"dome\", \"flat\", \"countersunk\"]")
+              .Append(", \"rationale\": \"permanent joint, single-side install, fills the hole ")
+              .Append("(better shear/fatigue); countersunk head when the surface must stay flush\"}");
+            sb.Append("]");
+            if (n <= 0)
+                sb.Append(", \"note\": \"no standard metric nominal fits this hole with a ")
+                  .Append("medium clearance fit - bolt requires explicit nominal_d_mm\"");
+            sb.Append("}");
+            return sb.ToString();
+        }
+
         /// <summary>Layer-stack summary for parse_package_file (no geometry).</summary>
         private static string PackageSummaryJson(Models.Package.PackageSpec spec, string path)
         {

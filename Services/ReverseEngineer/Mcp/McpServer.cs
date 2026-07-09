@@ -166,6 +166,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Mcp
             "get_feature_graph", "find_features_by_type",
             "validate_body", "measure_body", "fea_freeze", "detect_contacts",
             "mesh_with_gmsh",   // external meshing: temp/.k files only, no geometry mutation
+            "suggest_fastener", // site detection + design recommendations, no mutation
         };
 
         /// <summary>C3: tools that build/bind their own session body (or need none at all) —

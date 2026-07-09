@@ -57,6 +57,12 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Package
             DesignBody firstPlain = null, firstMatrix = null, firstAny = null;
             var zBases = spec.ComputeZBasesMm();
 
+            // every DesignBody materialized so far — on a mid-build kernel failure the
+            // partial stack is rolled back instead of committing half a package (a retry
+            // would otherwise stack duplicate-named bodies on top).
+            var createdBodies = new List<DesignBody>();
+            try
+            {
             for (int li = 0; li < spec.Layers.Count; li++)
             {
                 var layer = spec.Layers[li];
@@ -87,15 +93,22 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Package
                 double cxM = GeometryUtils.MmToMeters(layer.LocXMm);
                 double cyM = GeometryUtils.MmToMeters(layer.LocYMm);
 
-                // layer slab at [zBase, zBase+t], centered on (LocX, LocY)
-                Body slab = BodyBuilder.CreateBlock(
-                    GeometryUtils.MmToMeters(layer.LenXMm),
-                    GeometryUtils.MmToMeters(layer.LenYMm), tM);
-                slab.Transform(Matrix.CreateTranslation(Vector.Create(cxM, cyM, zM)));
+                // layer slab at [zBase, zBase+t], centered on (LocX, LocY). Only extruded
+                // when consumed: as the plain-layer body, or as the matrix Boolean target —
+                // an inclusion layer with FillMatrix=false would orphan the kernel body.
+                Body slab = null;
+                if (!layer.HasInclusions || opt.FillMatrix)
+                {
+                    slab = BodyBuilder.CreateBlock(
+                        GeometryUtils.MmToMeters(layer.LenXMm),
+                        GeometryUtils.MmToMeters(layer.LenYMm), tM);
+                    slab.Transform(Matrix.CreateTranslation(Vector.Create(cxM, cyM, zM)));
+                }
 
                 if (!layer.HasInclusions)
                 {
                     var db = BodyBuilder.CreateDesignBody(part, layer.Name, slab);
+                    createdBodies.Add(db);
                     info.PlainCreated = true;
                     res.TotalBodies++;
                     if (firstPlain == null) firstPlain = db;
@@ -158,6 +171,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Package
                         ? string.Format(Inv, "{0}_Ball_{1:0000}", layer.Name, i + 1)
                         : string.Format(Inv, "{0}_Die_{1}", layer.Name, i - ballCount + 1);
                     var db = BodyBuilder.CreateDesignBody(part, name, inclusionBodies[i]);
+                    createdBodies.Add(db);
                     res.TotalBodies++;
                     if (firstAny == null) firstAny = db;
                 }
@@ -167,6 +181,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Package
                 if (matrix != null)
                 {
                     var db = BodyBuilder.CreateDesignBody(part, layer.Name + "_Matrix", matrix);
+                    createdBodies.Add(db);
                     info.MatrixCreated = true;
                     res.TotalBodies++;
                     if (firstMatrix == null) firstMatrix = db;
@@ -179,6 +194,20 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Package
                     layer.Boxes.Count > 0 ? " + " + layer.Boxes.Count.ToString(Inv) + " die(s)" : "",
                     matrix != null ? " + matrix" : "", info.ZBaseMm,
                     barrel ? "barrel" : "cylinder"));
+            }
+            }
+            catch (Exception ex)
+            {
+                int n = createdBodies.Count;
+                foreach (var db in createdBodies)
+                {
+                    try { db.Delete(); } catch { }
+                }
+                res.Success = false;
+                res.TotalBodies = 0;
+                res.Error = string.Format(Inv,
+                    "kernel failure mid-build (rolled back {0} bodies): {1}", n, ex.Message);
+                return res;
             }
 
             res.TotalThicknessMm = spec.GetTotalThicknessMm();

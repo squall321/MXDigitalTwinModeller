@@ -502,6 +502,42 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                       "\"layer_filter\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"Only build these layer names (z stacking stays true); omit for all\"}" +
                     "}, \"required\": [\"path\"]}"),
 
+                // ---- fastening design (concentric hole pairs) ----------------
+                new ToolDef(
+                    "suggest_fastener",
+                    "Detect fastening SITES - coaxial cylindrical HOLE faces spanning the body stack " +
+                    "(the 'two concentric circles' pick, any axis) - and return per-site geometry " +
+                    "(hole d, grip = clamped stack thickness, axis, spanned bodies) PLUS parametric " +
+                    "design recommendations: bolt (auto ISO 262 nominal/pitch + auto length + head " +
+                    "options with trade-off rationale) and rivet (hole-filling shank + tail dims). " +
+                    "Use this to GUIDE the fastening-design conversation before add_fastener. Read-only.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"seed_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"Optional 3D point; adds seed_distance_mm per site for disambiguation\"}" +
+                    "}, \"required\": []}"),
+
+                new ToolDef(
+                    "add_fastener",
+                    "Generate a PARAMETRIC fastener at the concentric-hole site nearest seed_mm. " +
+                    "type 'bolt': head hex|socket_cap|pan|countersunk, ISO 262/724 metric thread " +
+                    "rendered as 'rings' (cosmetic, one ring per pitch) | 'simplified' (minor-diameter " +
+                    "core, FEA-friendly) | 'none', plus optional hex nut and washers - separate bodies " +
+                    "for CAE contact. type 'rivet': factory head dome|flat|countersunk + hole-filling " +
+                    "shank + bucked tail, one body. EVERY dimension auto-derives from the detected " +
+                    "hole/grip via ISO-typical proportional ratios; nominal_d_mm/length_mm/pitch_mm " +
+                    "override the automation. Returns the full dims_mm record actually used.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"seed_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"3D point near the target hole (on/near its axis)\"}, " +
+                      "\"type\": {\"type\": \"string\", \"enum\": [\"bolt\", \"rivet\"], \"description\": \"Default bolt\"}, " +
+                      "\"head\": {\"type\": \"string\", \"enum\": [\"hex\", \"socket_cap\", \"pan\", \"countersunk\", \"dome\", \"flat\"], \"description\": \"Default: hex (bolt) / dome (rivet)\"}, " +
+                      "\"thread\": {\"type\": \"string\", \"enum\": [\"rings\", \"simplified\", \"none\"], \"description\": \"Thread representation (default rings)\"}, " +
+                      "\"nominal_d_mm\": {\"type\": \"number\", \"description\": \"Override the auto ISO nominal / rivet shank dia\"}, " +
+                      "\"length_mm\": {\"type\": \"number\", \"description\": \"Override the auto bolt length (below head)\"}, " +
+                      "\"pitch_mm\": {\"type\": \"number\", \"description\": \"Override the ISO 262 coarse pitch\"}, " +
+                      "\"with_nut\": {\"type\": \"boolean\", \"description\": \"Bolt only (default true)\"}, " +
+                      "\"with_washer\": {\"type\": \"boolean\", \"description\": \"Washer under head and nut (default false)\"}, " +
+                      "\"name_prefix\": {\"type\": \"string\", \"description\": \"Body name prefix (default 'Fastener')\"}" +
+                    "}, \"required\": [\"seed_mm\"]}"),
+
                 // ---- CAE mutators on existing bodies -------------------------
                 new ToolDef(
                     "laminate_body",

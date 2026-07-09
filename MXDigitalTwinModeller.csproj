@@ -250,6 +250,8 @@
       <SubType>Form</SubType>
     </Compile>
     <Compile Include="Commands\Package\ImportPackageCommand.cs" />
+    <Compile Include="Models\Fastener\FastenerModels.cs" />
+    <Compile Include="Services\Fastener\FastenerGenerationService.cs" />
     <Compile Include="Models\Package\PackageModels.cs" />
     <Compile Include="Services\Package\PackageFileParser.cs" />
     <Compile Include="Services\Package\PackageGenerationService.cs" />
