@@ -543,9 +543,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                     "(frustum-exact) transitions; false gives smooth. Session binds to the body.",
                     "{\"type\": \"object\", \"properties\": {" +
                       "\"sections\": {\"type\": \"array\", \"minItems\": 2, \"items\": {\"type\": \"object\", \"properties\": {" +
-                        "\"shape\": {\"type\": \"string\", \"enum\": [\"circle\", \"rect\", \"polygon\"]}, " +
+                        "\"shape\": {\"type\": \"string\", \"enum\": [\"circle\", \"rect\", \"rounded_rect\", \"polygon\"]}, " +
                         "\"dia_mm\": {\"type\": \"number\", \"description\": \"circle dia / polygon circumscribed dia\"}, " +
                         "\"w_mm\": {\"type\": \"number\"}, \"h_mm\": {\"type\": \"number\"}, " +
+                        "\"corner_r_mm\": {\"type\": \"number\", \"description\": \"rounded_rect corner radius\"}, " +
                         "\"sides\": {\"type\": \"integer\", \"description\": \"polygon sides (default 6)\"}, " +
                         "\"center_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3}, " +
                         "\"rot_deg\": {\"type\": \"number\", \"description\": \"in-plane rotation\"}" +
@@ -605,6 +606,44 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                       "\"copy\": {\"type\": \"boolean\", \"description\": \"Keep the original (default false)\"}, " +
                       "\"count\": {\"type\": \"integer\", \"description\": \"Pattern instances 1-200 (default 1)\"}" +
                     "}, \"required\": [\"op\"]}"),
+
+                // ---- pouch battery ----------------------------------------------
+                new ToolDef(
+                    "create_pouch_battery",
+                    "Generate a PARAMETRIC POUCH BATTERY CELL (the standard content of drop / bend " +
+                    "/ SWELLING models): rounded-rect core + terrace seal shelf (+X end) + side seal " +
+                    "flanges (flat|folded pouch film) + two tabs as SEPARATE bodies (Al/Cu in CAE) + " +
+                    "optional SWELL DOMES on the large faces. swell_percent has EXACT semantics: the " +
+                    "dome height is solved so the added volume equals percent/100 x core volume " +
+                    "(swell_height_mm gives the height explicitly instead). count > 1 stacks cells " +
+                    "at thickness + gap pitch. Every unset dimension derives from documented typical " +
+                    "ratios (corner r = 5% of min plan dim, terrace t = 40% of thickness, tab width " +
+                    "= 15% / pitch = 40% of width) - all overridable. Session binds to Cell_1.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"length_mm\": {\"type\": \"number\", \"description\": \"Core length (X, terrace end is +X)\"}, " +
+                      "\"width_mm\": {\"type\": \"number\"}, " +
+                      "\"thickness_mm\": {\"type\": \"number\"}, " +
+                      "\"corner_r_mm\": {\"type\": \"number\", \"description\": \"Default 5% of min(length, width)\"}, " +
+                      "\"terrace_length_mm\": {\"type\": \"number\", \"description\": \"Seal shelf length (default 4; 0 = none)\"}, " +
+                      "\"terrace_thickness_mm\": {\"type\": \"number\", \"description\": \"Default 40% of thickness\"}, " +
+                      "\"tab_width_mm\": {\"type\": \"number\", \"description\": \"Default 15% of width\"}, " +
+                      "\"tab_thickness_mm\": {\"type\": \"number\", \"description\": \"Default 0.2\"}, " +
+                      "\"tab_length_mm\": {\"type\": \"number\", \"description\": \"Default 5\"}, " +
+                      "\"tab_pitch_mm\": {\"type\": \"number\", \"description\": \"Tab center distance (default 40% of width)\"}, " +
+                      "\"tab_offset_mm\": {\"type\": \"number\", \"description\": \"Common Y offset of the tab pair\"}, " +
+                      "\"flange\": {\"type\": \"string\", \"enum\": [\"none\", \"flat\", \"folded\"], \"description\": \"Side seal fold (default flat)\"}, " +
+                      "\"flange_width_mm\": {\"type\": \"number\", \"description\": \"Default 1.5\"}, " +
+                      "\"flange_thickness_mm\": {\"type\": \"number\", \"description\": \"Default 0.15\"}, " +
+                      "\"swell\": {\"type\": \"string\", \"enum\": [\"none\", \"dome\"], \"description\": \"Inferred as dome when percent/height given\"}, " +
+                      "\"swell_percent\": {\"type\": \"number\", \"description\": \"Added volume as % of core volume (exact)\"}, " +
+                      "\"swell_height_mm\": {\"type\": \"number\", \"description\": \"Explicit dome height instead of percent\"}, " +
+                      "\"swell_both_sides\": {\"type\": \"boolean\", \"description\": \"Bulge both faces (default true)\"}, " +
+                      "\"swell_top_scale\": {\"type\": \"number\", \"description\": \"Dome top section scale (default 0.55)\"}, " +
+                      "\"swell_inset_mm\": {\"type\": \"number\", \"description\": \"Dome base inset (default corner r)\"}, " +
+                      "\"count\": {\"type\": \"integer\", \"description\": \"Cells in the stack, 1-8 (default 1)\"}, " +
+                      "\"gap_mm\": {\"type\": \"number\", \"description\": \"Stack gap (default 0.5)\"}, " +
+                      "\"name_prefix\": {\"type\": \"string\", \"description\": \"Default 'Battery'\"}" +
+                    "}, \"required\": [\"length_mm\", \"width_mm\", \"thickness_mm\"]}"),
 
                 // ---- drop-test environment ------------------------------------
                 new ToolDef(

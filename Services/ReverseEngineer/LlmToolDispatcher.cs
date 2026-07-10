@@ -46,6 +46,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             "generate_tensile_specimen", "generate_laminate",          // CAE from-scratch generators
             "parse_package_file", "generate_package_from_file",        // package-stack generators
             "revolve_profile", "sweep_profile", "loft_profiles",       // CAD primitive creators
+            "create_pouch_battery",                                     // battery generator
         };
 
         /// <summary>
@@ -722,6 +723,81 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         return Envelope(true, null, gpSb.ToString());
                     }
 
+                    // ---- pouch battery cell -----------------------------------------
+                    case "create_pouch_battery":
+                    {
+                        var pbSpec = new Models.Battery.PouchBatterySpec
+                        {
+                            LengthMm = GetDouble(args, "length_mm"),
+                            WidthMm = GetDouble(args, "width_mm"),
+                            ThicknessMm = GetDouble(args, "thickness_mm"),
+                            CornerRMm = GetDoubleOrDefault(args, "corner_r_mm", 0),
+                            TerraceLengthMm = GetDoubleOrDefault(args, "terrace_length_mm", 4.0),
+                            TerraceThicknessMm = GetDoubleOrDefault(args, "terrace_thickness_mm", 0),
+                            TabWidthMm = GetDoubleOrDefault(args, "tab_width_mm", 0),
+                            TabThicknessMm = GetDoubleOrDefault(args, "tab_thickness_mm", 0.2),
+                            TabLengthMm = GetDoubleOrDefault(args, "tab_length_mm", 5.0),
+                            TabPitchMm = GetDoubleOrDefault(args, "tab_pitch_mm", 0),
+                            TabOffsetMm = GetDoubleOrDefault(args, "tab_offset_mm", 0),
+                            FlangeWidthMm = GetDoubleOrDefault(args, "flange_width_mm", 1.5),
+                            FlangeThicknessMm = GetDoubleOrDefault(args, "flange_thickness_mm", 0.15),
+                            SwellPercent = GetDoubleOrDefault(args, "swell_percent", 0),
+                            SwellHeightMm = GetDoubleOrDefault(args, "swell_height_mm", 0),
+                            SwellTopScale = GetDoubleOrDefault(args, "swell_top_scale", 0.55),
+                            SwellInsetMm = GetDoubleOrDefault(args, "swell_inset_mm", 0),
+                            GapMm = GetDoubleOrDefault(args, "gap_mm", 0.5),
+                        };
+                        if (args.ContainsKey("flange"))
+                        {
+                            string pbFl = GetString(args, "flange").ToLowerInvariant();
+                            if (pbFl == "none") pbSpec.Flange = Models.Battery.FlangeFold.None;
+                            else if (pbFl == "flat") pbSpec.Flange = Models.Battery.FlangeFold.Flat;
+                            else if (pbFl == "folded") pbSpec.Flange = Models.Battery.FlangeFold.Folded;
+                            else return Envelope(false, "flange must be none|flat|folded", null);
+                        }
+                        if (args.ContainsKey("swell"))
+                        {
+                            string pbSw = GetString(args, "swell").ToLowerInvariant();
+                            if (pbSw == "none") pbSpec.Swell = Models.Battery.SwellMode.None;
+                            else if (pbSw == "dome") pbSpec.Swell = Models.Battery.SwellMode.Dome;
+                            else return Envelope(false, "swell must be none|dome", null);
+                        }
+                        else if (pbSpec.SwellPercent > 0 || pbSpec.SwellHeightMm > 0)
+                            pbSpec.Swell = Models.Battery.SwellMode.Dome;
+                        if (args.ContainsKey("swell_both_sides"))
+                            pbSpec.SwellBothSides = GetBool(args, "swell_both_sides");
+                        if (args.ContainsKey("count")) pbSpec.Count = (int)GetDouble(args, "count");
+                        if (args.ContainsKey("name_prefix")) pbSpec.NamePrefix = GetString(args, "name_prefix");
+
+                        Part pbPart = ResolveActivePart(true);
+                        if (pbPart == null) return Envelope(false, "no active part", null);
+                        var pbRes = new Battery.PouchBatteryService().Create(pbPart, pbSpec);
+                        if (!pbRes.Success)
+                            return Envelope(false, pbRes.Error ?? "battery creation failed", null);
+                        var pbCell = ResolveBodyByName(pbPart, pbSpec.NamePrefix + "_Cell_1");
+                        if (pbCell != null)
+                        {
+                            string pbBindErr = Mcp.SessionContext.Instance.BindBody(pbCell, null, null);
+                            if (pbBindErr != null) return Envelope(false, pbBindErr, null);
+                        }
+                        var pbSb = new System.Text.StringBuilder();
+                        pbSb.Append("{\"generated\": true, \"bodies_created\": ")
+                            .Append(JsonStringArray(pbRes.BodiesCreated))
+                            .Append(", \"cell_volume_mm3\": ").Append(pbCell != null
+                                ? (pbCell.Shape.Volume * 1e9).ToString("0.###", Inv) : "0")
+                            .Append(", \"dims_mm\": {");
+                        bool pbFirst = true;
+                        foreach (var kv in pbRes.DimsMm)
+                        {
+                            if (!pbFirst) pbSb.Append(", ");
+                            pbFirst = false;
+                            pbSb.Append("\"").Append(EscapeStr(kv.Key)).Append("\": ")
+                                .Append(kv.Value.ToString("0.####", Inv));
+                        }
+                        pbSb.Append("}}");
+                        return Envelope(true, null, pbSb.ToString());
+                    }
+
                     // ---- drop-test environment (pose / floor / impactors) ----------
                     case "pose_for_drop":
                     {
@@ -955,6 +1031,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                             if (sd.ContainsKey("dia_mm")) sec.DiaMm = GetDouble(sd, "dia_mm");
                             if (sd.ContainsKey("w_mm")) sec.WMm = GetDouble(sd, "w_mm");
                             if (sd.ContainsKey("h_mm")) sec.HMm = GetDouble(sd, "h_mm");
+                            if (sd.ContainsKey("corner_r_mm")) sec.CornerRMm = GetDouble(sd, "corner_r_mm");
                             if (sd.ContainsKey("sides")) sec.Sides = (int)GetDouble(sd, "sides");
                             if (sd.ContainsKey("rot_deg")) sec.RotDeg = GetDouble(sd, "rot_deg");
                             if (sd.ContainsKey("center_mm")) sec.CenterMm = GetDoubleArray(sd, "center_mm", 3);

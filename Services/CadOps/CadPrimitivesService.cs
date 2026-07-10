@@ -205,9 +205,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.CadOps
         // ------------------------------------------------------------------
         public class LoftSection
         {
-            public string Shape = "circle";     // circle | rect | polygon
+            public string Shape = "circle";     // circle | rect | rounded_rect | polygon
             public double DiaMm;                // circle / polygon circumscribed dia
-            public double WMm, HMm;             // rect
+            public double WMm, HMm;             // rect / rounded_rect
+            public double CornerRMm;            // rounded_rect corner radius
             public int Sides = 6;               // polygon
             public double[] CenterMm = new double[3];
             public double RotDeg;               // in-plane rotation (rect/polygon)
@@ -241,6 +242,19 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.CadOps
             if (!body.IsClosed)
                 throw new InvalidOperationException("loft did not close into a solid");
             return body;
+        }
+
+        /// <summary>Quarter arc for a rounded-rect corner: local corner center ccLocal
+        /// (pre-rotation), radius rr, in-plane rotation rot, base start angle a0.</summary>
+        private static ITrimmedCurve ArcOnPlane(double[] cMm, double[] u, double[] v,
+            double[] ccLocal, double rr, double rot, double a0)
+        {
+            double cx = ccLocal[0] * Math.Cos(rot) - ccLocal[1] * Math.Sin(rot);
+            double cy = ccLocal[0] * Math.Sin(rot) + ccLocal[1] * Math.Cos(rot);
+            var circle = Circle.Create(Frame.Create(InPlanePoint(cMm, u, v, cx, cy),
+                Direction.Create(u[0], u[1], u[2]), Direction.Create(v[0], v[1], v[2])),
+                GeometryUtils.MmToMeters(rr));
+            return CurveSegment.Create(circle, Interval.Create(a0 + rot, a0 + rot + Math.PI / 2));
         }
 
         private static Plane SectionPlane(LoftSection s, double[] u, double[] v)
@@ -282,6 +296,39 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.CadOps
                         pts.Add(InPlanePoint(c, u, v, x, y));
                     }
                     for (int i = 0; i < 4; i++) curves.Add(CurveSegment.Create(pts[i], pts[(i + 1) % 4]));
+                    break;
+                }
+                case "rounded_rect":
+                {
+                    if (s.WMm <= 0 || s.HMm <= 0)
+                        throw new ArgumentException("rounded_rect section needs w_mm/h_mm > 0");
+                    double rr = s.CornerRMm;
+                    if (rr <= 0 || rr >= Math.Min(s.WMm, s.HMm) / 2)
+                        throw new ArgumentException(
+                            "rounded_rect corner_r_mm must be in (0, min(w,h)/2)");
+                    double hw = s.WMm / 2, hh = s.HMm / 2;
+                    // CCW: 4 straight edges + 4 quarter arcs; RotDeg rotates the corner
+                    // centers in-plane AND offsets the arc start angles by the same amount
+                    // (the circle frames stay on the fixed (u, v) axes).
+                    double[][] cc =
+                    {
+                        new[] { hw - rr, hh - rr },     // TR, arcs 0..90
+                        new[] { -(hw - rr), hh - rr },  // TL, 90..180
+                        new[] { -(hw - rr), -(hh - rr) }, // BL, 180..270
+                        new[] { hw - rr, -(hh - rr) },  // BR, 270..360
+                    };
+                    Func<double, double, Point> rp = (x, y) => InPlanePoint(c, u, v,
+                        x * Math.Cos(rot) - y * Math.Sin(rot),
+                        x * Math.Sin(rot) + y * Math.Cos(rot));
+                    // straight edges between consecutive arc tangent points
+                    curves.Add(CurveSegment.Create(rp(hw, -(hh - rr)), rp(hw, hh - rr)));      // right
+                    curves.Add(ArcOnPlane(c, u, v, cc[0], rr, rot, 0));                        // TR
+                    curves.Add(CurveSegment.Create(rp(hw - rr, hh), rp(-(hw - rr), hh)));      // top
+                    curves.Add(ArcOnPlane(c, u, v, cc[1], rr, rot, Math.PI / 2));              // TL
+                    curves.Add(CurveSegment.Create(rp(-hw, hh - rr), rp(-hw, -(hh - rr))));    // left
+                    curves.Add(ArcOnPlane(c, u, v, cc[2], rr, rot, Math.PI));                  // BL
+                    curves.Add(CurveSegment.Create(rp(-(hw - rr), -hh), rp(hw - rr, -hh)));    // bottom
+                    curves.Add(ArcOnPlane(c, u, v, cc[3], rr, rot, 3 * Math.PI / 2));          // BR
                     break;
                 }
                 case "polygon":
