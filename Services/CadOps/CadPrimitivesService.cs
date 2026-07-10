@@ -135,7 +135,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.CadOps
         }
 
         /// <summary>Polyline path with tangent arc fillets at interior corners —
-        /// kernel sweeps want tangent continuity. cornerR = 0 gives sharp corners.</summary>
+        /// kernel sweeps want tangent continuity. cornerR = 0 gives sharp corners.
+        /// Fails LOUDLY when the radius does not fit the legs (an over-consumed setback
+        /// silently produces a self-crossing path and a wrong solid) or when a corner is
+        /// a near-reversal hairpin (tan(phi/2) blows up long before the collinear guard).</summary>
         internal static List<ITrimmedCurve> BuildBlendedPath(double[][] p, double cornerRMm)
         {
             var curves = new List<ITrimmedCurve>();
@@ -162,14 +165,26 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.CadOps
                 for (int k = 0; k < 3; k++) n[k] /= nMag;
                 double cosPhi = Math.Max(-1.0, Math.Min(1.0, Dot(d1, d2)));
                 double phi = Math.Acos(cosPhi);                 // turn angle
+                if (phi > 170.0 * Math.PI / 180.0)
+                    throw new ArgumentException(string.Format(Inv,
+                        "path corner {0} is a near-reversal ({1:0.#} deg turn) - " +
+                        "an arc blend cannot fit; add an intermediate waypoint", i, phi * 180 / Math.PI));
                 double setback = cornerRMm * Math.Tan(phi / 2); // tangent-point distance
+                // the setback must fit the REMAINING incoming leg and its share of the
+                // outgoing leg (halved when the next vertex is also a blended corner)
+                double availIn = Math.Sqrt(Dot(Sub(p[i], cur), Sub(p[i], cur)));
+                double availOut = Math.Sqrt(Dot(Sub(p[i + 1], p[i]), Sub(p[i + 1], p[i])));
+                if (i + 1 < p.Length - 1) availOut /= 2;
+                if (setback > availIn + 1e-9 || setback > availOut + 1e-9)
+                    throw new ArgumentException(string.Format(Inv,
+                        "corner_r_mm {0:0.###} does not fit the path at vertex {1} " +
+                        "(needs {2:0.###}mm of leg, has {3:0.###}mm)",
+                        cornerRMm, i, setback, Math.Min(availIn, availOut)));
                 double[] t1 = Add(p[i], Scale(d1, -setback));   // tangent point on incoming leg
                 double[] t2 = Add(p[i], Scale(d2, setback));    // tangent point on outgoing leg
                 // arc center: from t1, perpendicular to d1 (in the corner plane), toward inside
                 var inward = Norm(Cross(n, d1));
-                if (Dot(inward, d2) < 0) inward = Scale(inward, -1);
                 double[] c = Add(t1, Scale(inward, cornerRMm));
-                // arc frame: x from center to t1, sweep by (pi - phi)... the arc turns by phi
                 var ax = Norm(Sub(t1, c));
                 var ay = Cross(n, ax);
                 var circle = Circle.Create(Frame.Create(
@@ -177,7 +192,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.CadOps
                     Direction.Create(ax[0], ax[1], ax[2]),
                     Direction.Create(ay[0], ay[1], ay[2])),
                     GeometryUtils.MmToMeters(cornerRMm));
-                curves.Add(Seg(cur, t1));
+                double segLen = Math.Sqrt(Dot(Sub(t1, cur), Sub(t1, cur)));
+                if (segLen > 1e-12) curves.Add(Seg(cur, t1));
                 curves.Add(CurveSegment.Create(circle, Interval.Create(0, phi)));
                 cur = t2;
             }
@@ -299,8 +315,21 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.CadOps
             var n = Norm(planeNormal);
             var bb = shape.GetBoundingBox(Matrix.Identity);
             double diag = (bb.MaxCorner - bb.MinCorner).Magnitude * 1000 + 1.0;  // mm
-            below = HalfIntersect(shape, planePointMm, n, diag, false);
-            above = HalfIntersect(shape, planePointMm, n, diag, true);
+            // re-anchor the slab OVER THE BODY: any point on the plane is a valid plane
+            // spec, so a caller point far from the body would otherwise leave the slab
+            // (sized from the body bbox but centered at the caller point) partially or
+            // fully missing the body — silent clipping. Projecting the bbox center onto
+            // the plane keeps the cut identical and the coverage guaranteed.
+            double[] cMm =
+            {
+                (bb.MinCorner.X + bb.MaxCorner.X) / 2 * 1000,
+                (bb.MinCorner.Y + bb.MaxCorner.Y) / 2 * 1000,
+                (bb.MinCorner.Z + bb.MaxCorner.Z) / 2 * 1000,
+            };
+            double dist = Dot(Sub(cMm, planePointMm), n);
+            double[] anchor = Sub(cMm, Scale(n, dist));
+            below = HalfIntersect(shape, anchor, n, diag, false);
+            above = HalfIntersect(shape, anchor, n, diag, true);
         }
 
         private static Body HalfIntersect(Body shape, double[] pMm, double[] n,
@@ -333,14 +362,15 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.CadOps
         /// (the "side walls") by angleDeg about the neutral plane through neutralPointMm.
         /// Mutates the body in place; returns the number of faces tapered.</summary>
         public int DraftSideFaces(Body shape, double[] neutralPointMm, double[] pullDir,
-            double angleDeg)
+            double angleDeg, out int skippedNonPlanar)
         {
             var pull = Norm(pullDir);
             var faces = new List<Face>();
+            skippedNonPlanar = 0;
             foreach (var f in shape.Faces)
             {
                 var pl = f.Geometry as Plane;
-                if (pl == null) continue;
+                if (pl == null) { skippedNonPlanar++; continue; }
                 double[] fn = { pl.Frame.DirZ.X, pl.Frame.DirZ.Y, pl.Frame.DirZ.Z };
                 if (Math.Abs(Dot(fn, pull)) < 0.05) faces.Add(f);
             }

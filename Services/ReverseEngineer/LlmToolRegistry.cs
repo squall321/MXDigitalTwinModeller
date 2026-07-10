@@ -508,7 +508,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                     "REVOLVE a closed (r, z) polyline profile about an arbitrary axis to create a " +
                     "solid of revolution - shafts, pulleys, flanges, bottles, O-ring grooves. r = " +
                     "radial distance from the axis (>= 0), z = position along the axis. angle_deg " +
-                    "in (0, 360] for partial revolves. The session binds to the created body.",
+                    "in (0, 360] for partial revolves - NOTE: the start azimuth of a partial wedge " +
+                    "is internally chosen; rotate the result with transform_body if the wedge must " +
+                    "face a specific direction. The session binds to the created body.",
                     "{\"type\": \"object\", \"properties\": {" +
                       "\"profile_rz_mm\": {\"type\": \"array\", \"items\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 2, \"maxItems\": 2}, \"minItems\": 3, \"description\": \"Closed profile as [r, z] pairs in mm (auto-closed)\"}, " +
                       "\"axis_point_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"Point on the axis (default origin)\"}, " +
@@ -522,7 +524,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                     "SWEEP a circular section along a 3D polyline path with tangent arc-blended " +
                     "corners - pipes, tubes, wires, frames, cooling channels. wall_mm > 0 makes a " +
                     "hollow pipe (outer minus bore). corner_r_mm rounds every interior corner " +
-                    "(recommended: sharp corners are kernel-hostile). Session binds to the body.",
+                    "(recommended: sharp corners are kernel-hostile) and MUST FIT the adjacent " +
+                    "legs - an oversized radius or a near-reversal (>170 deg) corner is rejected " +
+                    "with an actionable error. Session binds to the body.",
                     "{\"type\": \"object\", \"properties\": {" +
                       "\"path_mm\": {\"type\": \"array\", \"items\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3}, \"minItems\": 2, \"description\": \"Polyline waypoints [x,y,z] in mm\"}, " +
                       "\"dia_mm\": {\"type\": \"number\", \"description\": \"Section outer diameter\"}, " +
@@ -555,7 +559,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                     "split_body",
                     "SPLIT an existing body by a plane into below/above pieces (named separately, " +
                     "along the plane normal). Reports the piece volumes plus the original so " +
-                    "conservation is checkable. DESTRUCTIVE when delete_original=true (default).",
+                    "conservation is checkable; errors when the plane does not actually cut the " +
+                    "body. When the session body is consumed the session rebinds to the BELOW " +
+                    "piece (reported as session_bound_to). DESTRUCTIVE when delete_original=true " +
+                    "(default).",
                     "{\"type\": \"object\", \"properties\": {" +
                       "\"body_name\": {\"type\": \"string\", \"description\": \"Target body (default: session body)\"}, " +
                       "\"plane_point_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3}, " +
@@ -581,8 +588,12 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                     "transform_body",
                     "MOVE / ROTATE / SCALE a whole named body, optionally as COPIES and PATTERNS: " +
                     "op move + count N = linear array (step translation_mm); op rotate + count N = " +
-                    "circular array (step angle_deg about the axis); copy=true keeps the original. " +
-                    "op scale resizes about the body center (count 1 only).",
+                    "circular array (step angle_deg about the axis). Patterns ALWAYS keep the " +
+                    "original (use copy=true with count); copy=false is the in-place transform and " +
+                    "requires count=1. op scale resizes about the body center (count 1 only). " +
+                    "NOTE: feature ids (H*/B*) captured before a transform are stale afterwards - " +
+                    "do not chain feature-id edits after transform_body inside one apply_operations " +
+                    "batch.",
                     "{\"type\": \"object\", \"properties\": {" +
                       "\"body_name\": {\"type\": \"string\", \"description\": \"Target body (default: session body)\"}, " +
                       "\"op\": {\"type\": \"string\", \"enum\": [\"move\", \"rotate\", \"scale\"]}, " +

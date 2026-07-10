@@ -834,7 +834,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                             rvProf.ToArray(), rvAxP, rvAxD, rvAng); }
                         catch (Exception ex) { return Envelope(false, "revolve failed: " + ex.Message, null); }
                         var rvDb = Core.Geometry.BodyBuilder.CreateDesignBody(rvPart, rvName, rvBody);
-                        Mcp.SessionContext.Instance.BindBody(rvDb, null, null);
+                        string rvBindErr = Mcp.SessionContext.Instance.BindBody(rvDb, null, null);
+                        if (rvBindErr != null) return Envelope(false, rvBindErr, null);
                         return Envelope(true, null, "{\"generated\": true, \"body\": \"" + EscapeStr(rvDb.Name) +
                             "\", \"volume_mm3\": " + (rvDb.Shape.Volume * 1e9).ToString("0.####", Inv) + "}");
                     }
@@ -852,7 +853,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                             swPath.ToArray(), swDia, swCr, swWall); }
                         catch (Exception ex) { return Envelope(false, "sweep failed: " + ex.Message, null); }
                         var swDb = Core.Geometry.BodyBuilder.CreateDesignBody(swPart, swName, swBody);
-                        Mcp.SessionContext.Instance.BindBody(swDb, null, null);
+                        string swBindErr = Mcp.SessionContext.Instance.BindBody(swDb, null, null);
+                        if (swBindErr != null) return Envelope(false, swBindErr, null);
                         return Envelope(true, null, "{\"generated\": true, \"body\": \"" + EscapeStr(swDb.Name) +
                             "\", \"volume_mm3\": " + (swDb.Shape.Volume * 1e9).ToString("0.####", Inv) + "}");
                     }
@@ -886,7 +888,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         try { lfBody = new CadOps.CadPrimitivesService().Loft(lfList, lfAx, lfRuled); }
                         catch (Exception ex) { return Envelope(false, "loft failed: " + ex.Message, null); }
                         var lfDb = Core.Geometry.BodyBuilder.CreateDesignBody(lfPart, lfName, lfBody);
-                        Mcp.SessionContext.Instance.BindBody(lfDb, null, null);
+                        string lfBindErr = Mcp.SessionContext.Instance.BindBody(lfDb, null, null);
+                        if (lfBindErr != null) return Envelope(false, lfBindErr, null);
                         return Envelope(true, null, "{\"generated\": true, \"body\": \"" + EscapeStr(lfDb.Name) +
                             "\", \"volume_mm3\": " + (lfDb.Shape.Volume * 1e9).ToString("0.####", Inv) + "}");
                     }
@@ -911,34 +914,42 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         try { new CadOps.CadPrimitivesService().SplitByPlane(
                             spTarget.Shape, spP, spN, out spBelow, out spAbove); }
                         catch (Exception ex) { return Envelope(false, "split failed: " + ex.Message, null); }
-                        if (spBelow == null && spAbove == null)
-                            return Envelope(false, "the plane does not intersect the body", null);
+                        // a split that leaves either side empty did not actually cut the
+                        // body — succeeding with one whole-volume piece would silently
+                        // rename+rebind under the caller.
+                        if (spBelow == null || spAbove == null)
+                            return Envelope(false, "the plane does not cut the body (one side is empty)", null);
                         var spNames = new List<string>();
                         double spVb = 0, spVa = 0;
+                        DesignBody spFirstPiece = null;
                         try
                         {
-                            if (spBelow != null)
-                            {
-                                var db = Core.Geometry.BodyBuilder.CreateDesignBody(spPart, spNb, spBelow);
-                                spNames.Add(db.Name); spVb = db.Shape.Volume * 1e9;
-                            }
-                            if (spAbove != null)
-                            {
-                                var db = Core.Geometry.BodyBuilder.CreateDesignBody(spPart, spNa, spAbove);
-                                spNames.Add(db.Name); spVa = db.Shape.Volume * 1e9;
-                            }
+                            var dbB = Core.Geometry.BodyBuilder.CreateDesignBody(spPart, spNb, spBelow);
+                            spNames.Add(dbB.Name); spVb = dbB.Shape.Volume * 1e9;
+                            spFirstPiece = dbB;
+                            var dbA = Core.Geometry.BodyBuilder.CreateDesignBody(spPart, spNa, spAbove);
+                            spNames.Add(dbA.Name); spVa = dbA.Shape.Volume * 1e9;
                             if (spDel) spTarget.Delete();
                         }
                         finally
                         {
+                            // deterministic rebind: point the session at a PIECE, not at
+                            // whatever body happens to be first in the document.
                             if (designBody.IsDeleted)
-                            { string spIgn; Mcp.SessionContext.Instance.BindActiveBody(out spIgn); }
+                            {
+                                if (spFirstPiece != null && !spFirstPiece.IsDeleted)
+                                    Mcp.SessionContext.Instance.BindBody(spFirstPiece, null, null);
+                                else
+                                { string spIgn; Mcp.SessionContext.Instance.BindActiveBody(out spIgn); }
+                            }
                         }
                         return Envelope(true, null, "{\"split\": true, \"bodies_created\": " +
                             JsonStringArray(spNames) +
                             ", \"volume_below_mm3\": " + spVb.ToString("0.####", Inv) +
                             ", \"volume_above_mm3\": " + spVa.ToString("0.####", Inv) +
-                            ", \"volume_original_mm3\": " + spVol0.ToString("0.####", Inv) + "}");
+                            ", \"volume_original_mm3\": " + spVol0.ToString("0.####", Inv) +
+                            ", \"session_bound_to\": \"" + EscapeStr(designBody.IsDeleted && spFirstPiece != null
+                                ? spFirstPiece.Name : (designBody.Name ?? "")) + "\"}");
                     }
                     case "draft_body":
                     {
@@ -956,12 +967,14 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         if (Math.Abs(drAng) <= 0 || Math.Abs(drAng) > 30)
                             return Envelope(false, "angle_deg must be in (0, 30] (or negative)", null);
                         double drV0 = drTarget.Shape.Volume * 1e9;
-                        int drN;
+                        int drN, drSkipped;
                         try { drN = new CadOps.CadPrimitivesService().DraftSideFaces(
-                            drTarget.Shape, drP, drDir, drAng); }
+                            drTarget.Shape, drP, drDir, drAng, out drSkipped); }
                         catch (Exception ex) { return Envelope(false, "draft failed: " + ex.Message, null); }
-                        if (drN == 0) return Envelope(false, "no side faces found to draft", null);
+                        if (drN == 0) return Envelope(false, "no planar side faces found to draft" +
+                            (drSkipped > 0 ? " (" + drSkipped.ToString(Inv) + " non-planar face(s) skipped)" : ""), null);
                         return Envelope(true, null, "{\"drafted\": true, \"faces\": " + drN.ToString(Inv) +
+                            ", \"skipped_nonplanar_faces\": " + drSkipped.ToString(Inv) +
                             ", \"volume_before_mm3\": " + drV0.ToString("0.####", Inv) +
                             ", \"volume_after_mm3\": " + (drTarget.Shape.Volume * 1e9).ToString("0.####", Inv) + "}");
                     }
@@ -979,6 +992,12 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         int tbCount = args.ContainsKey("count") ? (int)GetDouble(args, "count") : 1;
                         if (tbCount < 1 || tbCount > 200)
                             return Envelope(false, "count must be in [1, 200]", null);
+                        // a pattern always keeps the original — copy=false with count>1
+                        // would be silently promoted to copy=true, so reject it loudly.
+                        if (!tbCopy && tbCount > 1 && args.ContainsKey("copy"))
+                            return Envelope(false,
+                                "copy=false requires count=1 (in-place transform); " +
+                                "patterns keep the original - use copy=true with count", null);
                         Part tbPart = tbTarget.Parent as Part;
                         var tbNames = new List<string>();
                         Func<int, Matrix> tbStep;

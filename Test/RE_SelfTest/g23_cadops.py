@@ -132,6 +132,38 @@ def _do():
     _mk("P1 split below=%.2f above=%.2f -> %s" % (vb, va, ok))
     H["P1"] = ok
 
+    # ---- S3/S4: sweep corner-fit + hairpin must fail LOUDLY --------------------
+    Document.Create()
+    env = LlmToolDispatcher.Dispatch(None, None, "sweep_profile",
+        '{"path_mm": [[0,0,0],[3,0,0],[3,30,0]], "dia_mm": 2, "corner_r_mm": 5}')
+    H["S3"] = '"success": false' in env and 'does not fit' in env
+    _mk("S3 oversized corner -> %s | %s" % (H["S3"], env[:150]))
+    env = LlmToolDispatcher.Dispatch(None, None, "sweep_profile",
+        '{"path_mm": [[0,0,0],[20,0,0],[0,1.75,0]], "dia_mm": 2, "corner_r_mm": 2}')
+    H["S4"] = '"success": false' in env and 'near-reversal' in env
+    _mk("S4 hairpin -> %s | %s" % (H["S4"], env[:150]))
+
+    # ---- P2/P3: far plane point (anchor fix) + plane miss ----------------------
+    part, box = fresh_box("FBox", 10, 10, 8)
+    env = LlmToolDispatcher.Dispatch(box, None, "split_body",
+        '{"plane_point_mm": [500,-300,3], "plane_normal": [0,0,1]}')
+    vb, va = env_vol(env, "volume_below_mm3"), env_vol(env, "volume_above_mm3")
+    H["P2"] = ('"success": true' in env and abs(vb - 300) < 1 and abs(va - 500) < 1
+               and '"session_bound_to": "FBox_Below"' in env)
+    _mk("P2 far-point split below=%.2f above=%.2f -> %s" % (vb, va, H["P2"]))
+    part, box = fresh_box("MBox", 10, 10, 8)
+    env = LlmToolDispatcher.Dispatch(box, None, "split_body",
+        '{"plane_point_mm": [0,0,20], "plane_normal": [0,0,1]}')
+    H["P3"] = '"success": false' in env and 'does not cut' in env
+    _mk("P3 plane-miss -> %s | %s" % (H["P3"], env[:140]))
+
+    # ---- T3E: copy=false with count>1 must fail LOUDLY -------------------------
+    part, box = fresh_box("EBox", 5, 5, 5)
+    env = LlmToolDispatcher.Dispatch(box, None, "transform_body",
+        '{"op": "move", "translation_mm": [10,0,0], "copy": false, "count": 3}')
+    H["T3E"] = '"success": false' in env and 'copy=false requires count=1' in env
+    _mk("T3E copy=false pattern -> %s" % H["T3E"])
+
     # ---- D1: draft -----------------------------------------------------------
     part, box = fresh_box("DBox", 10, 10, 6)
     env = LlmToolDispatcher.Dispatch(box, None, "draft_body",
@@ -143,7 +175,7 @@ def _do():
     v = env_vol(env, "volume_after_mm3")
     okp = abs(v - draft_v(+1)) < draft_v(+1) * 0.005
     okm = abs(v - draft_v(-1)) < draft_v(-1) * 0.005
-    ok = '"faces": 4' in env and (okp or okm)
+    ok = '"faces": 4' in env and '"skipped_nonplanar_faces": 0' in env and (okp or okm)
     _mk("D1 draft v=%.3f (grow %.3f / shrink %.3f) sense=%s -> %s" % (
         v, draft_v(+1), draft_v(-1), "grow" if okp else ("shrink" if okm else "?"), ok))
     H["D1"] = ok
@@ -193,10 +225,10 @@ except System.Exception as e:
     _mk("wb-THREW " + e.GetType().Name + ": " + e.Message)
     emit("WB THREW: %s: %s" % (e.GetType().Name, e.Message))
 
-KEYS = ["R1", "R2", "S1", "S2", "L1", "L2", "P1", "D1", "T1", "T2"]
+KEYS = ["R1", "R2", "S1", "S2", "S3", "S4", "L1", "L2", "P1", "P2", "P3", "D1", "T1", "T2", "T3E"]
 for k in KEYS:
     emit("%s %s" % (k, H.get(k)))
 allp = all(bool(H.get(k)) for k in KEYS)
-emit("G23_PASS ALL=%s (%d/10)" % (allp, sum(1 for k in KEYS if H.get(k))))
+emit("G23_PASS ALL=%s (%d/15)" % (allp, sum(1 for k in KEYS if H.get(k))))
 File.WriteAllText(OUT, "\n".join(log) + "\n", UTF8Encoding(False))
 File.WriteAllText(DONE, "done\n", UTF8Encoding(False))
