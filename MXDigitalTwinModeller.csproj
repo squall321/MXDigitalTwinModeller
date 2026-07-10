@@ -254,6 +254,8 @@
     <Compile Include="Services\DropTest\DropTestService.cs" />
     <Compile Include="Models\Battery\PouchBatterySpec.cs" />
     <Compile Include="Services\Battery\PouchBatteryService.cs" />
+    <Compile Include="Models\Pcb\PcbAssemblySpec.cs" />
+    <Compile Include="Services\Pcb\PcbAssemblyService.cs" />
     <Compile Include="Models\Fastener\FastenerModels.cs" />
     <Compile Include="Services\Fastener\FastenerGenerationService.cs" />
     <Compile Include="Models\Package\PackageModels.cs" />

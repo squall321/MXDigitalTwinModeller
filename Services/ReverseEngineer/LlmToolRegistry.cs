@@ -607,6 +607,43 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                       "\"count\": {\"type\": \"integer\", \"description\": \"Pattern instances 1-200 (default 1)\"}" +
                     "}, \"required\": [\"op\"]}"),
 
+                // ---- PCB assembly -------------------------------------------------
+                new ToolDef(
+                    "create_pcb_assembly",
+                    "Generate a PARAMETRIC PCB ASSEMBLY: arbitrary polygon BOARD (non-convex " +
+                    "supported) minus a hole map and polygon cutouts, BLOCK / BGA components " +
+                    "seated on the board top (bga adds a per-ball solder grid spanning the " +
+                    "standoff - separate bodies so CAE can assign solder material; max 400 " +
+                    "balls per component), optional stiffener plate. Self-intersecting " +
+                    "outlines and holes/components outside the board are rejected loudly. " +
+                    "Session binds to the board.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"outline_mm\": {\"type\": \"array\", \"items\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 2, \"maxItems\": 2}, \"minItems\": 3, \"description\": \"Board polygon [x, y] points\"}, " +
+                      "\"thickness_mm\": {\"type\": \"number\", \"description\": \"Board thickness (default 1.0)\"}, " +
+                      "\"holes\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {" +
+                        "\"x\": {\"type\": \"number\"}, \"y\": {\"type\": \"number\"}, \"dia_mm\": {\"type\": \"number\"}" +
+                      "}, \"required\": [\"x\", \"y\", \"dia_mm\"]}}, " +
+                      "\"cutouts_mm\": {\"type\": \"array\", \"items\": {\"type\": \"array\", \"items\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 2, \"maxItems\": 2}, \"minItems\": 3}, \"description\": \"Polygon cutouts\"}, " +
+                      "\"components\": {\"type\": \"array\", \"items\": {\"type\": \"object\", \"properties\": {" +
+                        "\"ref\": {\"type\": \"string\", \"description\": \"Designator, e.g. U1\"}, " +
+                        "\"type\": {\"type\": \"string\", \"enum\": [\"block\", \"bga\"], \"description\": \"Default block\"}, " +
+                        "\"x\": {\"type\": \"number\"}, \"y\": {\"type\": \"number\"}, " +
+                        "\"w_mm\": {\"type\": \"number\"}, \"l_mm\": {\"type\": \"number\"}, \"h_mm\": {\"type\": \"number\"}, " +
+                        "\"rot_deg\": {\"type\": \"number\"}, " +
+                        "\"standoff_mm\": {\"type\": \"number\", \"description\": \"Package bottom above board top; bga ball height\"}, " +
+                        "\"ball_pitch_mm\": {\"type\": \"number\", \"description\": \"bga only\"}, " +
+                        "\"ball_dia_mm\": {\"type\": \"number\", \"description\": \"Default 55% of pitch\"}, " +
+                        "\"balls_nx\": {\"type\": \"integer\", \"description\": \"Default derived from footprint\"}, " +
+                        "\"balls_ny\": {\"type\": \"integer\"}" +
+                      "}, \"required\": [\"ref\", \"x\", \"y\", \"w_mm\", \"l_mm\", \"h_mm\"]}}, " +
+                      "\"stiffener\": {\"type\": \"object\", \"properties\": {" +
+                        "\"outline_mm\": {\"type\": \"array\", \"items\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 2, \"maxItems\": 2}, \"minItems\": 3}, " +
+                        "\"thickness_mm\": {\"type\": \"number\", \"description\": \"Default 0.15\"}, " +
+                        "\"side\": {\"type\": \"string\", \"enum\": [\"bottom\", \"top\"], \"description\": \"Default bottom\"}" +
+                      "}, \"required\": [\"outline_mm\"]}, " +
+                      "\"name_prefix\": {\"type\": \"string\", \"description\": \"Default 'Pcb'\"}" +
+                    "}, \"required\": [\"outline_mm\"]}"),
+
                 // ---- pouch battery ----------------------------------------------
                 new ToolDef(
                     "create_pouch_battery",

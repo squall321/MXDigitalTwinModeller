@@ -46,7 +46,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             "generate_tensile_specimen", "generate_laminate",          // CAE from-scratch generators
             "parse_package_file", "generate_package_from_file",        // package-stack generators
             "revolve_profile", "sweep_profile", "loft_profiles",       // CAD primitive creators
-            "create_pouch_battery",                                     // battery generator
+            "create_pouch_battery", "create_pcb_assembly",              // structure generators
         };
 
         /// <summary>
@@ -721,6 +721,118 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         gpSb.Append("], \"log\": ").Append(JsonStringArray(gpRes.Log))
                             .Append(", \"warnings\": ").Append(JsonStringArray(gpf.Warnings)).Append("}");
                         return Envelope(true, null, gpSb.ToString());
+                    }
+
+                    // ---- PCB assembly ------------------------------------------
+                    case "create_pcb_assembly":
+                    {
+                        var pcbSpec = new Models.Pcb.PcbAssemblySpec
+                        {
+                            OutlineMm = ParsePointList(args, "outline_mm", 3, 2).ToArray(),
+                            ThicknessMm = GetDoubleOrDefault(args, "thickness_mm", 1.0),
+                        };
+                        if (args.ContainsKey("name_prefix"))
+                            pcbSpec.NamePrefix = GetString(args, "name_prefix");
+                        if (args.ContainsKey("holes"))
+                        {
+                            if (!(args["holes"] is List<object> pcbHoles))
+                                return Envelope(false, "holes must be an array of {x, y, dia_mm}", null);
+                            foreach (var o in pcbHoles)
+                            {
+                                if (!(o is Dictionary<string, object> hd))
+                                    return Envelope(false, "each hole must be an object", null);
+                                pcbSpec.Holes.Add(new Models.Pcb.PcbHoleSpec
+                                {
+                                    XMm = GetDouble(hd, "x"), YMm = GetDouble(hd, "y"),
+                                    DiaMm = GetDouble(hd, "dia_mm"),
+                                });
+                            }
+                        }
+                        if (args.ContainsKey("cutouts_mm"))
+                        {
+                            if (!(args["cutouts_mm"] is List<object> pcbCuts))
+                                return Envelope(false, "cutouts_mm must be an array of polygons", null);
+                            for (int ci = 0; ci < pcbCuts.Count; ci++)
+                            {
+                                var wrap = new Dictionary<string, object> { { "p", pcbCuts[ci] } };
+                                pcbSpec.CutoutsMm.Add(ParsePointList(wrap, "p", 3, 2).ToArray());
+                            }
+                        }
+                        if (args.ContainsKey("components"))
+                        {
+                            if (!(args["components"] is List<object> pcbComps))
+                                return Envelope(false, "components must be an array of objects", null);
+                            foreach (var o in pcbComps)
+                            {
+                                if (!(o is Dictionary<string, object> cd))
+                                    return Envelope(false, "each component must be an object", null);
+                                var comp = new Models.Pcb.PcbComponentSpec
+                                {
+                                    Ref = cd.ContainsKey("ref") ? GetString(cd, "ref") : null,
+                                    XMm = GetDouble(cd, "x"), YMm = GetDouble(cd, "y"),
+                                    WMm = GetDouble(cd, "w_mm"), LMm = GetDouble(cd, "l_mm"),
+                                    HMm = GetDouble(cd, "h_mm"),
+                                    RotDeg = GetDoubleOrDefault(cd, "rot_deg", 0),
+                                    StandoffMm = GetDoubleOrDefault(cd, "standoff_mm", 0),
+                                    BallPitchMm = GetDoubleOrDefault(cd, "ball_pitch_mm", 0),
+                                    BallDiaMm = GetDoubleOrDefault(cd, "ball_dia_mm", 0),
+                                    BallsNx = (int)GetDoubleOrDefault(cd, "balls_nx", 0),
+                                    BallsNy = (int)GetDoubleOrDefault(cd, "balls_ny", 0),
+                                };
+                                if (cd.ContainsKey("type"))
+                                {
+                                    string ct = GetString(cd, "type").ToLowerInvariant();
+                                    if (ct == "block") comp.Type = Models.Pcb.PcbComponentType.Block;
+                                    else if (ct == "bga") comp.Type = Models.Pcb.PcbComponentType.Bga;
+                                    else return Envelope(false, "component type must be block|bga", null);
+                                }
+                                pcbSpec.Components.Add(comp);
+                            }
+                        }
+                        if (args.ContainsKey("stiffener") && args["stiffener"] is Dictionary<string, object> sd2)
+                        {
+                            var st = new Models.Pcb.PcbStiffenerSpec
+                            {
+                                OutlineMm = ParsePointList(sd2, "outline_mm", 3, 2).ToArray(),
+                                ThicknessMm = GetDoubleOrDefault(sd2, "thickness_mm", 0.15),
+                            };
+                            if (sd2.ContainsKey("side"))
+                            {
+                                string ss = GetString(sd2, "side").ToLowerInvariant();
+                                if (ss == "bottom") st.Side = Models.Pcb.StiffenerSide.Bottom;
+                                else if (ss == "top") st.Side = Models.Pcb.StiffenerSide.Top;
+                                else return Envelope(false, "stiffener side must be bottom|top", null);
+                            }
+                            pcbSpec.Stiffener = st;
+                        }
+
+                        Part pcbPart = ResolveActivePart(true);
+                        if (pcbPart == null) return Envelope(false, "no active part", null);
+                        var pcbRes = new Pcb.PcbAssemblyService().Create(pcbPart, pcbSpec);
+                        if (!pcbRes.Success)
+                            return Envelope(false, pcbRes.Error ?? "pcb creation failed", null);
+                        var pcbBoard = ResolveBodyByName(pcbPart, pcbSpec.NamePrefix + "_Board");
+                        if (pcbBoard != null)
+                        {
+                            string pcbBindErr = Mcp.SessionContext.Instance.BindBody(pcbBoard, null, null);
+                            if (pcbBindErr != null) return Envelope(false, pcbBindErr, null);
+                        }
+                        var pcbSb = new System.Text.StringBuilder();
+                        pcbSb.Append("{\"generated\": true, \"bodies_created\": ")
+                             .Append(JsonStringArray(pcbRes.BodiesCreated))
+                             .Append(", \"board_volume_mm3\": ").Append(pcbBoard != null
+                                 ? (pcbBoard.Shape.Volume * 1e9).ToString("0.###", Inv) : "0")
+                             .Append(", \"dims_mm\": {");
+                        bool pcbFirst = true;
+                        foreach (var kv in pcbRes.DimsMm)
+                        {
+                            if (!pcbFirst) pcbSb.Append(", ");
+                            pcbFirst = false;
+                            pcbSb.Append("\"").Append(EscapeStr(kv.Key)).Append("\": ")
+                                 .Append(kv.Value.ToString("0.####", Inv));
+                        }
+                        pcbSb.Append("}}");
+                        return Envelope(true, null, pcbSb.ToString());
                     }
 
                     // ---- pouch battery cell -----------------------------------------
