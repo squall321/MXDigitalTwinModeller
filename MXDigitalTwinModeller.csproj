@@ -251,6 +251,7 @@
     </Compile>
     <Compile Include="Commands\Package\ImportPackageCommand.cs" />
     <Compile Include="Services\CadOps\CadPrimitivesService.cs" />
+    <Compile Include="Services\DropTest\DropTestService.cs" />
     <Compile Include="Models\Fastener\FastenerModels.cs" />
     <Compile Include="Services\Fastener\FastenerGenerationService.cs" />
     <Compile Include="Models\Package\PackageModels.cs" />

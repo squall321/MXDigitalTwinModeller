@@ -415,7 +415,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Fastener
         // ------------------------------------------------------------------
         // primitive builders (local coords: +Z axis, mm in / meters to kernel)
         // ------------------------------------------------------------------
-        private static Body Disc(double rMm, double z0Mm, double hMm)
+        internal static Body Disc(double rMm, double z0Mm, double hMm)
         {
             Body b = BodyBuilder.CreateCylinder(
                 GeometryUtils.MmToMeters(rMm), GeometryUtils.MmToMeters(hMm));
@@ -448,7 +448,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Fastener
 
         /// <summary>Linear taper (cone) via stacked discs: radius r0 at the base plane,
         /// r1 at the far end, growing along dir (+1 = +Z from zBase, -1 = downward).</summary>
-        private static Body TaperStack(double r0Mm, double r1Mm, double zBaseMm, double hMm, int dir)
+        internal static Body TaperStack(double r0Mm, double r1Mm, double zBaseMm, double hMm, int dir)
         {
             return Stack(zBaseMm, hMm, dir, s => r0Mm + (r1Mm - r0Mm) * s);
         }

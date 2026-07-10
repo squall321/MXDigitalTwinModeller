@@ -722,6 +722,88 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         return Envelope(true, null, gpSb.ToString());
                     }
 
+                    // ---- drop-test environment (pose / floor / impactors) ----------
+                    case "pose_for_drop":
+                    {
+                        double[] pdDir;
+                        if (args.ContainsKey("direction"))
+                            pdDir = GetDoubleArray(args, "direction", 3);
+                        else if (args.ContainsKey("feature"))
+                        {
+                            try { pdDir = DropTest.DropTestService.FeatureDirection(GetString(args, "feature")); }
+                            catch (Exception ex) { return Envelope(false, ex.Message, null); }
+                        }
+                        else return Envelope(false, "feature (e.g. bottom_front_left) or direction required", null);
+                        double pdGap = GetDoubleOrDefault(args, "gap_mm", 0.1);
+                        double pdTop = GetDoubleOrDefault(args, "floor_top_z_mm", 0);
+                        var pdBodies = DeviceBodies(designBody);
+                        if (pdBodies.Count == 0) return Envelope(false, "no device bodies to pose", null);
+                        DropTest.DropTestService.PoseResult pdRes;
+                        try { pdRes = new DropTest.DropTestService().Pose(pdBodies, pdDir, pdGap, pdTop); }
+                        catch (Exception ex) { return Envelope(false, "pose failed: " + ex.Message, null); }
+                        return Envelope(true, null, "{\"posed\": true, \"bodies_posed\": " +
+                            pdRes.BodiesPosed.ToString(Inv) +
+                            ", \"rotation_deg\": " + pdRes.RotationDeg.ToString("0.###", Inv) +
+                            ", \"rot_axis\": [" + pdRes.RotAxis[0].ToString("0.####", Inv) +
+                            ", " + pdRes.RotAxis[1].ToString("0.####", Inv) +
+                            ", " + pdRes.RotAxis[2].ToString("0.####", Inv) +
+                            "], \"min_z_mm\": " + pdRes.MinZMm.ToString("0.####", Inv) +
+                            ", \"volume_before_mm3\": " + pdRes.VolumeBeforeMm3.ToString("0.###", Inv) +
+                            ", \"volume_after_mm3\": " + pdRes.VolumeAfterMm3.ToString("0.###", Inv) + "}");
+                    }
+                    case "add_drop_floor":
+                    {
+                        double dfMargin = GetDoubleOrDefault(args, "margin_mm", 20);
+                        double dfThick = GetDoubleOrDefault(args, "thickness_mm", 10);
+                        double dfTop = GetDoubleOrDefault(args, "top_z_mm", 0);
+                        string dfName = args.ContainsKey("name") ? GetString(args, "name") : "DropFloor";
+                        if (dfMargin < 0 || dfThick <= 0)
+                            return Envelope(false, "margin_mm must be >= 0 and thickness_mm > 0", null);
+                        var dfBodies = DeviceBodies(designBody);
+                        if (dfBodies.Count == 0) return Envelope(false, "no device bodies to size the floor from", null);
+                        DesignBody dfDb;
+                        try { dfDb = new DropTest.DropTestService().AddFloor(
+                            ScanRootPart(designBody), dfBodies, dfMargin, dfThick, dfTop, dfName); }
+                        catch (Exception ex) { return Envelope(false, "floor failed: " + ex.Message, null); }
+                        return Envelope(true, null, "{\"generated\": true, \"body\": \"" + EscapeStr(dfDb.Name) +
+                            "\", \"volume_mm3\": " + (dfDb.Shape.Volume * 1e9).ToString("0.###", Inv) +
+                            ", \"top_z_mm\": " + dfTop.ToString("0.###", Inv) + "}");
+                    }
+                    case "add_impactor":
+                    {
+                        string imType = args.ContainsKey("type") ? GetString(args, "type").ToLowerInvariant() : "ball";
+                        if (imType != "ball" && imType != "pen")
+                            return Envelope(false, "type must be ball|pen", null);
+                        double[] imTgt = GetDoubleArray(args, "target_mm", 3);
+                        double imClr = GetDoubleOrDefault(args, "clearance_mm", 0.1);
+                        var imSvc = new DropTest.DropTestService();
+                        Part imPart = ScanRootPart(designBody);
+                        DesignBody imDb;
+                        double imConeH = 0;
+                        try
+                        {
+                            if (imType == "ball")
+                                imDb = imSvc.AddBall(imPart,
+                                    GetDoubleOrDefault(args, "ball_dia_mm", 32),
+                                    imTgt, imClr,
+                                    args.ContainsKey("name") ? GetString(args, "name") : "Impactor_Ball");
+                            else
+                                imDb = imSvc.AddPen(imPart,
+                                    GetDoubleOrDefault(args, "pen_tip_r_mm", 0.35),
+                                    GetDoubleOrDefault(args, "pen_cone_deg", 120),
+                                    GetDoubleOrDefault(args, "pen_shank_dia_mm", 6),
+                                    GetDoubleOrDefault(args, "pen_len_mm", 60),
+                                    imTgt, imClr,
+                                    args.ContainsKey("name") ? GetString(args, "name") : "Impactor_Pen",
+                                    out imConeH);
+                        }
+                        catch (Exception ex) { return Envelope(false, "impactor failed: " + ex.Message, null); }
+                        return Envelope(true, null, "{\"generated\": true, \"type\": \"" + imType +
+                            "\", \"body\": \"" + EscapeStr(imDb.Name) +
+                            "\", \"volume_mm3\": " + (imDb.Shape.Volume * 1e9).ToString("0.####", Inv) +
+                            (imType == "pen" ? ", \"cone_h_mm\": " + imConeH.ToString("0.###", Inv) : "") + "}");
+                    }
+
                     // ---- fastening design (bolt/rivet on concentric hole pairs) ----
                     case "suggest_fastener":
                     {
@@ -1759,6 +1841,24 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
         // ----------------------------------------------------------------
         // Argument extraction
         // ----------------------------------------------------------------
+        /// <summary>All DEVICE bodies for drop-test tools: everything in the root part
+        /// except previously added drop fixtures (floor / impactors) — re-posing after
+        /// adding the floor must not rotate the floor along with the device.</summary>
+        private static List<DesignBody> DeviceBodies(DesignBody designBody)
+        {
+            var result = new List<DesignBody>();
+            var part = ScanRootPart(designBody);
+            if (part == null) return result;
+            foreach (var b in ConformalMesh.ConformalMeshService.CollectBodies(part, null))
+            {
+                string n = b.Name ?? "";
+                if (n.StartsWith("DropFloor", StringComparison.OrdinalIgnoreCase)) continue;
+                if (n.StartsWith("Impactor", StringComparison.OrdinalIgnoreCase)) continue;
+                result.Add(b);
+            }
+            return result;
+        }
+
         /// <summary>Array-of-arrays numeric parse: [[a,b(,c)], ...] with loud failures.</summary>
         private static List<double[]> ParsePointList(Dictionary<string, object> args,
             string key, int minCount, int dims)

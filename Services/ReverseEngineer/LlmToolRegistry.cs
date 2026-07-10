@@ -606,6 +606,53 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                       "\"count\": {\"type\": \"integer\", \"description\": \"Pattern instances 1-200 (default 1)\"}" +
                     "}, \"required\": [\"op\"]}"),
 
+                // ---- drop-test environment ------------------------------------
+                new ToolDef(
+                    "pose_for_drop",
+                    "POSE the whole device (every body except previously added DropFloor/Impactor* " +
+                    "fixtures) into a drop attitude: the named feature - face ('bottom'), edge " +
+                    "('bottom_front'), or corner ('bottom_front_left'), any _-joined combination of " +
+                    "top|bottom|left|right|front|back - is rotated to point straight DOWN about the " +
+                    "device center, then the device settles so its lowest point sits gap_mm above " +
+                    "the floor plane. Rigid transform: total volume is invariant (reported " +
+                    "before/after for verification).",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"feature\": {\"type\": \"string\", \"description\": \"Drop feature, e.g. bottom | bottom_front | bottom_front_left\"}, " +
+                      "\"direction\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"Explicit device direction to point down (overrides feature)\"}, " +
+                      "\"gap_mm\": {\"type\": \"number\", \"description\": \"Gap between device and floor plane (default 0.1)\"}, " +
+                      "\"floor_top_z_mm\": {\"type\": \"number\", \"description\": \"Floor plane height (default 0)\"}" +
+                    "}, \"required\": []}"),
+
+                new ToolDef(
+                    "add_drop_floor",
+                    "Add the RIGID FLOOR slab under the (posed) device: spans the device XY " +
+                    "footprint + margin_mm on every side, top face at top_z_mm. Body 'DropFloor' " +
+                    "is excluded from later pose_for_drop calls automatically.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"margin_mm\": {\"type\": \"number\", \"description\": \"Footprint margin (default 20)\"}, " +
+                      "\"thickness_mm\": {\"type\": \"number\", \"description\": \"Slab thickness (default 10)\"}, " +
+                      "\"top_z_mm\": {\"type\": \"number\", \"description\": \"Top face height (default 0)\"}, " +
+                      "\"name\": {\"type\": \"string\", \"description\": \"Body name (default 'DropFloor')\"}" +
+                    "}, \"required\": []}"),
+
+                new ToolDef(
+                    "add_impactor",
+                    "Place an IMPACTOR over a target point, lowest point clearance_mm above it: " +
+                    "'ball' = steel ball of ball_dia_mm; 'pen' = vertical pen with a conical nose " +
+                    "(pen_tip_r_mm tip, pen_cone_deg full angle, pen_shank_dia_mm shank, pen_len_mm " +
+                    "total). Impactor* bodies are excluded from later pose_for_drop calls.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"type\": {\"type\": \"string\", \"enum\": [\"ball\", \"pen\"], \"description\": \"Default ball\"}, " +
+                      "\"target_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"Impact target point (X, Y, Z) in mm\"}, " +
+                      "\"clearance_mm\": {\"type\": \"number\", \"description\": \"Gap above the target (default 0.1)\"}, " +
+                      "\"ball_dia_mm\": {\"type\": \"number\", \"description\": \"Ball diameter (default 32)\"}, " +
+                      "\"pen_tip_r_mm\": {\"type\": \"number\", \"description\": \"Pen tip radius (default 0.35)\"}, " +
+                      "\"pen_cone_deg\": {\"type\": \"number\", \"description\": \"Pen nose full cone angle (default 120)\"}, " +
+                      "\"pen_shank_dia_mm\": {\"type\": \"number\", \"description\": \"Pen shank diameter (default 6)\"}, " +
+                      "\"pen_len_mm\": {\"type\": \"number\", \"description\": \"Pen total length (default 60)\"}, " +
+                      "\"name\": {\"type\": \"string\", \"description\": \"Body name (default Impactor_Ball / Impactor_Pen)\"}" +
+                    "}, \"required\": [\"target_mm\"]}"),
+
                 // ---- fastening design (concentric hole pairs) ----------------
                 new ToolDef(
                     "suggest_fastener",
