@@ -5,8 +5,10 @@ using System.Text;
 using SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.ReverseEngineer;
 
 #if V251
+using SpaceClaim.Api.V251.Geometry;
 using SpaceClaim.Api.V251.Modeler;
 #elif V252
+using SpaceClaim.Api.V252.Geometry;
 using SpaceClaim.Api.V252.Modeler;
 #endif
 
@@ -43,6 +45,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             "rebind_active_body", "import_step",                       // session binding
             "generate_tensile_specimen", "generate_laminate",          // CAE from-scratch generators
             "parse_package_file", "generate_package_from_file",        // package-stack generators
+            "revolve_profile", "sweep_profile", "loft_profiles",       // CAD primitive creators
         };
 
         /// <summary>
@@ -814,6 +817,233 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         return Envelope(true, null, afSb.ToString());
                     }
 
+                    // ---- general CAD primitives (revolve/sweep/loft/split/draft/transform) ----
+                    case "revolve_profile":
+                    {
+                        var rvProf = ParsePointList(args, "profile_rz_mm", 3, 2);
+                        double[] rvAxP = args.ContainsKey("axis_point_mm")
+                            ? GetDoubleArray(args, "axis_point_mm", 3) : new double[] { 0, 0, 0 };
+                        double[] rvAxD = args.ContainsKey("axis_dir")
+                            ? GetDoubleArray(args, "axis_dir", 3) : new double[] { 0, 0, 1 };
+                        double rvAng = GetDoubleOrDefault(args, "angle_deg", 360.0);
+                        string rvName = args.ContainsKey("name") ? GetString(args, "name") : "Revolve";
+                        Part rvPart = ResolveActivePart(true);
+                        if (rvPart == null) return Envelope(false, "no active part", null);
+                        Body rvBody;
+                        try { rvBody = new CadOps.CadPrimitivesService().Revolve(
+                            rvProf.ToArray(), rvAxP, rvAxD, rvAng); }
+                        catch (Exception ex) { return Envelope(false, "revolve failed: " + ex.Message, null); }
+                        var rvDb = Core.Geometry.BodyBuilder.CreateDesignBody(rvPart, rvName, rvBody);
+                        Mcp.SessionContext.Instance.BindBody(rvDb, null, null);
+                        return Envelope(true, null, "{\"generated\": true, \"body\": \"" + EscapeStr(rvDb.Name) +
+                            "\", \"volume_mm3\": " + (rvDb.Shape.Volume * 1e9).ToString("0.####", Inv) + "}");
+                    }
+                    case "sweep_profile":
+                    {
+                        var swPath = ParsePointList(args, "path_mm", 2, 3);
+                        double swDia = GetDouble(args, "dia_mm");
+                        double swCr = GetDoubleOrDefault(args, "corner_r_mm", 0);
+                        double swWall = GetDoubleOrDefault(args, "wall_mm", 0);
+                        string swName = args.ContainsKey("name") ? GetString(args, "name") : "Sweep";
+                        Part swPart = ResolveActivePart(true);
+                        if (swPart == null) return Envelope(false, "no active part", null);
+                        Body swBody;
+                        try { swBody = new CadOps.CadPrimitivesService().SweepTube(
+                            swPath.ToArray(), swDia, swCr, swWall); }
+                        catch (Exception ex) { return Envelope(false, "sweep failed: " + ex.Message, null); }
+                        var swDb = Core.Geometry.BodyBuilder.CreateDesignBody(swPart, swName, swBody);
+                        Mcp.SessionContext.Instance.BindBody(swDb, null, null);
+                        return Envelope(true, null, "{\"generated\": true, \"body\": \"" + EscapeStr(swDb.Name) +
+                            "\", \"volume_mm3\": " + (swDb.Shape.Volume * 1e9).ToString("0.####", Inv) + "}");
+                    }
+                    case "loft_profiles":
+                    {
+                        if (!args.ContainsKey("sections") || !(args["sections"] is List<object> lfSecs)
+                            || lfSecs.Count < 2)
+                            return Envelope(false, "sections must be an array of >= 2 section objects", null);
+                        var lfList = new List<CadOps.CadPrimitivesService.LoftSection>();
+                        foreach (var o in lfSecs)
+                        {
+                            if (!(o is Dictionary<string, object> sd))
+                                return Envelope(false, "each section must be an object", null);
+                            var sec = new CadOps.CadPrimitivesService.LoftSection();
+                            if (sd.ContainsKey("shape")) sec.Shape = GetString(sd, "shape");
+                            if (sd.ContainsKey("dia_mm")) sec.DiaMm = GetDouble(sd, "dia_mm");
+                            if (sd.ContainsKey("w_mm")) sec.WMm = GetDouble(sd, "w_mm");
+                            if (sd.ContainsKey("h_mm")) sec.HMm = GetDouble(sd, "h_mm");
+                            if (sd.ContainsKey("sides")) sec.Sides = (int)GetDouble(sd, "sides");
+                            if (sd.ContainsKey("rot_deg")) sec.RotDeg = GetDouble(sd, "rot_deg");
+                            if (sd.ContainsKey("center_mm")) sec.CenterMm = GetDoubleArray(sd, "center_mm", 3);
+                            lfList.Add(sec);
+                        }
+                        double[] lfAx = args.ContainsKey("axis_dir")
+                            ? GetDoubleArray(args, "axis_dir", 3) : new double[] { 0, 0, 1 };
+                        bool lfRuled = !args.ContainsKey("ruled") || GetBool(args, "ruled");
+                        string lfName = args.ContainsKey("name") ? GetString(args, "name") : "Loft";
+                        Part lfPart = ResolveActivePart(true);
+                        if (lfPart == null) return Envelope(false, "no active part", null);
+                        Body lfBody;
+                        try { lfBody = new CadOps.CadPrimitivesService().Loft(lfList, lfAx, lfRuled); }
+                        catch (Exception ex) { return Envelope(false, "loft failed: " + ex.Message, null); }
+                        var lfDb = Core.Geometry.BodyBuilder.CreateDesignBody(lfPart, lfName, lfBody);
+                        Mcp.SessionContext.Instance.BindBody(lfDb, null, null);
+                        return Envelope(true, null, "{\"generated\": true, \"body\": \"" + EscapeStr(lfDb.Name) +
+                            "\", \"volume_mm3\": " + (lfDb.Shape.Volume * 1e9).ToString("0.####", Inv) + "}");
+                    }
+                    case "split_body":
+                    {
+                        DesignBody spTarget = designBody;
+                        if (args.ContainsKey("body_name"))
+                        {
+                            spTarget = ResolveBodyByName(ScanRootPart(designBody), GetString(args, "body_name"));
+                            if (spTarget == null)
+                                return Envelope(false, "body not found: " + GetString(args, "body_name"), null);
+                        }
+                        double[] spP = GetDoubleArray(args, "plane_point_mm", 3);
+                        double[] spN = GetDoubleArray(args, "plane_normal", 3);
+                        bool spDel = !args.ContainsKey("delete_original") || GetBool(args, "delete_original");
+                        string spBase = spTarget.Name ?? "Body";
+                        string spNb = args.ContainsKey("name_below") ? GetString(args, "name_below") : spBase + "_Below";
+                        string spNa = args.ContainsKey("name_above") ? GetString(args, "name_above") : spBase + "_Above";
+                        Part spPart = spTarget.Parent as Part;
+                        Body spBelow, spAbove;
+                        double spVol0 = spTarget.Shape.Volume * 1e9;
+                        try { new CadOps.CadPrimitivesService().SplitByPlane(
+                            spTarget.Shape, spP, spN, out spBelow, out spAbove); }
+                        catch (Exception ex) { return Envelope(false, "split failed: " + ex.Message, null); }
+                        if (spBelow == null && spAbove == null)
+                            return Envelope(false, "the plane does not intersect the body", null);
+                        var spNames = new List<string>();
+                        double spVb = 0, spVa = 0;
+                        try
+                        {
+                            if (spBelow != null)
+                            {
+                                var db = Core.Geometry.BodyBuilder.CreateDesignBody(spPart, spNb, spBelow);
+                                spNames.Add(db.Name); spVb = db.Shape.Volume * 1e9;
+                            }
+                            if (spAbove != null)
+                            {
+                                var db = Core.Geometry.BodyBuilder.CreateDesignBody(spPart, spNa, spAbove);
+                                spNames.Add(db.Name); spVa = db.Shape.Volume * 1e9;
+                            }
+                            if (spDel) spTarget.Delete();
+                        }
+                        finally
+                        {
+                            if (designBody.IsDeleted)
+                            { string spIgn; Mcp.SessionContext.Instance.BindActiveBody(out spIgn); }
+                        }
+                        return Envelope(true, null, "{\"split\": true, \"bodies_created\": " +
+                            JsonStringArray(spNames) +
+                            ", \"volume_below_mm3\": " + spVb.ToString("0.####", Inv) +
+                            ", \"volume_above_mm3\": " + spVa.ToString("0.####", Inv) +
+                            ", \"volume_original_mm3\": " + spVol0.ToString("0.####", Inv) + "}");
+                    }
+                    case "draft_body":
+                    {
+                        DesignBody drTarget = designBody;
+                        if (args.ContainsKey("body_name"))
+                        {
+                            drTarget = ResolveBodyByName(ScanRootPart(designBody), GetString(args, "body_name"));
+                            if (drTarget == null)
+                                return Envelope(false, "body not found: " + GetString(args, "body_name"), null);
+                        }
+                        double[] drP = GetDoubleArray(args, "neutral_point_mm", 3);
+                        double[] drDir = args.ContainsKey("pull_dir")
+                            ? GetDoubleArray(args, "pull_dir", 3) : new double[] { 0, 0, 1 };
+                        double drAng = GetDouble(args, "angle_deg");
+                        if (Math.Abs(drAng) <= 0 || Math.Abs(drAng) > 30)
+                            return Envelope(false, "angle_deg must be in (0, 30] (or negative)", null);
+                        double drV0 = drTarget.Shape.Volume * 1e9;
+                        int drN;
+                        try { drN = new CadOps.CadPrimitivesService().DraftSideFaces(
+                            drTarget.Shape, drP, drDir, drAng); }
+                        catch (Exception ex) { return Envelope(false, "draft failed: " + ex.Message, null); }
+                        if (drN == 0) return Envelope(false, "no side faces found to draft", null);
+                        return Envelope(true, null, "{\"drafted\": true, \"faces\": " + drN.ToString(Inv) +
+                            ", \"volume_before_mm3\": " + drV0.ToString("0.####", Inv) +
+                            ", \"volume_after_mm3\": " + (drTarget.Shape.Volume * 1e9).ToString("0.####", Inv) + "}");
+                    }
+                    case "transform_body":
+                    {
+                        DesignBody tbTarget = designBody;
+                        if (args.ContainsKey("body_name"))
+                        {
+                            tbTarget = ResolveBodyByName(ScanRootPart(designBody), GetString(args, "body_name"));
+                            if (tbTarget == null)
+                                return Envelope(false, "body not found: " + GetString(args, "body_name"), null);
+                        }
+                        string tbOp = GetString(args, "op").ToLowerInvariant();
+                        bool tbCopy = args.ContainsKey("copy") && GetBool(args, "copy");
+                        int tbCount = args.ContainsKey("count") ? (int)GetDouble(args, "count") : 1;
+                        if (tbCount < 1 || tbCount > 200)
+                            return Envelope(false, "count must be in [1, 200]", null);
+                        Part tbPart = tbTarget.Parent as Part;
+                        var tbNames = new List<string>();
+                        Func<int, Matrix> tbStep;
+                        switch (tbOp)
+                        {
+                            case "move":
+                            {
+                                double[] t = GetDoubleArray(args, "translation_mm", 3);
+                                tbStep = i => Matrix.CreateTranslation(Vector.Create(
+                                    Core.Geometry.GeometryUtils.MmToMeters(t[0] * i),
+                                    Core.Geometry.GeometryUtils.MmToMeters(t[1] * i),
+                                    Core.Geometry.GeometryUtils.MmToMeters(t[2] * i)));
+                                break;
+                            }
+                            case "rotate":
+                            {
+                                double[] ap = args.ContainsKey("axis_point_mm")
+                                    ? GetDoubleArray(args, "axis_point_mm", 3) : new double[] { 0, 0, 0 };
+                                double[] ad = args.ContainsKey("axis_dir")
+                                    ? GetDoubleArray(args, "axis_dir", 3) : new double[] { 0, 0, 1 };
+                                double ang = GetDouble(args, "angle_deg") * Math.PI / 180.0;
+                                var line = Line.Create(Point.Create(
+                                        Core.Geometry.GeometryUtils.MmToMeters(ap[0]),
+                                        Core.Geometry.GeometryUtils.MmToMeters(ap[1]),
+                                        Core.Geometry.GeometryUtils.MmToMeters(ap[2])),
+                                    Direction.Create(ad[0], ad[1], ad[2]));
+                                tbStep = i => Matrix.CreateRotation(line, ang * i);
+                                break;
+                            }
+                            case "scale":
+                            {
+                                double f = GetDouble(args, "factor");
+                                if (f <= 0) return Envelope(false, "factor must be > 0", null);
+                                if (tbCount != 1) return Envelope(false, "scale does not support count > 1", null);
+                                var bbT = tbTarget.Shape.GetBoundingBox(Matrix.Identity);
+                                var ctr = Point.Create(
+                                    (bbT.MinCorner.X + bbT.MaxCorner.X) / 2,
+                                    (bbT.MinCorner.Y + bbT.MaxCorner.Y) / 2,
+                                    (bbT.MinCorner.Z + bbT.MaxCorner.Z) / 2);
+                                tbStep = i => Matrix.CreateScale(f, ctr);
+                                break;
+                            }
+                            default:
+                                return Envelope(false, "op must be move|rotate|scale", null);
+                        }
+                        if (!tbCopy && tbCount == 1)
+                        {
+                            tbTarget.Shape.Transform(tbStep(1));
+                            tbNames.Add(tbTarget.Name ?? "(unnamed)");
+                        }
+                        else
+                        {
+                            for (int i = 1; i <= tbCount; i++)
+                            {
+                                Body cp = tbTarget.Shape.Copy();
+                                cp.Transform(tbStep(i));
+                                var db = Core.Geometry.BodyBuilder.CreateDesignBody(tbPart,
+                                    (tbTarget.Name ?? "Body") + "_" + i.ToString(Inv), cp);
+                                tbNames.Add(db.Name);
+                            }
+                        }
+                        return Envelope(true, null, "{\"transformed\": true, \"op\": \"" + EscapeStr(tbOp) +
+                            "\", \"bodies\": " + JsonStringArray(tbNames) + "}");
+                    }
+
                     // ---- CAE mutators on existing bodies ---------------------
                     case "laminate_body":
                     {
@@ -1510,6 +1740,34 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
         // ----------------------------------------------------------------
         // Argument extraction
         // ----------------------------------------------------------------
+        /// <summary>Array-of-arrays numeric parse: [[a,b(,c)], ...] with loud failures.</summary>
+        private static List<double[]> ParsePointList(Dictionary<string, object> args,
+            string key, int minCount, int dims)
+        {
+            if (!args.ContainsKey(key) || !(args[key] is List<object> outer))
+                throw new ArgumentException(key + " must be an array of " + dims + "-number arrays");
+            if (outer.Count < minCount)
+                throw new ArgumentException(key + " needs >= " + minCount + " points");
+            var result = new List<double[]>();
+            for (int i = 0; i < outer.Count; i++)
+            {
+                if (!(outer[i] is List<object> inner) || inner.Count < dims)
+                    throw new ArgumentException(key + "[" + i + "] must be a " + dims + "-number array");
+                var p = new double[dims];
+                for (int k = 0; k < dims; k++)
+                {
+                    if (inner[k] is double dv) p[k] = dv;
+                    else if (inner[k] is long lv) p[k] = lv;
+                    else if (inner[k] is int iv) p[k] = iv;
+                    else if (!(inner[k] is string sv) || !double.TryParse(
+                        sv, NumberStyles.Float, Inv, out p[k]))
+                        throw new ArgumentException(key + "[" + i + "][" + k + "] is not a number");
+                }
+                result.Add(p);
+            }
+            return result;
+        }
+
         private static Models.Fastener.HeadStyle? ParseHeadStyle(string s)
         {
             switch ((s ?? "").ToLowerInvariant())

@@ -179,6 +179,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Mcp
             "rebind_active_body", "import_step",
             "generate_tensile_specimen", "generate_laminate",
             "parse_package_file", "generate_package_from_file",
+            "revolve_profile", "sweep_profile", "loft_profiles",
         };
 
         /// <summary>Long-running CAE tools get a 10-minute marshaller budget: a licensed-seat

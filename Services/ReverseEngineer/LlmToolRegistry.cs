@@ -502,6 +502,99 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                       "\"layer_filter\": {\"type\": \"array\", \"items\": {\"type\": \"string\"}, \"description\": \"Only build these layer names (z stacking stays true); omit for all\"}" +
                     "}, \"required\": [\"path\"]}"),
 
+                // ---- general CAD primitives -----------------------------------
+                new ToolDef(
+                    "revolve_profile",
+                    "REVOLVE a closed (r, z) polyline profile about an arbitrary axis to create a " +
+                    "solid of revolution - shafts, pulleys, flanges, bottles, O-ring grooves. r = " +
+                    "radial distance from the axis (>= 0), z = position along the axis. angle_deg " +
+                    "in (0, 360] for partial revolves. The session binds to the created body.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"profile_rz_mm\": {\"type\": \"array\", \"items\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 2, \"maxItems\": 2}, \"minItems\": 3, \"description\": \"Closed profile as [r, z] pairs in mm (auto-closed)\"}, " +
+                      "\"axis_point_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"Point on the axis (default origin)\"}, " +
+                      "\"axis_dir\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"Axis direction (default +Z)\"}, " +
+                      "\"angle_deg\": {\"type\": \"number\", \"description\": \"Revolve angle (default 360)\"}, " +
+                      "\"name\": {\"type\": \"string\", \"description\": \"Body name (default 'Revolve')\"}" +
+                    "}, \"required\": [\"profile_rz_mm\"]}"),
+
+                new ToolDef(
+                    "sweep_profile",
+                    "SWEEP a circular section along a 3D polyline path with tangent arc-blended " +
+                    "corners - pipes, tubes, wires, frames, cooling channels. wall_mm > 0 makes a " +
+                    "hollow pipe (outer minus bore). corner_r_mm rounds every interior corner " +
+                    "(recommended: sharp corners are kernel-hostile). Session binds to the body.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"path_mm\": {\"type\": \"array\", \"items\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3}, \"minItems\": 2, \"description\": \"Polyline waypoints [x,y,z] in mm\"}, " +
+                      "\"dia_mm\": {\"type\": \"number\", \"description\": \"Section outer diameter\"}, " +
+                      "\"corner_r_mm\": {\"type\": \"number\", \"description\": \"Corner blend radius (default 0 = sharp)\"}, " +
+                      "\"wall_mm\": {\"type\": \"number\", \"description\": \"Pipe wall thickness (default 0 = solid)\"}, " +
+                      "\"name\": {\"type\": \"string\", \"description\": \"Body name (default 'Sweep')\"}" +
+                    "}, \"required\": [\"path_mm\", \"dia_mm\"]}"),
+
+                new ToolDef(
+                    "loft_profiles",
+                    "LOFT a solid through 2+ stacked sections (circle | rect | polygon), each with " +
+                    "its own size/center/rotation - transitions, funnels, ducts, tapered columns. " +
+                    "Section planes are perpendicular to axis_dir. ruled=true gives straight " +
+                    "(frustum-exact) transitions; false gives smooth. Session binds to the body.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"sections\": {\"type\": \"array\", \"minItems\": 2, \"items\": {\"type\": \"object\", \"properties\": {" +
+                        "\"shape\": {\"type\": \"string\", \"enum\": [\"circle\", \"rect\", \"polygon\"]}, " +
+                        "\"dia_mm\": {\"type\": \"number\", \"description\": \"circle dia / polygon circumscribed dia\"}, " +
+                        "\"w_mm\": {\"type\": \"number\"}, \"h_mm\": {\"type\": \"number\"}, " +
+                        "\"sides\": {\"type\": \"integer\", \"description\": \"polygon sides (default 6)\"}, " +
+                        "\"center_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3}, " +
+                        "\"rot_deg\": {\"type\": \"number\", \"description\": \"in-plane rotation\"}" +
+                      "}, \"required\": [\"shape\", \"center_mm\"]}}, " +
+                      "\"axis_dir\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"Section-plane normal (default +Z)\"}, " +
+                      "\"ruled\": {\"type\": \"boolean\", \"description\": \"Straight transitions (default true)\"}, " +
+                      "\"name\": {\"type\": \"string\", \"description\": \"Body name (default 'Loft')\"}" +
+                    "}, \"required\": [\"sections\"]}"),
+
+                new ToolDef(
+                    "split_body",
+                    "SPLIT an existing body by a plane into below/above pieces (named separately, " +
+                    "along the plane normal). Reports the piece volumes plus the original so " +
+                    "conservation is checkable. DESTRUCTIVE when delete_original=true (default).",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"body_name\": {\"type\": \"string\", \"description\": \"Target body (default: session body)\"}, " +
+                      "\"plane_point_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3}, " +
+                      "\"plane_normal\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3}, " +
+                      "\"delete_original\": {\"type\": \"boolean\", \"description\": \"Default true\"}, " +
+                      "\"name_below\": {\"type\": \"string\"}, \"name_above\": {\"type\": \"string\"}" +
+                    "}, \"required\": [\"plane_point_mm\", \"plane_normal\"]}"),
+
+                new ToolDef(
+                    "draft_body",
+                    "Apply a molding DRAFT: taper every planar SIDE face (normal perpendicular to " +
+                    "pull_dir) by angle_deg about the neutral plane through neutral_point_mm. " +
+                    "Positive/negative angle flips the taper sense. Reports faces tapered and the " +
+                    "volume before/after (in-place mutation).",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"body_name\": {\"type\": \"string\", \"description\": \"Target body (default: session body)\"}, " +
+                      "\"neutral_point_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"Point on the neutral (parting) plane\"}, " +
+                      "\"pull_dir\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"Mold pull direction (default +Z)\"}, " +
+                      "\"angle_deg\": {\"type\": \"number\", \"description\": \"Draft angle, |a| in (0, 30]\"}" +
+                    "}, \"required\": [\"neutral_point_mm\", \"angle_deg\"]}"),
+
+                new ToolDef(
+                    "transform_body",
+                    "MOVE / ROTATE / SCALE a whole named body, optionally as COPIES and PATTERNS: " +
+                    "op move + count N = linear array (step translation_mm); op rotate + count N = " +
+                    "circular array (step angle_deg about the axis); copy=true keeps the original. " +
+                    "op scale resizes about the body center (count 1 only).",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"body_name\": {\"type\": \"string\", \"description\": \"Target body (default: session body)\"}, " +
+                      "\"op\": {\"type\": \"string\", \"enum\": [\"move\", \"rotate\", \"scale\"]}, " +
+                      "\"translation_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"move: step vector\"}, " +
+                      "\"axis_point_mm\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"rotate: axis point (default origin)\"}, " +
+                      "\"axis_dir\": {\"type\": \"array\", \"items\": {\"type\": \"number\"}, \"minItems\": 3, \"maxItems\": 3, \"description\": \"rotate: axis dir (default +Z)\"}, " +
+                      "\"angle_deg\": {\"type\": \"number\", \"description\": \"rotate: step angle\"}, " +
+                      "\"factor\": {\"type\": \"number\", \"description\": \"scale: factor > 0\"}, " +
+                      "\"copy\": {\"type\": \"boolean\", \"description\": \"Keep the original (default false)\"}, " +
+                      "\"count\": {\"type\": \"integer\", \"description\": \"Pattern instances 1-200 (default 1)\"}" +
+                    "}, \"required\": [\"op\"]}"),
+
                 // ---- fastening design (concentric hole pairs) ----------------
                 new ToolDef(
                     "suggest_fastener",
