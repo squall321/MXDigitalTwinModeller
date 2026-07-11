@@ -181,6 +181,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Mcp
             "parse_package_file", "generate_package_from_file",
             "revolve_profile", "sweep_profile", "loft_profiles",
             "create_pouch_battery", "create_pcb_assembly",
+            "parse_odbpp", "import_odbpp",
         };
 
         /// <summary>Long-running CAE tools get a 10-minute marshaller budget: a licensed-seat
@@ -192,6 +193,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer.Mcp
         {
             "mesh_with_gmsh", "conformal_mesh",
             "generate_package_from_file",   // thousands of ball instances + chunked Booleans
+            "import_odbpp",                 // up to 500 components + 5000 pad instances
         };
 
         private string ExecuteTool(string toolName, string argsJson)

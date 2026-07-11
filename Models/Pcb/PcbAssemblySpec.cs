@@ -177,8 +177,20 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Models.Pcb
                 (q[0] - p[0]) * (r[1] - p[1]) - (q[1] - p[1]) * (r[0] - p[0]);
             double d1 = cross(c, d, a), d2 = cross(c, d, b);
             double d3 = cross(a, b, c), d4 = cross(a, b, d);
-            return ((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0))
-                && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0));
+            if (((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0))
+                && ((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0)))
+                return true;
+            // degenerate contact: a vertex ON a non-adjacent edge or collinear overlap
+            // (zero-width slits from rounding). The caller already skips adjacent
+            // edges, so any touch flagged here is a genuine pinch.
+            return (d1 == 0 && OnSegment(c, d, a)) || (d2 == 0 && OnSegment(c, d, b))
+                || (d3 == 0 && OnSegment(a, b, c)) || (d4 == 0 && OnSegment(a, b, d));
+        }
+
+        private static bool OnSegment(double[] p, double[] q, double[] r)
+        {
+            return Math.Min(p[0], q[0]) - 1e-12 <= r[0] && r[0] <= Math.Max(p[0], q[0]) + 1e-12
+                && Math.Min(p[1], q[1]) - 1e-12 <= r[1] && r[1] <= Math.Max(p[1], q[1]) + 1e-12;
         }
     }
 

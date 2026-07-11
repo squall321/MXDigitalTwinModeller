@@ -4,7 +4,7 @@ $sc   = "D:\Program Files\ANSYS Inc\ANSYS Student\v252\scdm\SpaceClaim.exe"
 $gate = "D:\MXDigitalTwinModeller\Test\RE_SelfTest\g20_package.py"
 $dir  = "D:\MXDigitalTwinModeller\Test\RE_SelfTest"
 $done = Join-Path $dir "g20_done.txt"
-
+. (Join-Path $dir "_lic_watchdog.ps1")
 Get-Process SpaceClaim, ansyscl -ErrorAction SilentlyContinue |
     Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 1
@@ -14,6 +14,7 @@ $start = Get-Date
 $p = Start-Process -FilePath $sc -ArgumentList @("/RunScript=$gate") -PassThru -NoNewWindow
 $deadline = $start.AddSeconds(300)
 while ((Get-Date) -lt $deadline) {
+    if ([LicDlg]::Dismiss()) { Write-Host "license dialog dismissed" }
     if (Test-Path $done) { break }
     if ($p.HasExited) { break }
     Start-Sleep -Seconds 2

@@ -47,6 +47,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
             "parse_package_file", "generate_package_from_file",        // package-stack generators
             "revolve_profile", "sweep_profile", "loft_profiles",       // CAD primitive creators
             "create_pouch_battery", "create_pcb_assembly",              // structure generators
+            "parse_odbpp", "import_odbpp",                              // ODB++ import
         };
 
         /// <summary>
@@ -721,6 +722,101 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                         gpSb.Append("], \"log\": ").Append(JsonStringArray(gpRes.Log))
                             .Append(", \"warnings\": ").Append(JsonStringArray(gpf.Warnings)).Append("}");
                         return Envelope(true, null, gpSb.ToString());
+                    }
+
+                    // ---- ODB++ import ------------------------------------------
+                    case "parse_odbpp":
+                    {
+                        string poPath = GetString(args, "path");
+                        string poStep = args.ContainsKey("step") ? GetString(args, "step") : null;
+                        Models.Odb.OdbDesign poDesign;
+                        try { poDesign = Odb.OdbPlusPlusParser.Parse(poPath, poStep); }
+                        catch (Exception ex)
+                        { return Envelope(false, "odb++ parse failed: " + ex.Message, null); }
+                        var poS = poDesign.Step;
+                        double poArea = Math.Abs(Models.Pcb.PcbAssemblySpec.ShoelaceArea(
+                            poS.OutlineMm.ToArray()));
+                        int poPins = 0, poBottom = 0;
+                        foreach (var c in poS.Components)
+                        {
+                            poPins += poS.Packages[c.PkgIndex].Pins.Count;
+                            if (c.Mirrored) poBottom++;
+                        }
+                        var poSb = new System.Text.StringBuilder();
+                        poSb.Append("{\"steps\": ").Append(JsonStringArray(poDesign.StepNames))
+                            .Append(", \"step\": \"").Append(EscapeStr(poS.Name))
+                            .Append("\", \"outline_points\": ").Append(poS.OutlineMm.Count.ToString(Inv))
+                            .Append(", \"outline_area_mm2\": ").Append(poArea.ToString("0.###", Inv))
+                            .Append(", \"cutouts\": ").Append(poS.CutoutsMm.Count.ToString(Inv))
+                            .Append(", \"packages\": ").Append(poS.Packages.Count.ToString(Inv))
+                            .Append(", \"components\": ").Append(poS.Components.Count.ToString(Inv))
+                            .Append(", \"components_bottom\": ").Append(poBottom.ToString(Inv))
+                            .Append(", \"total_pins\": ").Append(poPins.ToString(Inv))
+                            .Append(", \"component_layers\": ").Append(JsonStringArray(poS.ComponentLayers))
+                            .Append(", \"warnings\": ").Append(JsonStringArray(poDesign.Warnings))
+                            .Append("}");
+                        return Envelope(true, null, poSb.ToString());
+                    }
+                    case "import_odbpp":
+                    {
+                        string ioPath = GetString(args, "path");
+                        string ioStep = args.ContainsKey("step") ? GetString(args, "step") : null;
+                        Models.Odb.OdbDesign ioDesign;
+                        try { ioDesign = Odb.OdbPlusPlusParser.Parse(ioPath, ioStep); }
+                        catch (Exception ex)
+                        { return Envelope(false, "odb++ parse failed: " + ex.Message, null); }
+                        var ioOpt = new Odb.OdbImportOptions
+                        {
+                            BoardThicknessMm = GetDoubleOrDefault(args, "board_thickness_mm", 1.0),
+                            PadThicknessMm = GetDoubleOrDefault(args, "pad_thickness_mm", 0.05),
+                            PadDiaMm = GetDoubleOrDefault(args, "pad_dia_mm", 0),
+                            DefaultCompHeightMm = GetDoubleOrDefault(args, "default_comp_height_mm", 1.0),
+                            MinFootprintMm = GetDoubleOrDefault(args, "min_footprint_mm", 0),
+                            // clamp before the int cast: 1e10 would overflow to int.MinValue
+                            MaxComponents = (int)Math.Max(1.0, Math.Min(2147483647.0,
+                                GetDoubleOrDefault(args, "max_components", 500))),
+                            MaxTotalPads = (int)Math.Max(1.0, Math.Min(2147483647.0,
+                                GetDoubleOrDefault(args, "max_total_pads", 5000))),
+                        };
+                        if (args.ContainsKey("include_pads"))
+                            ioOpt.IncludePads = GetBool(args, "include_pads");
+                        if (args.ContainsKey("name_prefix"))
+                            ioOpt.NamePrefix = GetString(args, "name_prefix");
+
+                        Part ioPart = ResolveActivePart(true);
+                        if (ioPart == null) return Envelope(false, "no active part", null);
+                        var ioRes = new Odb.OdbImportService().Build(ioPart, ioDesign, ioOpt);
+                        if (!ioRes.Success)
+                            return Envelope(false, ioRes.Error ?? "odb++ import failed", null);
+                        // the board created by THIS call - a name lookup could hit a stale
+                        // duplicate from an earlier import
+                        var ioBoard = ioRes.BoardBody;
+                        if (ioBoard != null)
+                        {
+                            string ioBindErr = Mcp.SessionContext.Instance.BindBody(ioBoard, null, null);
+                            if (ioBindErr != null) return Envelope(false, ioBindErr, null);
+                        }
+                        var ioSb = new System.Text.StringBuilder();
+                        ioSb.Append("{\"generated\": true, \"total_bodies\": ")
+                            .Append(ioRes.BodiesCreated.Count.ToString(Inv))
+                            .Append(", \"components_built\": ").Append(ioRes.ComponentsBuilt.ToString(Inv))
+                            .Append(", \"components_skipped\": ").Append(ioRes.ComponentsSkipped.ToString(Inv))
+                            .Append(", \"pads_built\": ").Append(ioRes.PadsBuilt.ToString(Inv))
+                            .Append(", \"board_volume_mm3\": ").Append(ioBoard != null
+                                ? (ioBoard.Shape.Volume * 1e9).ToString("0.###", Inv) : "0")
+                            .Append(", \"dims_mm\": {");
+                        bool ioFirst = true;
+                        foreach (var kv in ioRes.DimsMm)
+                        {
+                            if (!ioFirst) ioSb.Append(", ");
+                            ioFirst = false;
+                            ioSb.Append("\"").Append(EscapeStr(kv.Key)).Append("\": ")
+                                .Append(kv.Value.ToString("0.####", Inv));
+                        }
+                        ioSb.Append("}, \"log\": ").Append(JsonStringArray(ioRes.Log))
+                            .Append(", \"warnings\": ").Append(JsonStringArray(ioDesign.Warnings))
+                            .Append("}");
+                        return Envelope(true, null, ioSb.ToString());
                     }
 
                     // ---- PCB assembly ------------------------------------------

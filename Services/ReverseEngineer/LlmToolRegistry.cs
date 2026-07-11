@@ -607,6 +607,43 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                       "\"count\": {\"type\": \"integer\", \"description\": \"Pattern instances 1-200 (default 1)\"}" +
                     "}, \"required\": [\"op\"]}"),
 
+                // ---- ODB++ import -------------------------------------------------
+                new ToolDef(
+                    "parse_odbpp",
+                    "Parse an UNPACKED ODB++ directory (extract the .tgz first) WITHOUT building " +
+                    "geometry - the dry-run lint for import_odbpp. Reads the board outline from " +
+                    "steps/<step>/profile (holes become cutouts), package outlines + PIN sites " +
+                    "from eda/data, and CMP placements (+ COMP_HEIGHT) from the COMPONENT layers. " +
+                    "Units follow each file's UNITS directive (ODB++ default INCH).",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"path\": {\"type\": \"string\", \"description\": \"Unpacked ODB++ root (contains steps/ and matrix/)\"}, " +
+                      "\"step\": {\"type\": \"string\", \"description\": \"Step name (default: first step)\"}" +
+                    "}, \"required\": [\"path\"]}"),
+
+                new ToolDef(
+                    "import_odbpp",
+                    "IMPORT an unpacked ODB++ design as CAE geometry: BOARD = profile island minus " +
+                    "profile holes (arcs tessellated); each component = its PACKAGE OUTLINE polygon " +
+                    "extruded at COMP_HEIGHT (or default_comp_height_mm), seated on thin PADS at the " +
+                    "PIN sites (separate bodies for solder material); ODB++ clockwise rotation and " +
+                    "bottom-side mirroring honored. Loud guards: max_components / max_total_pads; " +
+                    "min_footprint_mm filters small passives (skips are counted, never silent). " +
+                    "NOTE: board thickness is NOT in ODB++ - set board_thickness_mm. Session binds " +
+                    "to the board.",
+                    "{\"type\": \"object\", \"properties\": {" +
+                      "\"path\": {\"type\": \"string\", \"description\": \"Unpacked ODB++ root directory\"}, " +
+                      "\"step\": {\"type\": \"string\", \"description\": \"Step name (default: first)\"}, " +
+                      "\"board_thickness_mm\": {\"type\": \"number\", \"description\": \"Default 1.0\"}, " +
+                      "\"include_pads\": {\"type\": \"boolean\", \"description\": \"Build PIN-site pads (default true)\"}, " +
+                      "\"pad_thickness_mm\": {\"type\": \"number\", \"description\": \"Default 0.05\"}, " +
+                      "\"pad_dia_mm\": {\"type\": \"number\", \"description\": \"Default 55% of package pitch\"}, " +
+                      "\"default_comp_height_mm\": {\"type\": \"number\", \"description\": \"When COMP_HEIGHT is absent (default 1.0)\"}, " +
+                      "\"min_footprint_mm\": {\"type\": \"number\", \"description\": \"Skip components smaller than this (default 0 = all)\"}, " +
+                      "\"max_components\": {\"type\": \"integer\", \"description\": \"Loud limit (default 500)\"}, " +
+                      "\"max_total_pads\": {\"type\": \"integer\", \"description\": \"Loud limit (default 5000)\"}, " +
+                      "\"name_prefix\": {\"type\": \"string\", \"description\": \"Default 'Pcb'\"}" +
+                    "}, \"required\": [\"path\"]}"),
+
                 // ---- PCB assembly -------------------------------------------------
                 new ToolDef(
                     "create_pcb_assembly",
