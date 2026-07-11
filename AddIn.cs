@@ -80,6 +80,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller
             // 패키지 임포트 (볼맵 → 솔더볼/수지/레이어 스택)
             new ImportPackageCommand(),
 
+            // ODB++ 임포트 (ECAD → 보드/부품/패드 MCAD 솔리드)
+            new Commands.Odb.ImportOdbCommand(),
+
             // 메쉬 설정 그룹
             new CommandCapsule("MXDigitalTwinModeller.MeshGroup", "Mesh"),
 
@@ -280,6 +283,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller
                     <button id=""MXDigitalTwinModeller.ImportPackage""
                             size=""large""
                             command=""MXDigitalTwinModeller.ImportPackage""/>
+                    <button id=""MXDigitalTwinModeller.ImportOdb""
+                            size=""large""
+                            command=""MXDigitalTwinModeller.ImportOdb""/>
                 </group>
                 <group id=""MXDigitalTwinModeller.MeshGroup"" command=""MXDigitalTwinModeller.MeshGroup"">
                     <button id=""MXDigitalTwinModeller.Material""
