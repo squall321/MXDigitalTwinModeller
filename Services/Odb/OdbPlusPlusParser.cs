@@ -95,8 +95,11 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Odb
             ParseProfile(Path.Combine(stepDir, "profile"), s, design.Warnings);
             ParseEdaData(Path.Combine(stepDir, "eda", "data"), s, design.Warnings);
             foreach (var lay in s.ComponentLayers)
+                // the LAYER decides the side: real Mentor exports write mirror='N'
+                // even in comp_+_bot (verified against TOP toeprint coordinates)
                 ParseComponents(Path.Combine(stepDir, "layers", lay, "components"),
-                    s, design.Warnings);
+                    s, design.Warnings,
+                    lay.IndexOf("bot", StringComparison.OrdinalIgnoreCase) >= 0);
             return design;
         }
 
@@ -233,6 +236,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Odb
                     case "S":
                     case "SE":
                         break; // surface record markers - structural, no geometry of their own
+                    case "U":  // Board Station units record ('U MM')
+                        scale = UnitsRecord(t, scale);
+                        break;
                     default:
                         if (unknown.Add(t[0].ToUpperInvariant()))
                             warnings.Add("profile: unknown record '" + t[0] + "' skipped");
@@ -303,8 +309,12 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Odb
                 line = StripAttrSuffix(line);
                 if (line.Length == 0) continue;
                 var t = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                if (t[0][0] == '&') continue; // '&<id> <text>' attribute string table
                 switch (t[0].ToUpperInvariant())
                 {
+                    case "U":  // Board Station units record ('U MM')
+                        scale = UnitsRecord(t, scale);
+                        break;
                     case "PKG":
                         FinishPackage(s, pkg, warnings);
                         pkg = new OdbPackage
@@ -423,7 +433,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Odb
         //             CMP <pkg_ref> <x> <y> <rot> <mirror N|M> <name> <part> ;n=v,...
         //             PRP COMP_HEIGHT '<v>'   (v follows the file's UNITS)
         // ------------------------------------------------------------------
-        private static void ParseComponents(string path, OdbStep s, List<string> warnings)
+        private static void ParseComponents(string path, OdbStep s, List<string> warnings,
+            bool bottomLayer)
         {
             if (!File.Exists(path))
             {
@@ -459,8 +470,12 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Odb
                         attrNames[ai] = t[1].ToLowerInvariant();
                     continue;
                 }
+                if (t[0][0] == '&') continue; // '&<id> <text>' attribute string table
                 switch (t[0].ToUpperInvariant())
                 {
+                    case "U":  // Board Station units record ('U MM')
+                        scale = UnitsRecord(t, scale);
+                        break;
                     case "CMP":
                         cur = new OdbComponent
                         {
@@ -468,7 +483,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Odb
                             XMm = Num(t[2]) * scale,
                             YMm = Num(t[3]) * scale,
                             RotDeg = t.Length > 4 ? Num(t[4]) : 0,
-                            Mirrored = t.Length > 5 && t[5].ToUpperInvariant() == "M",
+                            Mirrored = bottomLayer
+                                || (t.Length > 5 && t[5].ToUpperInvariant() == "M"),
                             RefDes = t.Length > 6 ? t[6] : ("C" + s.Components.Count.ToString(Inv)),
                             PartName = t.Length > 7 ? t[7] : "",
                         };
@@ -533,12 +549,16 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Odb
 
         private static IEnumerable<string> JoinContinuations(string[] lines)
         {
+            // '&' + whitespace = record continuation; '&<id> <text>' is an attribute
+            // STRING TABLE entry (real Mentor/Expedition exports) and must stay a
+            // standalone line - gluing it would corrupt the preceding record
             string pending = null;
             foreach (var l in lines)
             {
-                if (l.TrimStart().StartsWith("&"))
+                string ts = l.TrimStart();
+                if (ts.StartsWith("&") && (ts.Length == 1 || char.IsWhiteSpace(ts[1])))
                 {
-                    pending = (pending ?? "") + " " + l.TrimStart().Substring(1);
+                    pending = (pending ?? "") + " " + ts.Substring(1);
                     continue;
                 }
                 if (pending != null) yield return pending;
@@ -553,6 +573,19 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Odb
             if (v.StartsWith("MM")) return 1.0;
             if (v.StartsWith("INCH") || v.StartsWith("IN")) return InchToMm;
             throw new ArgumentException("unknown UNITS directive: " + unitsLine);
+        }
+
+        /// <summary>'U MM' / 'U INCH' / 'U MIL' units record (Mentor Board Station
+        /// exports use this instead of a UNITS= directive). Returns the current
+        /// scale unchanged when the token is unknown.</summary>
+        private static double UnitsRecord(string[] t, double current)
+        {
+            if (t.Length < 2) return current;
+            string v = t[1].ToUpperInvariant();
+            if (v.StartsWith("MM")) return 1.0;
+            if (v.StartsWith("MIL")) return 0.0254;
+            if (v.StartsWith("INCH") || v.StartsWith("IN")) return InchToMm;
+            return current;
         }
 
         private static void TrimClosingPoint(List<double[]> poly)

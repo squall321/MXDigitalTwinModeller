@@ -94,15 +94,17 @@ def build_fixture_hard():
     wf(FIX3 + r"\matrix\matrix",
        "STEP {\n   COL=1\n   NAME=array\n}\n"
        "STEP {\n   COL=2\n   NAME=pcb\n}\n"
-       "LAYER {\n   NAME=comp_+_top\n   TYPE=COMPONENT\n}\n")
+       "LAYER {\n   NAME=comp_+_top\n   TYPE=COMPONENT\n}\n"
+       "LAYER {\n   NAME=comp_+_bot\n   TYPE=COMPONENT\n}\n")
     wf(FIX3 + r"\steps\array\profile",
        "UNITS=MM\nOB 0 0 I\nOS 10 0\nOS 10 10\nOS 0 10\nOE\n")
     wf(FIX3 + r"\steps\array\stephdr",
        "SR {\n   NAME=pcb\n   X=5 Y=5 NX=2 NY=3 DX=63.5 DY=25.4\n}\n")
     # profile: 100x50 island + interior 8x6 hole + FULL-CIRCLE OC hole (rounded
-    # endpoint 1e-5 off) + second island (warned) + its hole (foreign -> skipped)
+    # endpoint 1e-5 off) + second island (warned) + its hole (foreign -> skipped);
+    # units via Board Station 'U MM' record (real Mentor exports use this, not UNITS=)
     wf(FIX3 + r"\steps\pcb\profile",
-       "UNITS=MM\nS P 0\n"
+       "U MM\nS P 0\n"
        "OB 0 0 I\nOS 100 0\nOS 100 50\nOS 0 50\nOE\n"
        "OB 20 20 H\nOS 28 20\nOS 28 26\nOS 20 26\nOE\n"
        "OB 65 25 H\nOC 65.00001 25 60 25 Y\nOE\n"
@@ -134,6 +136,8 @@ def build_fixture_hard():
        "UNITS=MM\n"
        "@0 .comp_mount_type\n"
        "@1 .comp_height\n"
+       "&0 chip\n"   # attribute STRING TABLE - must stay standalone, not a continuation
+       "&1 smd\n"
        "CMP 0 30 25 90 M U3 CHIP ;0=1,1=2.5\n"
        "CMP 1 70 25 0 N U4 SO8\n"
        "CMP 1 15 10 180 N U6 SO8\n"
@@ -145,6 +149,10 @@ def build_fixture_hard():
        "CMP 5 50 40 0 N SH1 SHIELD\n"
        "CMP 6 50 10 0 N BAD1 X\n"
        "TOP 0 26.67 41.91 270 N 1 0 r170_50\n")
+    # bottom layer: mirror field says 'N' but the LAYER decides (real Mentor exports)
+    wf(FIX3 + r"\steps\pcb\layers\comp_+_bot\components",
+       "UNITS=MM\n"
+       "CMP 1 60 10 0 N B1 SO8BOT\n")
 
 def env_num(env, key):
     import re
@@ -265,8 +273,9 @@ def _do():
     env = LlmToolDispatcher.Dispatch(None, None, "parse_odbpp", '{"path": "%s"}' % fix3j)
     okP5 = ('"success": true' in env
             and '"step": "pcb"' in env                      # auto-select skipped 'array'
-            and '"packages": 7' in env and '"components": 10' in env
-            and '"cutouts": 3' in env and '"total_pins": 6' in env
+            and '"packages": 7' in env and '"components": 11' in env
+            and '"components_bottom": 2' in env             # U3 (M flag) + B1 (bot LAYER)
+            and '"cutouts": 3' in env and '"total_pins": 7' in env
             and abs(env_num(env, "outline_area_mm2") - 5000) < 0.01
             and 'multiple islands' in env                   # second profile island
             and 'auto-selected' in env
@@ -293,10 +302,14 @@ def _do():
         okP6 = abs(vb - exp) < exp * 1e-6 and board.Shape.PieceCount == 1
         okP6 = okP6 and abs(env_num(env, "board_v_mm3") - exp) < exp * 1e-6
         okP6 = okP6 and 'outside the board island' in env   # foreign cutout, loud
-        # 1 board + 9 comps + 6 pads
-        okP6 = okP6 and len(list(part.Bodies)) == 16
-        okP6 = okP6 and '"components_built": 9' in env and '"components_skipped": 1' in env
-        okP6 = okP6 and '"pads_built": 6' in env and 'BAD1 SKIPPED' in env
+        # 1 board + 10 comps + 7 pads
+        okP6 = okP6 and len(list(part.Bodies)) == 18
+        okP6 = okP6 and '"components_built": 10' in env and '"components_skipped": 1' in env
+        okP6 = okP6 and '"pads_built": 7' in env and 'BAD1 SKIPPED' in env
+        # B1: bottom LAYER (mirror field 'N') -> under the board, X-mirrored pad
+        b1 = bb_mm(body_by_name(part, "Comp_B1"))
+        okP6 = okP6 and abs(b1[5] + 0.05) < 1e-6 and abs(b1[2] + 1.05) < 1e-6
+        okP6 = okP6 and pad_center_ok(part, "Comp_B1_Pad_001", 61.5, 8.0)
         # U3 mirrored+rot90: rotate CW FIRST then mirror (spec order):
         # pin1(-4.5,-4.5) -> (-4.5,4.5) -> (4.5,4.5) -> (34.5,29.5)
         # pin2(4.5,4.5)   -> (4.5,-4.5) -> (-4.5,-4.5) -> (25.5,20.5)
