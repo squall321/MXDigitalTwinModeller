@@ -628,6 +628,10 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                     "PIN sites (separate bodies for solder material); ODB++ clockwise rotation and " +
                     "bottom-side mirroring honored. Loud guards: max_components / max_total_pads; " +
                     "min_footprint_mm filters small passives (skips are counted, never silent). " +
+                    "Optional subdivide_layers splits each big component (footprint >= " +
+                    "min_layer_footprint_mm) into its ASSUMED internal stack (substrate/die/mold, " +
+                    "by package family) via the laminate splitter, with bonded interface named " +
+                    "selections - the layer breakdown is a model assumption (ODB++ has no stack). " +
                     "NOTE: board thickness is NOT in ODB++ - set board_thickness_mm. Session binds " +
                     "to the board.",
                     "{\"type\": \"object\", \"properties\": {" +
@@ -641,6 +645,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                       "\"min_footprint_mm\": {\"type\": \"number\", \"description\": \"Skip components smaller than this (default 0 = all)\"}, " +
                       "\"max_components\": {\"type\": \"integer\", \"description\": \"Loud limit (default 500)\"}, " +
                       "\"max_total_pads\": {\"type\": \"integer\", \"description\": \"Loud limit (default 5000)\"}, " +
+                      "\"subdivide_layers\": {\"type\": \"boolean\", \"description\": \"Split big components into an assumed layer stack (default false)\"}, " +
+                      "\"min_layer_footprint_mm\": {\"type\": \"number\", \"description\": \"Only subdivide components at least this big (default 3.0)\"}, " +
+                      "\"max_total_layers\": {\"type\": \"integer\", \"description\": \"Loud cap on layer bodies (default 4000); rest stay single blocks\"}, " +
                       "\"name_prefix\": {\"type\": \"string\", \"description\": \"Default 'Pcb'\"}" +
                     "}, \"required\": [\"path\"]}"),
 

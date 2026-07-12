@@ -30,6 +30,19 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Odb
         public int MaxComponents = 500;
         public int MaxTotalPads = 5000;
         public string NamePrefix = "Pcb";
+
+        /// <summary>Subdivide each eligible component block into its assumed internal layer
+        /// stack (substrate/die/mold ...) via the laminate splitter. Off = single block.</summary>
+        public bool SubdivideLayers = false;
+        /// <summary>Only components whose footprint (max of width/length) reaches this get
+        /// layer-subdivided — keeps the body count (and memory) bounded on a full board.</summary>
+        public double MinLayerFootprintMm = 3.0;
+        /// <summary>Loud cap on the layer-body multiplier: subdivision stops once this many
+        /// layer bodies exist (remaining components stay single blocks). Guards the
+        /// Copy+Intersect explosion the way MaxTotalPads guards pad instancing.</summary>
+        public int MaxTotalLayers = 4000;
+        /// <summary>Family -> fractional stack. Null uses OdbLayerPresets.Defaults().</summary>
+        public Dictionary<OdbPackageFamily, List<OdbLayerFraction>> LayerPresets;
     }
 
     public class OdbImportResult
@@ -40,9 +53,20 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Odb
         public Dictionary<string, double> DimsMm = new Dictionary<string, double>();
         public List<string> Log = new List<string>();
         public int ComponentsBuilt, ComponentsSkipped, PadsBuilt;
+        public int ComponentsLayered, LayersCreated;
         /// <summary>The board DesignBody created by THIS call (never re-resolved by
         /// name — duplicate names in the document must not hijack the binding).</summary>
         public DesignBody BoardBody;
+    }
+
+    /// <summary>Bookkeeping to layer-subdivide a component after its DesignBody exists:
+    /// the family/height decide the stack, the name keys the created body back.</summary>
+    internal class OdbLayerCandidate
+    {
+        public string Name;
+        public OdbPackageFamily Family;
+        public double FootprintMm;
+        public bool Mirrored;   // bottom-side: the board-facing cap is the +Z (top) one
     }
 
     /// <summary>
@@ -80,6 +104,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Odb
             double t = opt.BoardThicknessMm;
 
             var pending = new List<KeyValuePair<string, Body>>();
+            var layerCandidates = new List<OdbLayerCandidate>();
             try
             {
                 // ---- board ------------------------------------------------------
@@ -205,6 +230,14 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Odb
                         res.Log.Add("duplicate RefDes '" + comp.RefDes + "' - body named " + cname);
                     pending.Add(new KeyValuePair<string, Body>(cname, body));
                     res.ComponentsBuilt++;
+                    if (opt.SubdivideLayers && Math.Max(fw, fl) >= opt.MinLayerFootprintMm)
+                        layerCandidates.Add(new OdbLayerCandidate
+                        {
+                            Name = cname,
+                            Family = OdbLayerPresets.Classify(pkg, comp),
+                            FootprintMm = Math.Max(fw, fl),
+                            Mirrored = comp.Mirrored,
+                        });
 
                     if (seatOnPads)
                     {
@@ -261,11 +294,101 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.Odb
             }
             foreach (var db in created) res.BodiesCreated.Add(db.Name);
             res.BoardBody = created.Count > 0 ? created[0] : null;   // pending[0] is the board
+
+            // ---- optional layer subdivision (reuses the verified laminate splitter) ----
+            if (opt.SubdivideLayers && layerCandidates.Count > 0)
+                SubdivideComponentLayers(part, created, layerCandidates, opt, res);
+
             res.DimsMm["components"] = res.ComponentsBuilt;
             res.DimsMm["components_skipped"] = res.ComponentsSkipped;
             res.DimsMm["pads"] = res.PadsBuilt;
+            res.DimsMm["components_layered"] = res.ComponentsLayered;
+            res.DimsMm["layers_created"] = res.LayersCreated;
             res.Success = true;
             return res;
+        }
+
+        /// <summary>Post-pass: replace each eligible component block with its assumed
+        /// internal layer stack (family preset x component height) using the laminate
+        /// splitter — which preserves the footprint (Copy+Intersect) and adds bonded
+        /// interface Named Selections. A per-component failure is logged, not fatal:
+        /// that component stays a single block and the rest of the import is untouched.</summary>
+        private void SubdivideComponentLayers(Part part, List<DesignBody> created,
+            List<OdbLayerCandidate> candidates, OdbImportOptions opt, OdbImportResult res)
+        {
+            var presets = opt.LayerPresets ?? OdbLayerPresets.Defaults();
+            var byName = new Dictionary<string, DesignBody>(StringComparer.Ordinal);
+            foreach (var db in created)
+                if (db != null && !db.IsDeleted && db.Name != null) byName[db.Name] = db;
+
+            var lam = new Laminate.SolidLaminateService();
+            foreach (var cand in candidates)
+            {
+                DesignBody db;
+                if (!byName.TryGetValue(cand.Name, out db) || db.IsDeleted) continue;
+                List<OdbLayerFraction> stack;
+                if (!presets.TryGetValue(cand.Family, out stack) || stack == null || stack.Count == 0)
+                    continue;
+
+                // loud limit like the pad path: stop before a runaway Copy+Intersect
+                // explosion; remaining components stay single blocks (not an error)
+                if (res.LayersCreated + stack.Count > opt.MaxTotalLayers)
+                {
+                    res.Log.Add(string.Format(Inv,
+                        "layer subdivision stopped at max_total_layers={0} - raise the limit " +
+                        "or min_layer_footprint_mm (remaining components stay single blocks)",
+                        opt.MaxTotalLayers));
+                    break;
+                }
+
+                var analysis = lam.AnalyzeSolid(db);
+                if (analysis == null || !analysis.IsValid)
+                {
+                    res.Log.Add(cand.Name + ": layer split skipped - "
+                        + (analysis != null ? analysis.ErrorMessage : "analysis null"));
+                    continue;
+                }
+                // substrate (stack[0]) must seat on the BOARD-FACING cap. The board is
+                // toward -Z for a top-side part, +Z for a mirrored (bottom-side) one.
+                // The laminate service lays stack[0] at its 'base' cap and stacks along
+                // StackingNormal, but which cap is base is undefined for a straight prism
+                // (equal-area caps, unstable sort). So decide the fed ORDER here from the
+                // resolved StackingNormal vs the board direction - robust either way.
+                double boardDirZ = cand.Mirrored ? 1.0 : -1.0;
+                bool substrateAtBase = analysis.StackingNormal.Z * boardDirZ < 0;
+                var ordered = new List<OdbLayerFraction>(stack);
+                if (!substrateAtBase) ordered.Reverse();
+
+                var slP = new Models.Laminate.SolidLaminateParameters
+                {
+                    DeleteOriginalBody = true,
+                    CreateInterfaceNamedSelections = true,
+                    Layers = new List<Models.Laminate.LaminateLayerDefinition>(),
+                };
+                foreach (var f in ordered)
+                    slP.Layers.Add(new Models.Laminate.LaminateLayerDefinition(
+                        cand.Name + "_" + f.Name, f.Fraction * analysis.ThicknessMm));
+                try
+                {
+                    var plies = lam.CreateSolidLaminate(part, db, analysis, slP);
+                    if (plies != null && plies.Count > 0)
+                    {
+                        res.ComponentsLayered++;
+                        res.LayersCreated += plies.Count;
+                        // the single-block name is now a deleted body - drop it from the
+                        // created list so total_bodies reflects the real document
+                        res.BodiesCreated.Remove(cand.Name);
+                        foreach (var p in plies) res.BodiesCreated.Add(p.Name);
+                        res.Log.Add(string.Format(Inv, "{0}: {1} layers ({2}, h={3:0.###}mm){4}",
+                            cand.Name, plies.Count, OdbLayerPresets.FamilyName(cand.Family),
+                            analysis.ThicknessMm, cand.Mirrored ? " bottom" : ""));
+                    }
+                }
+                catch (Exception ex)
+                {
+                    res.Log.Add(cand.Name + ": layer split failed - " + ex.Message);
+                }
+            }
         }
 
         /// <summary>Package-local (x, y) -> board coordinates. ODB++ order: rotation

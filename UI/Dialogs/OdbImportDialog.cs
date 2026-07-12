@@ -32,8 +32,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
         private TextBox _pathBox;
         private Label _summary;
         private ComboBox _stepCombo;
-        private NumericUpDown _thick, _padThick, _padDia, _compH, _minFoot, _maxComp, _maxPads;
-        private CheckBox _pads;
+        private NumericUpDown _thick, _padThick, _padDia, _compH, _minFoot, _maxComp, _maxPads,
+            _minLayerFoot, _maxLayers;
+        private CheckBox _pads, _subdivide;
         private Button _importBtn;
         private bool _stepComboReady;
 
@@ -49,7 +50,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             FormBorderStyle = FormBorderStyle.FixedDialog;
             MaximizeBox = false; MinimizeBox = false;
             StartPosition = FormStartPosition.CenterScreen;
-            ClientSize = new Size(560, 428);
+            ClientSize = new Size(620, 484);
 
             var pathLabel = new Label { Text = "ODB++ 경로:", Location = new Point(12, 15), AutoSize = true };
             _pathBox = new TextBox { Location = new Point(100, 12), Size = new Size(280, 23), ReadOnly = true };
@@ -100,16 +101,39 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
             var hint = new Label
             {
                 Text = "부품/패드 한도 초과 시 아무것도 생성하지 않고 명확한 오류로 중단합니다.",
-                Location = new Point(12, y3 + 32), AutoSize = true, ForeColor = Color.DimGray,
+                Location = new Point(12, y3 + 30), AutoSize = true, ForeColor = Color.DimGray,
+            };
+
+            int y4 = 344;
+            _subdivide = new CheckBox
+            {
+                Text = "패키지 층 세분화 (substrate/die/mold - 패키지족 프리셋, 가정 스택)",
+                Location = new Point(12, y4), AutoSize = true, Checked = false,
+            };
+            _subdivide.CheckedChanged += (s, e) =>
+            {
+                _minLayerFoot.Enabled = _subdivide.Checked;
+                _maxLayers.Enabled = _subdivide.Checked;
+            };
+            var mlLabel = new Label { Text = "최소 층분할 풋프린트 mm:", Location = new Point(12, y4 + 27), AutoSize = true };
+            _minLayerFoot = Num(170, y4 + 24, 0.5m, 50m, 3.0m, 1);
+            _minLayerFoot.Enabled = false;
+            var maxLLabel = new Label { Text = "최대 층 바디수:", Location = new Point(250, y4 + 27), AutoSize = true };
+            _maxLayers = Num(345, y4 + 24, 4m, 200000m, 4000m, 0);
+            _maxLayers.Enabled = false;
+            var mlHint = new Label
+            {
+                Text = "이 크기 이상 부품만 층 분할 (메모리 보호). 층 사이 접촉면 Named Selection 자동 생성.",
+                Location = new Point(12, y4 + 52), AutoSize = true, ForeColor = Color.DimGray,
             };
 
             _importBtn = new Button
             {
-                Text = "Import", Location = new Point(337, 380), Size = new Size(100, 32),
+                Text = "Import", Location = new Point(337, 436), Size = new Size(100, 32),
                 Enabled = false,
             };
             _importBtn.Click += OnImport;
-            var closeBtn = new Button { Text = "닫기", Location = new Point(443, 380), Size = new Size(100, 32) };
+            var closeBtn = new Button { Text = "닫기", Location = new Point(443, 436), Size = new Size(100, 32) };
             closeBtn.Click += (s, e) => Close();
 
             Controls.AddRange(new Control[]
@@ -119,6 +143,7 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                 tLabel, _thick, hLabel, _compH, fLabel, _minFoot,
                 _pads, ptLabel, _padThick, pdLabel, _padDia,
                 mcLabel, _maxComp, mpLabel, _maxPads, hint,
+                _subdivide, mlLabel, _minLayerFoot, maxLLabel, _maxLayers, mlHint,
                 _importBtn, closeBtn,
             });
         }
@@ -268,6 +293,9 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                 PadDiaMm = (double)_padDia.Value,
                 MaxComponents = (int)_maxComp.Value,
                 MaxTotalPads = (int)_maxPads.Value,
+                SubdivideLayers = _subdivide.Checked,
+                MinLayerFootprintMm = (double)_minLayerFoot.Value,
+                MaxTotalLayers = (int)_maxLayers.Value,
             };
 
             _importBtn.Enabled = false;
@@ -303,11 +331,15 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.UI.Dialogs
                     if (shown++ >= 8) { log.Append("\n... 외 ").Append(res.Log.Count - 8).Append("건"); break; }
                     log.Append("\n").Append(l);
                 }
+                string layerLine = res.ComponentsLayered > 0
+                    ? string.Format(Inv, "\n층 분할: {0}개 부품 → {1}개 층",
+                        res.ComponentsLayered, res.LayersCreated)
+                    : "";
                 MessageBox.Show(this, string.Format(Inv,
-                    "ODB++ → MCAD 변환 완료\n\n바디 {0}개 (부품 {1}, 스킵 {2}, 패드 {3})\n" +
-                    "보드 부피 {4:0.##} mm³{5}",
+                    "ODB++ → MCAD 변환 완료\n\n바디 {0}개 (부품 {1}, 스킵 {2}, 패드 {3}){4}\n" +
+                    "보드 부피 {5:0.##} mm³{6}",
                     res.BodiesCreated.Count, res.ComponentsBuilt, res.ComponentsSkipped,
-                    res.PadsBuilt, bv, log.ToString()),
+                    res.PadsBuilt, layerLine, bv, log.ToString()),
                     "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             else

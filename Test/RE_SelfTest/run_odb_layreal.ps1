@@ -1,0 +1,35 @@
+# Headless gate for the odb++ layer subdivision (probe_odb_layers_real.py).
+# Watchdog: since 2026-07-11 the Student license pops an "ANSYS LICENSE MANAGER MESSAGE"
+# expiry-warning modal at startup, which blocks /RunScript forever. The wait loop
+# auto-dismisses it (BM_CLICK on its OK button, then WM_CLOSE as fallback).
+$ErrorActionPreference = "Stop"
+$sc   = "D:\Program Files\ANSYS Inc\ANSYS Student\v252\scdm\SpaceClaim.exe"
+$gate = "D:\MXDigitalTwinModeller\Test\RE_SelfTest\probe_odb_layers_real.py"
+$dir  = "D:\MXDigitalTwinModeller\Test\RE_SelfTest"
+$done = Join-Path $dir "odb_layreal_done.txt"
+. (Join-Path $dir "_lic_watchdog.ps1")
+Get-Process SpaceClaim, ansyscl -ErrorAction SilentlyContinue |
+    Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 1
+Remove-Item $done, (Join-Path $dir "odb_layreal_mark.txt"), (Join-Path $dir "odb_layreal_result.txt") -ErrorAction SilentlyContinue
+
+$start = Get-Date
+$p = Start-Process -FilePath $sc -ArgumentList @("/RunScript=$gate") -PassThru -NoNewWindow
+$deadline = $start.AddSeconds(360)
+while ((Get-Date) -lt $deadline) {
+    if ([LicDlg]::Dismiss()) { Write-Host "license dialog dismissed" }
+    if (Test-Path $done) { break }
+    if ($p.HasExited) { break }
+    Start-Sleep -Seconds 2
+}
+Write-Host ("odb_layreal finished in {0:F1}s" -f (((Get-Date) - $start).TotalSeconds))
+Get-Process SpaceClaim, ansyscl -ErrorAction SilentlyContinue |
+    Stop-Process -Force -ErrorAction SilentlyContinue
+
+if (Test-Path (Join-Path $dir "odb_layreal_result.txt")) {
+    Write-Host "---- odb_layreal_result ----"
+    Get-Content (Join-Path $dir "odb_layreal_result.txt")
+} else {
+    Write-Host "NO RESULT FILE - marks:"
+    if (Test-Path (Join-Path $dir "odb_layreal_mark.txt")) { Get-Content (Join-Path $dir "odb_layreal_mark.txt") }
+}

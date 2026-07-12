@@ -782,6 +782,13 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                             ioOpt.IncludePads = GetBool(args, "include_pads");
                         if (args.ContainsKey("name_prefix"))
                             ioOpt.NamePrefix = GetString(args, "name_prefix");
+                        if (args.ContainsKey("subdivide_layers"))
+                            ioOpt.SubdivideLayers = GetBool(args, "subdivide_layers");
+                        if (args.ContainsKey("min_layer_footprint_mm"))
+                            ioOpt.MinLayerFootprintMm = GetDoubleOrDefault(args, "min_layer_footprint_mm", 3.0);
+                        if (args.ContainsKey("max_total_layers"))
+                            ioOpt.MaxTotalLayers = (int)Math.Max(1.0, Math.Min(2147483647.0,
+                                GetDoubleOrDefault(args, "max_total_layers", 4000)));
 
                         Part ioPart = ResolveActivePart(true);
                         if (ioPart == null) return Envelope(false, "no active part", null);
@@ -802,6 +809,8 @@ namespace SpaceClaim.Api.V252.MXDigitalTwinModeller.Services.ReverseEngineer
                             .Append(", \"components_built\": ").Append(ioRes.ComponentsBuilt.ToString(Inv))
                             .Append(", \"components_skipped\": ").Append(ioRes.ComponentsSkipped.ToString(Inv))
                             .Append(", \"pads_built\": ").Append(ioRes.PadsBuilt.ToString(Inv))
+                            .Append(", \"components_layered\": ").Append(ioRes.ComponentsLayered.ToString(Inv))
+                            .Append(", \"layers_created\": ").Append(ioRes.LayersCreated.ToString(Inv))
                             .Append(", \"board_volume_mm3\": ").Append(ioBoard != null
                                 ? (ioBoard.Shape.Volume * 1e9).ToString("0.###", Inv) : "0")
                             .Append(", \"dims_mm\": {");

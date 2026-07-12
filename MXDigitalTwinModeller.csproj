@@ -257,6 +257,7 @@
     <Compile Include="Models\Pcb\PcbAssemblySpec.cs" />
     <Compile Include="Services\Pcb\PcbAssemblyService.cs" />
     <Compile Include="Models\Odb\OdbModels.cs" />
+    <Compile Include="Models\Odb\PackageLayerProfile.cs" />
     <Compile Include="Services\Odb\OdbPlusPlusParser.cs" />
     <Compile Include="Services\Odb\OdbImportService.cs" />
     <Compile Include="Commands\Odb\ImportOdbCommand.cs" />
