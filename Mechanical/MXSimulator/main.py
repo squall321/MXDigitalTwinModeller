@@ -2140,7 +2140,19 @@ class PostProcessDialog(Window):
                     if dd:
                         entry['directional_def'] = dd
                 if strain_e is not None:
-                    entry['strain_energy'] = self._safe_float(strain_e, 'MaximumOfMaximumOverTime')
+                    # 바디의 총 변형에너지는 Result.Total 이다. MaximumOfMaximumOverTime 은
+                    # "그 바디에서 가장 뜨거운 요소 1개" 값이라, 바디별로 모아 합산해도
+                    # 총합이 되지 않는다 (뷰어 EnergyTab 의 % 가 그래서 틀렸다).
+                    # .Total 이 안 읽히는 경우를 대비해 폴백을 두고, 어느 쪽을 썼는지
+                    # basis 로 남겨 소비자가 판단할 수 있게 한다.
+                    _se_total = self._read_quantity(strain_e, 'Total')
+                    if _se_total is not None:
+                        entry['strain_energy'] = _se_total
+                        entry['strain_energy_basis'] = 'Total'
+                    else:
+                        entry['strain_energy'] = self._safe_float(
+                            strain_e, 'MaximumOfMaximumOverTime')
+                        entry['strain_energy_basis'] = 'MaximumOfMaximumOverTime'
                 ranked.append(entry)
 
             ranked.sort(key=lambda x: x['max_def'], reverse=True)
@@ -2233,6 +2245,8 @@ class PostProcessDialog(Window):
                                 pass
                 if 'strain_energy' in r:
                     entry['strain_energy'] = r['strain_energy']
+                if 'strain_energy_basis' in r:
+                    entry['strain_energy_basis'] = r['strain_energy_basis']
                     if r.get('strain_e') is not None:
                         fn = safe + "_strainenergy.txt"
                         try:
@@ -2261,7 +2275,7 @@ class PostProcessDialog(Window):
             except Exception:
                 _gen_at = ""
             meta = {
-                'schema_version':  '2.0',
+                'schema_version':  '2.1',
                 'generated_at':    _gen_at,
                 'source':          'MXSimulator PostProcessDialog',
                 'units':           {'deformation': 'mm', 'stress': 'MPa', 'frequency': 'Hz',
@@ -5294,6 +5308,13 @@ class MaterialTwinDialog(Window):
             # Find Python executable - check multiple locations
             script_dir = os.path.dirname(__file__)
 
+            # Priority 0: the MSI ships a standalone MaterialCalibrator.exe. If it is there the
+            # venv is never needed, so it must be checked BEFORE the venv gate below - otherwise
+            # a clean MSI install (no calibration_env, no d:\ dev checkout) shows "venv not found"
+            # and returns without ever reaching the EXE branch further down.
+            calib_exe = os.path.join(script_dir, 'calibration', 'MaterialCalibrator.exe')
+            have_exe = os.path.isfile(calib_exe)
+
             # Try 1: Deployed location venv
             venv_python = os.path.join(script_dir, 'calibration_env', 'Scripts', 'python.exe')
 
@@ -5303,13 +5324,15 @@ class MaterialTwinDialog(Window):
                 if os.path.isfile(dev_venv):
                     venv_python = dev_venv
 
-            if not os.path.isfile(venv_python):
+            if not have_exe and not os.path.isfile(venv_python):
                 MessageBox.Show(
-                    "Python venv not found!\n\n"
+                    "Neither MaterialCalibrator.exe nor a Python venv was found!\n\n"
                     "Checked:\n"
+                    "  0. {}\n"
                     "  1. {}\n"
                     "  2. d:\\MXDigitalTwinModeller\\...\\calibration_env\n\n"
-                    "Please run setup_venv.bat in either location.".format(
+                    "Reinstall (the MSI ships the exe), or run setup_venv.bat in either location.".format(
+                        calib_exe,
                         os.path.join(script_dir, 'calibration_env', 'Scripts', 'python.exe')
                     ),
                     "Error",
@@ -5561,3 +5584,730 @@ def Initialize():
 
 def Finalize():
     pass
+
+
+# ================================================================
+# EnergyDialog — 파트별 진동에너지 (버튼 하나)
+#
+# 한 번 누르면:
+#   1) 대상 해석의 모든 body 에 ElementalStrainEnergy 를 붙여 set(모드/주파수/시간)별로 평가
+#   2) body 별 총 에너지 -> 점유율(share) 계산
+#   3) "의미 있는 것"만 남기고 나머지 결과 객체는 트리에서 제거
+#      (누적 점유율 컷 + 상위 N + 최소 점유율)
+#   4) EnergyContribution 모자이크 차트(SE/KE/Total)를 상위 N 바디로 추가
+#   5) 최대 에너지 바디에 Total Deformation + Figure 자동 생성
+#   6) energy.json 으로 내보내 뷰어가 바로 그릴 수 있게 함
+#
+# 설계 원칙 (프로젝트 관례): 모든 API 호출은 방어적. 하나가 없으면 그 지표만
+# 빠지고 나머지는 계속 간다. GATE = verification/verify_energy_api.py
+# ================================================================
+
+ENERGY_SCHEMA_VERSION = "energy-1.0"
+
+
+def _e_num(obj, attr):
+    """Quantity-like 속성 -> float. 실패는 None (0.0 으로 뭉개지 않는다)."""
+    try:
+        v = getattr(obj, attr)
+    except Exception:
+        return None
+    if v is None:
+        return None
+    try:
+        return float(v)
+    except Exception:
+        pass
+    try:
+        return float(str(v).split()[0])
+    except Exception:
+        return None
+
+
+def _e_unit(obj, attr, default=""):
+    """Quantity 문자열에서 단위만 뽑는다. '1.23 mJ' -> 'mJ'."""
+    try:
+        parts = str(getattr(obj, attr)).split()
+        if len(parts) >= 2:
+            return parts[1]
+    except Exception:
+        pass
+    return default
+
+
+def _e_safe(fn):
+    try:
+        return True, fn()
+    except Exception as ex:
+        return False, str(ex)[:160]
+
+
+class EnergyDialog(Window):
+    """파트별 진동에너지 분석 — 모달(모드별) / 하모닉(주파수 세트별) / 트랜지언트(시간 세트별).
+
+    세트 선택은 셋 다 Result.SetNumber 로 한다. 모달은 MaximumModesToFind 로 스캔 상한을
+    클램프하고, 범위를 넘긴 SetNumber 가 마지막 세트로 클램프돼 같은 결과가 반복되면 스캔을
+    끝낸다. 하모닉/트랜지언트의 SetNumber 의미는 GATE 로 실측되지 않았으므로 세트 값(f/t)을
+    함께 기록해 사후 확인이 가능하게 한다."""
+
+    def __init__(self):
+        self.Title = "MX Vibration Energy"
+        self.Width = 620
+        self.Height = 720
+        self._analyses = []
+        self._result = None        # 마지막 분석 결과 dict (JSON 과 동일 구조)
+
+        root = StackPanel()
+        root.Orientation = Orientation.Vertical
+        root.Margin = Thickness(10)
+        sv = ScrollViewer()
+        sv.VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        sv.Content = root
+        self.Content = sv
+
+        def _hdr(text):
+            l = Label()
+            l.Content = text
+            l.FontSize = 11
+            l.FontWeight = System.Windows.FontWeights.Bold
+            l.Foreground = Brushes.DarkBlue
+            l.Margin = Thickness(0, 8, 0, 2)
+            return l
+
+        root.Children.Add(_hdr("대상"))
+
+        self.analysis_cb = ComboBox()
+        self.analysis_cb.Width = 400
+        root.Children.Add(_row(_lbl("Analysis:", 110), self.analysis_cb))
+
+        root.Children.Add(_hdr("무엇을 '의미 있다'고 볼 것인가"))
+
+        self.topn_tb = _tb("6", 60, "set 당 남길 최대 body 수")
+        self.cum_tb = _tb("90", 60, "누적 점유율이 이 %에 도달하면 컷")
+        self.minshare_tb = _tb("2", 60, "이 % 미만 점유 body 는 버림")
+        self.loc_tb = _tb("50", 60, "단일 body 가 이 % 이상이면 'localized' 로 표시")
+        root.Children.Add(_row(_lbl("Top-N / set:", 110), self.topn_tb,
+                               _lbl("  누적 컷 [%]:", 100), self.cum_tb))
+        root.Children.Add(_row(_lbl("최소 점유 [%]:", 110), self.minshare_tb,
+                               _lbl("  localized [%]:", 100), self.loc_tb))
+
+        self.maxsets_tb = _tb("10", 60, "스캔할 최대 set 수 (모달=모드, 하모닉=주파수 세트, 트랜지언트=시간 세트)")
+        root.Children.Add(_row(_lbl("Max sets:", 110), self.maxsets_tb))
+
+        root.Children.Add(_hdr("트리에 남길 것"))
+
+        self.chk_prune = CheckBox()
+        self.chk_prune.Content = "컷에서 탈락한 body 결과는 트리에서 제거 (의미 있는 것만 남김)"
+        self.chk_prune.IsChecked = True
+        root.Children.Add(self.chk_prune)
+
+        self.chk_mosaic = CheckBox()
+        self.chk_mosaic.Content = "EnergyContribution 모자이크 차트 추가 (Strain / Kinetic / Total)"
+        self.chk_mosaic.IsChecked = True
+        root.Children.Add(self.chk_mosaic)
+
+        self.chk_figure = CheckBox()
+        self.chk_figure.Content = "최대 에너지 body 에 Total Deformation + Figure 자동 생성"
+        self.chk_figure.IsChecked = True
+        root.Children.Add(self.chk_figure)
+
+        root.Children.Add(_sep())
+
+        self.run_btn = Button()
+        self.run_btn.Content = "▶  Analyze Vibration Energy"
+        self.run_btn.Height = 34
+        self.run_btn.FontWeight = System.Windows.FontWeights.Bold
+        self.run_btn.Click += self.on_run
+        root.Children.Add(self.run_btn)
+
+        self.export_btn = Button()
+        self.export_btn.Content = "energy.json 내보내기"
+        self.export_btn.Height = 26
+        self.export_btn.Margin = Thickness(0, 6, 0, 0)
+        self.export_btn.IsEnabled = False
+        self.export_btn.Click += self.on_export
+        root.Children.Add(self.export_btn)
+
+        self.status_lbl = Label()
+        self.status_lbl.Content = "대기 중."
+        root.Children.Add(self.status_lbl)
+
+        self.log_tb = TextBox()
+        self.log_tb.Height = 300
+        self.log_tb.AcceptsReturn = True
+        self.log_tb.VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+        self.log_tb.IsReadOnly = True
+        self.log_tb.FontFamily = System.Windows.Media.FontFamily("Consolas")
+        self.log_tb.FontSize = 11
+        root.Children.Add(self.log_tb)
+
+        self._load_analyses()
+
+    # ------------------------------------------------------------------
+    def log(self, msg):
+        self.log_tb.Text += msg + "\n"
+        self.log_tb.ScrollToEnd()
+
+    def _load_analyses(self):
+        self.analysis_cb.Items.Clear()
+        self._analyses = []
+        try:
+            model = ExtAPI.DataModel.Project.Model
+            for a in model.GetChildren(DataModelObjectCategory.Analysis, True):
+                try:
+                    atype = str(a.AnalysisType)
+                except Exception:
+                    atype = "?"
+                try:
+                    solved = (str(a.Solution.Status) == "Done")
+                except Exception:
+                    solved = False
+                self._analyses.append((a, atype, solved))
+                self.analysis_cb.Items.Add(
+                    "[{0}]{1} {2}".format(atype, "" if solved else " (unsolved)", a.Name))
+            # solve 된 것 중 마지막을 기본 선택
+            pick = -1
+            for i, (_a, _t, s) in enumerate(self._analyses):
+                if s:
+                    pick = i
+            if pick < 0 and self._analyses:
+                pick = len(self._analyses) - 1
+            if pick >= 0:
+                self.analysis_cb.SelectedIndex = pick
+            self.log("해석 {0} 개 로드.".format(len(self._analyses)))
+            if not any(s for _a, _t, s in self._analyses):
+                self.log("주의: solve 된 해석이 없다. 먼저 solve 할 것.")
+        except Exception as ex:
+            self.log("해석 로드 실패: {0}".format(str(ex)))
+
+    def _f(self, tb, default):
+        try:
+            return float(str(tb.Text).strip())
+        except Exception:
+            return default
+
+    # ------------------------------------------------------------------
+    def on_run(self, sender, e):
+        created = []          # 이번 실행에서 만든 객체 (실패 시 되돌림)
+        try:
+            idx = self.analysis_cb.SelectedIndex
+            if idx < 0 or idx >= len(self._analyses):
+                self.log("해석을 선택할 것.")
+                return
+            analysis, atype, solved = self._analyses[idx]
+            if not solved:
+                self.log("ERROR: 이 해석은 solve 되지 않았다. 먼저 solve 할 것.")
+                self.status_lbl.Content = "Not solved."
+                self.status_lbl.Foreground = Brushes.Red
+                return
+
+            top_n = int(self._f(self.topn_tb, 6))
+            cum_cut = self._f(self.cum_tb, 90.0) / 100.0
+            min_share = self._f(self.minshare_tb, 2.0) / 100.0
+            loc_thresh = self._f(self.loc_tb, 50.0) / 100.0
+            max_sets = int(self._f(self.maxsets_tb, 10))
+
+            self.log_tb.Text = ""
+            self.log("=" * 58)
+            self.log("Analysis : {0}  [{1}]".format(analysis.Name, atype))
+            self.log("Filter   : top{0} / cum{1:.0f}% / min{2:.0f}%".format(
+                top_n, cum_cut * 100, min_share * 100))
+            self.log("=" * 58)
+
+            sol = analysis.Solution
+            model = ExtAPI.DataModel.Project.Model
+
+            # --- 1. body 수집 ------------------------------------------------
+            bodies = []
+            for b in model.Geometry.GetChildren(DataModelObjectCategory.Body, True):
+                try:
+                    if b.Suppressed:
+                        continue
+                    bodies.append(b)
+                except Exception:
+                    continue
+            if not bodies:
+                self.log("ERROR: body 가 없다.")
+                return
+            self.log("body {0} 개.".format(len(bodies)))
+
+            # --- 2. body 별 ElementalStrainEnergy ----------------------------
+            # 표시 키: 같은 이름의 body 가 있으면 '#ObjectId' 를 붙여 구분한다. 이름만 키로
+            # 쓰면 서로 다른 body 의 에너지가 합쳐지고 worst 뷰가 엉뚱한 body 에 붙는다.
+            _cnt = {}
+            for b in bodies:
+                try:
+                    _cnt[b.Name] = _cnt.get(b.Name, 0) + 1
+                except Exception:
+                    pass
+            body_by_key = {}
+            probes = []       # (key, result_obj, body)
+            for b in bodies:
+                try:
+                    key = b.Name
+                    if _cnt.get(key, 0) > 1:
+                        oid = _e_num(b, 'ObjectId')
+                        key = "{0}#{1}".format(key, int(oid) if oid is not None else len(probes))
+                    sel = ExtAPI.SelectionManager.CreateSelectionInfo(
+                        SelectionTypeEnum.GeometryEntities)
+                    sel.Entities = [b.GetGeoBody()]
+                    se = sol.AddElementalStrainEnergy()
+                    se.Name = "_MXE_" + key
+                    se.Location = sel
+                    created.append(se)
+                    probes.append((key, se, b))
+                    body_by_key[key] = b
+                except Exception as ex:
+                    self.log("  (skip {0}: {1})".format(b.Name, str(ex)[:70]))
+            if not probes:
+                self.log("ERROR: strain energy 결과를 하나도 못 붙였다.")
+                return
+            self.log("probe {0} 개 부착.".format(len(probes)))
+
+            # --- 3. set(모드/주파수/시간)별 평가 -----------------------------
+            # 모달 = 모드, 하모닉 = 주파수 세트, 트랜지언트 = 시간 세트. 셋 다 Result.SetNumber
+            # 로 결과 세트를 고른다. 하모닉/트랜지언트의 SetNumber 의미는 GATE 미실측이라
+            # 세트 값(f 또는 t)을 같이 기록해 사후 확인이 가능하게 한다.
+            is_modal = ('Modal' in atype)
+            if is_modal:
+                kind = 'mode'
+            elif 'Harmonic' in atype:
+                kind = 'frequency'
+            elif 'Transient' in atype:
+                kind = 'time'
+            else:
+                kind = 'single'
+            is_set_based = (kind != 'single')
+
+            # 세트 값(고유진동수/주파수/시간) 전용 프로브. set 단위 값이라 body 1개로
+            # scoping 을 좁혀도 정확하다 -> 평가 비용을 최소화한다.
+            freq_probe = None
+            if is_set_based:
+                try:
+                    fsel = ExtAPI.SelectionManager.CreateSelectionInfo(
+                        SelectionTypeEnum.GeometryEntities)
+                    fsel.Entities = [bodies[0].GetGeoBody()]
+                    fp = sol.AddTotalDeformation()
+                    fp.Name = "_MXE_setprobe"
+                    fp.Location = fsel
+                    created.append(fp)
+                    freq_probe = fp
+                except Exception as ex:
+                    self.log("  (세트값 프로브 생략: {0})".format(str(ex)[:70]))
+
+            # 모달이면 스캔 상한을 실제 모드 수로 클램프한다
+            if is_modal:
+                nmodes = None
+                try:
+                    nmodes = int(analysis.AnalysisSettings.MaximumModesToFind)
+                except Exception:
+                    nmodes = None
+                if nmodes and nmodes < max_sets:
+                    self.log("Max sets {0} -> {1} (MaximumModesToFind)".format(max_sets, nmodes))
+                    max_sets = nmodes
+
+            sets_scanned = []
+            basis_used = {'Total': 0, 'MaxOverTime': 0}
+            unit = "?"
+
+            def read_one(res):
+                """Total 우선, 없으면 MaximumOfMaximumOverTime 으로 폴백.
+                어느 쪽을 썼는지 기록해서 metadata 에 남긴다."""
+                v = _e_num(res, 'Total')
+                if v is not None:
+                    basis_used['Total'] += 1
+                    return v, 'Total'
+                v = _e_num(res, 'MaximumOfMaximumOverTime')
+                if v is not None:
+                    basis_used['MaxOverTime'] += 1
+                    return v, 'MaximumOfMaximumOverTime'
+                return None, None
+
+            set_list = range(1, max_sets + 1) if is_set_based else [None]
+            prev_sig = None
+            cap_hit = False
+
+            for sn in set_list:
+                # set 지정
+                if sn is not None:
+                    okset = True
+                    for _n, res, _b in probes:
+                        ok, _err = _e_safe(lambda: setattr(res, 'SetNumber', sn))
+                        if not ok:
+                            okset = False
+                            break
+                    if not okset:
+                        break
+
+                # 평가
+                vals = []
+                failed = 0
+                for name, res, _b in probes:
+                    ok, _err = _e_safe(lambda: res.EvaluateAllResults())
+                    if not ok:
+                        failed += 1
+                        continue
+                    v, basis = read_one(res)
+                    if v is not None:
+                        vals.append((name, v))
+                    if unit == "?":
+                        u = _e_unit(res, 'Total') or _e_unit(res, 'Maximum')
+                        if u:
+                            unit = u
+                if failed == len(probes):
+                    break          # 이 set 은 존재하지 않는다 -> 스캔 종료
+                if not vals:
+                    if sn is None:
+                        break
+                    continue
+
+                total = sum(v for _n, v in vals)
+                if total <= 0:
+                    if sn is None:
+                        break
+                    continue
+
+                vals.sort(key=lambda x: x[1], reverse=True)
+                ranked, cum = [], 0.0
+                for name, v in vals:
+                    share = v / total
+                    cum += share
+                    ranked.append({'body': name, 'energy': v,
+                                   'share': share, 'cum_share': cum})
+
+                # 세트 값 (모드 고유진동수 / 하모닉 주파수 / 트랜지언트 시간)
+                setval = None
+                if is_set_based and freq_probe is not None:
+                    setval = self._probe_set_value(freq_probe, sn, kind)
+
+                # 범위를 넘긴 SetNumber 는 예외 없이 마지막 세트로 클램프될 수 있어 같은 결과가
+                # 반복된다. 직전 세트와 (세트값, 총에너지, 1위 body) 가 완전히 같으면 끝난 것.
+                sig = (setval, round(total, 12), ranked[0]['body'])
+                if prev_sig is not None and sig == prev_sig:
+                    self.log("\n  set {0}: 직전 세트와 동일 -> 범위 초과(클램프)로 판단, 스캔 종료".format(sn))
+                    break
+                prev_sig = sig
+
+                # --- 4. "의미 있는 것"만 --------------------------------------
+                keep = []
+                for i, r in enumerate(ranked):
+                    if i >= top_n:
+                        break
+                    if r['share'] < min_share and keep:
+                        break
+                    keep.append(r)
+                    if r['cum_share'] >= cum_cut:
+                        break
+
+                top = ranked[0]
+                entry = {
+                    'set': sn,
+                    'kind': kind,
+                    'total_energy': total,
+                    'dominant_body': top['body'],
+                    'dominant_share': top['share'],
+                    'localized': bool(top['share'] >= loc_thresh),
+                    'kept': keep,
+                    'n_bodies': len(ranked),
+                }
+                if setval is not None:
+                    entry['time_s' if kind == 'time' else 'frequency_hz'] = setval
+                sets_scanned.append(entry)
+                if sn is not None and sn == max_sets:
+                    cap_hit = True
+
+                if kind == 'mode':
+                    lab = "mode {0}".format(sn)
+                elif sn is not None:
+                    lab = "set {0}".format(sn)
+                else:
+                    lab = "result"
+                if setval is not None:
+                    lab += ("  t={0:.4g} s".format(setval) if kind == 'time'
+                            else "  f={0:.1f} Hz".format(setval))
+                self.log("\n  {0}  total={1:.4g} {2}".format(lab, total, unit))
+                for r in keep:
+                    self.log("     {0:5.1f}%  {1}".format(r['share'] * 100, r['body']))
+                if entry['localized']:
+                    self.log("     -> localized: '{0}' 단독 {1:.0f}%".format(
+                        top['body'], top['share'] * 100))
+
+            if cap_hit:
+                self.log("\n주의: Max sets({0}) 에 도달해 스캔을 끊었다 - 세트가 더 있을 수 있다.".format(max_sets))
+
+            # 주파수 프로브는 임시 객체다. 스캔이 끝나면 트리에서 뺀다.
+            if freq_probe is not None:
+                ok, _err = _e_safe(lambda: freq_probe.Delete())
+                if ok and freq_probe in created:
+                    created.remove(freq_probe)
+
+            if not sets_scanned:
+                self.log("\nERROR: 어떤 set 에서도 에너지를 못 읽었다.")
+                self.log("       verification/verify_energy_api.py 로 GATE 를 먼저 돌릴 것.")
+                self.status_lbl.Content = "No energy data."
+                self.status_lbl.Foreground = Brushes.Red
+                self._cleanup(created)
+                return
+
+            basis = 'Total' if basis_used['Total'] >= basis_used['MaxOverTime'] \
+                else 'MaximumOfMaximumOverTime'
+            self.log("\n집계 기준: {0}  (Total {1} / fallback {2})".format(
+                basis, basis_used['Total'], basis_used['MaxOverTime']))
+            if basis != 'Total':
+                self.log("  ! 경고: .Total 을 못 읽어 최대-요소 값으로 대체했다.")
+                self.log("    이 값의 합은 총 에너지가 아니므로 share 는 근사다.")
+
+            # --- 5. body 단위 종합 (어느 파트가 전 구간에서 문제인가) --------
+            agg = {}
+            for s in sets_scanned:
+                for r in s['kept']:
+                    a = agg.setdefault(r['body'], {'body': r['body'], 'appears': 0,
+                                                   'max_share': 0.0, 'worst_set': None,
+                                                   'sum_energy': 0.0})
+                    a['appears'] += 1
+                    a['sum_energy'] += r['energy']
+                    if r['share'] > a['max_share']:
+                        a['max_share'] = r['share']
+                        a['worst_set'] = s['set']
+            agg_list = sorted(agg.values(), key=lambda x: x['max_share'], reverse=True)
+
+            self.log("\n=== body 종합 (최대 점유율 기준) ===")
+            for a in agg_list[:top_n]:
+                self.log("  {0:5.1f}%  {1:28s} (set {2}, {3}회 등장)".format(
+                    a['max_share'] * 100, a['body'][:28],
+                    a['worst_set'], a['appears']))
+
+            worst_body = agg_list[0]['body'] if agg_list else None
+
+            # --- 6. 트리 정리: 탈락한 probe 제거 -----------------------------
+            keep_names = set()
+            for a in agg_list[:top_n]:
+                keep_names.add(a['body'])
+            if self.chk_prune.IsChecked == True:
+                pruned = 0
+                survivors = []
+                for name, res, _b in probes:
+                    if name in keep_names:
+                        rank = [i for i, a in enumerate(agg_list) if a['body'] == name]
+                        pct = agg[name]['max_share'] * 100
+                        _e_safe(lambda: setattr(
+                            res, 'Name',
+                            "E{0} [{1:.0f}%] {2}".format(
+                                (rank[0] + 1) if rank else 0, pct, name)))
+                        survivors.append(res)
+                    else:
+                        ok, _err = _e_safe(lambda: res.Delete())
+                        if ok:
+                            pruned += 1
+                            if res in created:
+                                created.remove(res)
+                self.log("\n트리 정리: {0} 개 제거, {1} 개 유지.".format(pruned, len(survivors)))
+            else:
+                self.log("\n트리 정리 안 함 ({0} 개 probe 유지).".format(len(probes)))
+
+            # --- 7. EnergyContribution 모자이크 ------------------------------
+            mosaics = {}
+            if self.chk_mosaic.IsChecked == True:
+                mosaics = self._add_mosaics(sol, top_n, is_modal, created)
+
+            # --- 8. 최대 에너지 body 에 Deformation + Figure -----------------
+            figure_added = False
+            if self.chk_figure.IsChecked == True and worst_body:
+                figure_added = self._add_worst_view(
+                    sol, body_by_key.get(worst_body), worst_body, agg[worst_body],
+                    sets_scanned, created)
+
+            # --- 9. 결과 보관 -------------------------------------------------
+            self._result = {
+                'schema_version': ENERGY_SCHEMA_VERSION,
+                'generated_at': self._now(),
+                'source': 'MXSimulator EnergyDialog',
+                'analysis': analysis.Name,
+                'analysis_type': atype,
+                'energy_basis': basis,
+                'energy_kind': 'strain',
+                'set_kind': kind,
+                'units': {'energy': unit},
+                'filter': {'top_n': top_n, 'cum_cut': cum_cut,
+                           'min_share': min_share, 'localized_thresh': loc_thresh},
+                'sets': sets_scanned,
+                'bodies': agg_list,
+                'worst_body': worst_body,
+                'mosaics': mosaics,
+                'figure_added': figure_added,
+            }
+            self.export_btn.IsEnabled = True
+
+            nloc = len([s for s in sets_scanned if s['localized']])
+            self.log("\n" + "=" * 58)
+            self.log("완료. set {0} 개, body {1} 개, localized set {2} 개.".format(
+                len(sets_scanned), len(agg_list), nloc))
+            self.log("worst body = {0}".format(worst_body))
+            self.status_lbl.Content = "Done. energy.json 내보내기 가능."
+            self.status_lbl.Foreground = Brushes.DarkGreen
+
+        except Exception as ex:
+            self.log("ERROR: {0}".format(str(ex)))
+            try:
+                import traceback
+                self.log(traceback.format_exc())
+            except Exception:
+                pass
+            self._cleanup(created)
+            self.status_lbl.Content = "Error - 로그 확인."
+            self.status_lbl.Foreground = Brushes.Red
+
+    # ------------------------------------------------------------------
+    def _cleanup(self, created):
+        for obj in reversed(created):
+            try:
+                obj.Delete()
+            except Exception:
+                pass
+
+    def _now(self):
+        try:
+            return System.DateTime.Now.ToString("o")
+        except Exception:
+            return ""
+
+    def _probe_set_value(self, probe, set_number, kind):
+        """전용 TotalDeformation 프로브에서 세트 값을 읽는다:
+        모드/주파수 -> ReportedFrequency [Hz], 시간 -> Time [s]. 못 읽으면 None."""
+        ok, _err = _e_safe(lambda: setattr(probe, 'SetNumber', set_number))
+        if not ok:
+            return None
+        ok2, _err = _e_safe(lambda: probe.EvaluateAllResults())
+        if not ok2:
+            return None
+        if kind == 'time':
+            v = _e_num(probe, 'Time')
+            if v is None:
+                v = _e_num(probe, 'DisplayTime')
+            return v
+        return _e_num(probe, 'ReportedFrequency')
+
+    def _add_mosaics(self, sol, top_n, is_modal, created):
+        """EnergyContribution 을 에너지 종류별로 추가. 없는 종류는 조용히 건너뛴다."""
+        out = {}
+        try:
+            from Ansys.Mechanical.DataModel.Enums import EnergyContributionEnergyType as _ET
+        except Exception:
+            self.log("\n모자이크: EnergyContributionEnergyType enum 없음 - 건너뜀.")
+            return out
+        try:
+            from Ansys.Mechanical.DataModel.Enums import ShowTextOnMosaicMode as _STM
+        except Exception:
+            _STM = None
+        try:
+            from Ansys.Mechanical.DataModel.Enums import ModeSelectionMethod as _MSM
+        except Exception:
+            _MSM = None
+
+        self.log("\n모자이크 차트:")
+        for label in ('StrainEnergy', 'KineticEnergy', 'TotalEnergy'):
+            try:
+                etype = getattr(_ET, label)
+            except Exception:
+                self.log("  - {0}: enum 멤버 없음".format(label))
+                out[label] = False
+                continue
+            ok, ec = _e_safe(lambda: sol.AddEnergyContribution())
+            if not ok:
+                self.log("  - {0}: AddEnergyContribution 실패 ({1})".format(label, ec))
+                out[label] = False
+                continue
+            # 모자이크는 산출물이다 -> created(롤백 대상)에 넣지 않는다.
+            _e_safe(lambda: setattr(ec, 'EnergyType', etype))
+            _e_safe(lambda: setattr(ec, 'TopBodiesToDisplay', top_n))
+            if _STM is not None:
+                _e_safe(lambda: setattr(ec, 'ShowTextOnMosaic', _STM.YesRefined))
+            if is_modal and _MSM is not None:
+                _e_safe(lambda: setattr(ec, 'ModeSelection', _MSM.ModalEffectiveMass))
+            _e_safe(lambda: setattr(ec, 'Name', "Energy% - " + label))
+            ok2, _err = _e_safe(lambda: ec.EvaluateAllResults())
+            self.log("  + {0}{1}".format(label, "" if ok2 else "  (평가 실패)"))
+            out[label] = True
+        return out
+
+    def _add_worst_view(self, sol, target, body_name, agg_entry, sets_scanned, created):
+        """최대 에너지 body 에 Total Deformation 을 붙이고 Figure 를 생성.
+        target 은 probe 를 붙일 때 잡아 둔 body 객체 - 이름으로 다시 찾지 않는다 (동명 body 오매칭 방지)."""
+        self.log("\n최대 에너지 body 뷰:")
+        if target is None:
+            self.log("  - body '{0}' 객체를 못 찾음.".format(body_name))
+            return False
+
+        ok, td = _e_safe(lambda: sol.AddTotalDeformation())
+        if not ok:
+            self.log("  - AddTotalDeformation 실패: {0}".format(td))
+            return False
+        try:
+            sel = ExtAPI.SelectionManager.CreateSelectionInfo(
+                SelectionTypeEnum.GeometryEntities)
+            sel.Entities = [target.GetGeoBody()]
+            td.Location = sel
+        except Exception as ex:
+            self.log("  - scoping 실패: {0}".format(str(ex)[:80]))
+
+        worst_set = agg_entry.get('worst_set')
+        if worst_set is not None:
+            _e_safe(lambda: setattr(td, 'SetNumber', worst_set))
+        _e_safe(lambda: setattr(
+            td, 'Name',
+            "WORST [{0:.0f}%] {1}{2}".format(
+                agg_entry['max_share'] * 100, body_name,
+                ("  set{0}".format(worst_set) if worst_set is not None else ""))))
+
+        ok2, _err = _e_safe(lambda: td.EvaluateAllResults())
+        if not ok2:
+            self.log("  - 평가 실패: {0}".format(_err))
+
+        ok3, err3 = _e_safe(lambda: td.AddFigure())
+        if ok3:
+            self.log("  + Total Deformation + Figure 생성 ({0})".format(body_name))
+        else:
+            self.log("  + Total Deformation 생성 (Figure 실패: {0})".format(err3))
+        return bool(ok3)
+
+    # ------------------------------------------------------------------
+    def on_export(self, sender, e):
+        if not self._result:
+            self.log("내보낼 결과가 없다. 먼저 분석할 것.")
+            return
+        try:
+            import json
+            dlg = FolderBrowserDialog()
+            dlg.Description = "energy.json 저장 폴더 선택"
+            default_dir = None
+            try:
+                idx = self.analysis_cb.SelectedIndex
+                default_dir = self._analyses[idx][0].WorkingDir
+            except Exception:
+                default_dir = None
+            if default_dir:
+                try:
+                    dlg.SelectedPath = default_dir
+                except Exception:
+                    pass
+            if dlg.ShowDialog() != DialogResult.OK:
+                return
+            out_dir = dlg.SelectedPath
+            path = os.path.join(out_dir, "energy.json")
+            f = open(path, 'w')
+            try:
+                json.dump(self._result, f, indent=2)
+            finally:
+                f.close()
+            self.log("\n저장: {0}".format(path))
+            self.status_lbl.Content = "energy.json 저장됨."
+            self.status_lbl.Foreground = Brushes.DarkGreen
+        except Exception as ex:
+            self.log("내보내기 실패: {0}".format(str(ex)))
+
+
+def show_energy_dialog(analysis=None):
+    try:
+        EnergyDialog().ShowDialog()
+    except Exception as ex:
+        MessageBox.Show("Error:\n\n" + str(ex), "Error",
+                        MessageBoxButton.OK, MessageBoxImage.Error)

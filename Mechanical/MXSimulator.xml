@@ -36,6 +36,11 @@
           <onclick>show_postprocess_dialog</onclick>
         </callbacks>
       </entry>
+      <entry name="VibrationEnergy" caption="Vibration Energy" icon="post_process">
+        <callbacks>
+          <onclick>show_energy_dialog</onclick>
+        </callbacks>
+      </entry>
       <entry name="ExportKFile" caption="Export K-File" icon="kfile_export">
         <callbacks>
           <onclick>show_export_kfile_dialog</onclick>

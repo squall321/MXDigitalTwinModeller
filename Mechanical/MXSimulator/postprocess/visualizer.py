@@ -100,8 +100,10 @@ class SummaryTab(QWidget):
 
         # Table
         bodies = meta.get('bodies', [])
+        # StrainE = body 총 변형에너지 (Result.Total, schema 2.1+). basis 가 Total 이 아닌 값
+        # (구버전 metadata 의 최대-요소값 / 폴백) 은 '*' 를 붙여 총합으로 읽히지 않게 한다.
         cols = ['Rank', 'Body / NS', 'MaxDef [mm]', 'MaxVM [MPa]',
-                'P2P [mm]', 'RMS [mm]', 'StrainE [mJ]', 'Severity']
+                'P2P [mm]', 'RMS [mm]', 'StrainE Total [mJ]', 'Severity']
         self.table = QTableWidget(len(bodies), len(cols))
         self.table.setHorizontalHeaderLabels(cols)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.Stretch)
@@ -136,7 +138,13 @@ class SummaryTab(QWidget):
                 bg  = QColor(200, 240, 200)
 
             se = b.get('strain_energy')
-            se_str = '{:.3g}'.format(float(se)) if se is not None else '—'
+            se_basis = b.get('strain_energy_basis')
+            if se is None:
+                se_str = '—'
+            elif se_basis == 'Total':
+                se_str = '{:.3g}'.format(float(se))
+            else:
+                se_str = '{:.3g} *'.format(float(se))   # 총합이 아님 (basis != Total)
             vals = [
                 str(b.get('rank', i + 1)),
                 b.get('name', '?'),
@@ -152,6 +160,10 @@ class SummaryTab(QWidget):
                 item.setBackground(bg)
                 item.setTextAlignment(Qt.AlignCenter)
                 self.table.setItem(i, j, item)
+            if se is not None and se_basis != 'Total':
+                self.table.item(i, 6).setToolTip(
+                    "basis = {0}: not a body total (max single-element value / legacy export). "
+                    "Re-export with a build that records Result.Total.".format(se_basis))
 
         lay.addWidget(self.table)
 
@@ -377,8 +389,18 @@ class FatigueTab(QWidget):
 
 # ── Tab: Energy (elemental strain energy per body) ───────────────────
 class EnergyTab(QWidget):
-    """Ranked strain-energy bar chart. Reads per-body scalar `strain_energy` from metadata
-    (schema 2.0+ additive field). Degrades to a placeholder on older/absent data."""
+    """파트별 진동에너지.
+
+    두 개의 소스를 받는다:
+      1) energy.json (EnergyDialog 산출, schema energy-1.0) — set(모드/주파수)별
+         랭킹 + localized 플래그까지 있는 풍부한 데이터. 있으면 이쪽을 쓴다.
+      2) metadata.json 의 body[].strain_energy — 폴백.
+
+    중요: strain_energy 의 basis 가 'Total' 이 아니면 그 값들의 합은 총 에너지가
+    아니므로 점유율(%)을 계산하면 안 된다. 그 경우 절대값만 그리고 경고를 띄운다.
+    """
+
+    _GOOD_BASIS = 'Total'
 
     def __init__(self, meta, base_dir, parent=None):
         super().__init__(parent)
@@ -387,50 +409,292 @@ class EnergyTab(QWidget):
         self._load_data()
 
         lay = QVBoxLayout(self)
+
+        # 경고 배너 (basis 가 폴백일 때만 보인다)
+        self.warn_lbl = QLabel("")
+        self.warn_lbl.setWordWrap(True)
+        self.warn_lbl.setStyleSheet(
+            "QLabel { background:#4a2a2a; color:#ffb4b4; padding:6px; border-radius:4px; }")
+        self.warn_lbl.setVisible(False)
+        self._warn_active = False
+        lay.addWidget(self.warn_lbl)
+
+        # set(모드) 선택 — energy.json 이 있을 때만 의미가 있다
+        row = QHBoxLayout()
+        row.addWidget(QLabel("View:"))
+        self.set_cb = QComboBox()
+        for label in self._set_labels():
+            self.set_cb.addItem(label)
+        self.set_cb.currentIndexChanged.connect(self._update)
+        row.addWidget(self.set_cb)
+        self.set_cb.setEnabled(bool(self.ej))
+        row.addStretch()
+        lay.addLayout(row)
+
         self.pw = PlotWidget(nrows=1, ncols=1)
         lay.addWidget(self.pw)
+
         self.summary_lbl = QLabel("")
+        self.summary_lbl.setWordWrap(True)
         lay.addWidget(self.summary_lbl)
-        row = QHBoxLayout()
-        b = QPushButton("Export PNG"); b.clicked.connect(self._save_png)
-        row.addWidget(b); row.addStretch()
-        lay.addLayout(row)
+
+        brow = QHBoxLayout()
+        b = QPushButton("Export PNG")
+        b.clicked.connect(self._save_png)
+        brow.addWidget(b)
+        brow.addStretch()
+        lay.addLayout(brow)
+
         self._update()
 
+    # ------------------------------------------------------------------
     def _load_data(self):
+        # --- energy.json (풍부한 소스) ---
+        # 형태를 검증/정규화하고, 이상하면 조용히 폴백한다 (탭 생성에서 예외가 나면 뷰어 전체가 안 뜬다).
+        self.ej = None
+        self.ej_error = None
+        try:
+            import json
+            p = os.path.join(self.base_dir, "energy.json")
+            if os.path.exists(p):
+                with open(p, 'r', encoding='utf-8') as f:
+                    ej = json.load(f)
+                if isinstance(ej, dict) and str(ej.get('schema_version', '')).startswith('energy-'):
+                    self.ej = self._normalize_ej(ej)
+        except Exception as ex:
+            self.ej = None
+            self.ej_error = str(ex)
+
+        # --- metadata 폴백 ---
+        # basis 는 body 마다 기록된다 (Total 과 폴백이 섞일 수 있다). 전부 Total 일 때만 점유율 유효.
         self.energy = []
+        bases = set()
         for b in self.meta.get('bodies', []):
             se = b.get('strain_energy')
-            if se is not None:
-                try:
-                    self.energy.append((b.get('name', '?'), float(se)))
-                except (ValueError, TypeError):
-                    pass
+            if se is None:
+                continue
+            try:
+                self.energy.append((b.get('name', '?'), float(se)))
+            except (ValueError, TypeError):
+                continue
+            bases.add(b.get('strain_energy_basis'))
         self.energy.sort(key=lambda x: x[1], reverse=True)
+        if not bases or bases == {None}:
+            self.basis = None
+        elif bases == {'Total'}:
+            self.basis = 'Total'
+        else:
+            self.basis = 'mixed(' + ','.join(sorted(str(x) for x in bases)) + ')'
 
+    def _normalize_ej(self, ej):
+        """energy.json 의 형태를 검증하고 숫자 필드를 float 로 강제한다. 이상하면 ValueError."""
+        def num(v, default=0.0):
+            try:
+                return float(v)
+            except (TypeError, ValueError):
+                return default
+        sets = ej.get('sets')
+        bodies = ej.get('bodies')
+        if not isinstance(sets, list) or not isinstance(bodies, list):
+            raise ValueError("energy.json: 'sets' and 'bodies' must be lists")
+        nsets = []
+        for s in sets:
+            if not isinstance(s, dict):
+                continue
+            kept = []
+            for r in (s.get('kept') or []):
+                if isinstance(r, dict) and 'body' in r:
+                    kept.append({'body': str(r['body']), 'energy': num(r.get('energy')),
+                                 'share': num(r.get('share')), 'cum_share': num(r.get('cum_share'))})
+            ns = dict(s)
+            ns['kept'] = kept
+            ns['total_energy'] = num(s.get('total_energy'))
+            ns['localized'] = bool(s.get('localized'))
+            for k in ('frequency_hz', 'time_s'):
+                if s.get(k) is not None:
+                    ns[k] = num(s.get(k), None)
+            nsets.append(ns)
+        nbodies = []
+        for b in bodies:
+            if isinstance(b, dict) and 'body' in b:
+                nb = dict(b)
+                nb['body'] = str(b['body'])
+                nb['max_share'] = num(b.get('max_share'))
+                nb['sum_energy'] = num(b.get('sum_energy'))
+                nbodies.append(nb)
+        out = dict(ej)
+        out['sets'] = nsets
+        out['bodies'] = nbodies
+        return out
+
+    def _basis(self):
+        """실제로 쓰인 집계 기준. 모르면 None."""
+        if self.ej:
+            return self.ej.get('energy_basis')
+        return self.basis
+
+    def _shares_valid(self):
+        """점유율(%)을 표시해도 되는가 — 총합 기준일 때만 참."""
+        return self._basis() == self._GOOD_BASIS
+
+    def _set_labels(self):
+        if not self.ej:
+            return ["(metadata strain energy)"]
+        labels = ["종합 — body 별 최대 점유율"]
+        for s in self.ej.get('sets', []):
+            sn = s.get('set')
+            kind = s.get('kind', 'mode')
+            f = s.get('frequency_hz')
+            t = s.get('time_s')
+            if sn is None:
+                lab = "result"
+            elif kind == 'time':
+                lab = ("set {0}  (t={1:.4g} s)".format(sn, t) if t is not None else "set {0}".format(sn))
+            elif kind == 'frequency':
+                lab = ("set {0}  (f={1:.1f} Hz)".format(sn, f) if f else "set {0}".format(sn))
+            elif f:
+                lab = "mode {0}  ({1:.1f} Hz)".format(sn, f)
+            else:
+                lab = "mode {0}".format(sn)
+            if s.get('localized'):
+                lab += "  ◆ localized"
+            labels.append(lab)
+        return labels
+
+    # ------------------------------------------------------------------
     def _update(self, *_):
-        ax = self.pw.axes[0]; ax.cla()
-        if not self.energy:
-            ax.text(0.5, 0.5, "no strain_energy in metadata\n(re-export with ① after this build)",
+        ax = self.pw.axes[0]
+        ax.cla()
+
+        basis = self._basis()
+        valid = self._shares_valid()
+        if basis and not valid:
+            self.warn_lbl.setText(
+                "집계 기준이 '{0}' 다 — 바디 안에서 가장 큰 요소 하나의 값이라 "
+                "합해도 총 에너지가 아니다. 점유율(%)은 신뢰할 수 없어 표시하지 "
+                "않는다. Mechanical 쪽에서 Result.Total 이 읽히는지 GATE "
+                "(verify_energy_api.py) 로 확인할 것.".format(basis))
+            self._warn_active = True
+            self.warn_lbl.setVisible(True)
+        elif basis is None:
+            self.warn_lbl.setText(
+                "집계 기준 미기록 (구버전 metadata). 점유율은 참고용으로만 볼 것.")
+            self._warn_active = True
+            self.warn_lbl.setVisible(True)
+        else:
+            self._warn_active = False
+            self.warn_lbl.setVisible(False)
+
+        if getattr(self, 'ej_error', None):
+            # energy.json 이 있었지만 형식이 깨져 무시됨 - 폴백으로 그리되 사용자에게 알린다
+            self.warn_lbl.setText("energy.json ignored (malformed: {0})  {1}".format(
+                self.ej_error[:100], self.warn_lbl.text()))
+            self._warn_active = True
+            self.warn_lbl.setVisible(True)
+
+        if self.ej:
+            try:
+                self._draw_from_energy_json(ax, valid)
+            except Exception as ex:
+                ax.cla()
+                ax.text(0.5, 0.5, "energy.json could not be drawn:\n" + str(ex)[:120],
+                        ha='center', va='center', transform=ax.transAxes)
+                self.summary_lbl.setText("")
+        elif self.energy:
+            self._draw_legacy(ax, valid)
+        else:
+            ax.text(0.5, 0.5,
+                    "No energy data.\n\nRun [Vibration Energy] in Mechanical,\n"
+                    "then export energy.json into this folder.",
                     ha='center', va='center', transform=ax.transAxes)
             self.summary_lbl.setText("")
-        else:
-            names = [n for n, _ in self.energy]
-            se = [s for _, s in self.energy]
-            total = sum(se) or 1.0
-            y = range(len(names))
-            ax.barh(list(y), se, color=COLORS[0], alpha=0.85, edgecolor='k', lw=0.5)
-            ax.set_yticks(list(y)); ax.set_yticklabels(names, fontsize=8)
-            for i, s in enumerate(se):
-                ax.text(s, i, "  {:.3g} ({:.0%})".format(s, s / total), va='center', fontsize=7)
-            unit = self.meta.get('units', {}).get('energy', 'mJ')
-            ax.set_xlabel("Strain Energy [{}]".format(unit))
-            ax.set_title("Strain energy by body")
-            ax.invert_yaxis()
-            ax.grid(True, axis='x', alpha=0.3)
-            self.summary_lbl.setText("Total = {:.4g} {}   over {} bodies".format(
-                total, unit, len(names)))
         self.pw.draw()
+
+    def _draw_from_energy_json(self, ax, valid):
+        idx = max(0, self.set_cb.currentIndex())
+        unit = (self.ej.get('units') or {}).get('energy', '')
+
+        if idx == 0:
+            rows = [(b['body'], b.get('max_share', 0.0), b.get('sum_energy', 0.0),
+                     b.get('worst_set')) for b in self.ej.get('bodies', [])]
+            title = "Peak share per body (across all sets)"
+            xlabel = "max share of a set [%]" if valid else "cumulative energy [{0}]".format(unit)
+            vals = [r[1] * 100 for r in rows] if valid else [r[2] for r in rows]
+            annot = [("set {0}".format(r[3]) if r[3] is not None else "") for r in rows]
+        else:
+            s = self.ej.get('sets', [])[idx - 1]
+            kept = s.get('kept', [])
+            rows = [(r['body'], r.get('share', 0.0), r.get('energy', 0.0), None)
+                    for r in kept]
+            f = s.get('frequency_hz')
+            t = s.get('time_s')
+            kind = s.get('kind', 'mode')
+            sn = s.get('set')
+            head = ("mode {0}".format(sn) if kind == 'mode' and sn is not None
+                    else ("set {0}".format(sn) if sn is not None else "result"))
+            tag = ("  t={0:.4g} s".format(t) if (kind == 'time' and t is not None)
+                   else ("  f={0:.1f} Hz".format(f) if f else ""))
+            title = "{0}{1} - total {2:.4g} {3}".format(head, tag, s.get('total_energy', 0.0), unit)
+            xlabel = "share [%]" if valid else "energy [{0}]".format(unit)
+            vals = [r[1] * 100 for r in rows] if valid else [r[2] for r in rows]
+            annot = [""] * len(rows)
+
+        if not rows:
+            ax.text(0.5, 0.5, "No bodies passed the filter for this set",
+                    ha='center', va='center', transform=ax.transAxes)
+            self.summary_lbl.setText("")
+            return
+
+        names = [r[0] for r in rows]
+        y = list(range(len(names)))
+        # 1위는 눈에 띄게
+        colors = [COLORS[3] if i == 0 else COLORS[0] for i in y]
+        ax.barh(y, vals, color=colors, alpha=0.9, edgecolor='k', lw=0.5)
+        ax.set_yticks(y)
+        ax.set_yticklabels(names, fontsize=8)
+        for i, v in enumerate(vals):
+            txt = ("  {0:.1f}%".format(v) if valid else "  {0:.3g}".format(v))
+            if annot[i]:
+                txt += "  ({0})".format(annot[i])
+            ax.text(v, i, txt, va='center', fontsize=7)
+        ax.set_xlabel(xlabel)
+        ax.set_title(title, fontsize=10)
+        ax.invert_yaxis()
+        ax.grid(True, axis='x', alpha=0.3)
+
+        sets = self.ej.get('sets', [])
+        nloc = len([s for s in sets if s.get('localized')])
+        self.summary_lbl.setText(
+            "analysis: {0} [{1}]   basis: {2}   set {3}개 (localized {4}개)   worst: {5}".format(
+                self.ej.get('analysis', '?'), self.ej.get('analysis_type', '?'),
+                self.ej.get('energy_basis', '?'), len(sets), nloc,
+                self.ej.get('worst_body', '?')))
+
+    def _draw_legacy(self, ax, valid):
+        names = [n for n, _ in self.energy]
+        se = [s for _, s in self.energy]
+        unit = (self.meta.get('units') or {}).get('energy', 'mJ')
+        total = sum(se) or 1.0
+        y = list(range(len(names)))
+        colors = [COLORS[3] if i == 0 else COLORS[0] for i in y]
+        ax.barh(y, se, color=colors, alpha=0.9, edgecolor='k', lw=0.5)
+        ax.set_yticks(y)
+        ax.set_yticklabels(names, fontsize=8)
+        for i, s in enumerate(se):
+            if valid:
+                ax.text(s, i, "  {0:.3g} ({1:.0%})".format(s, s / total), va='center', fontsize=7)
+            else:
+                ax.text(s, i, "  {0:.3g}".format(s), va='center', fontsize=7)
+        ax.set_xlabel("Strain Energy [{0}]".format(unit))
+        ax.set_title("Strain energy by body", fontsize=10)
+        ax.invert_yaxis()
+        ax.grid(True, axis='x', alpha=0.3)
+        if valid:
+            self.summary_lbl.setText(
+                "Total = {0:.4g} {1}   over {2} bodies".format(total, unit, len(names)))
+        else:
+            self.summary_lbl.setText(
+                "{0} bodies — 합계는 총 에너지가 아니므로 표시하지 않는다.".format(len(names)))
 
     def _save_png(self):
         p, _ = QFileDialog.getSaveFileName(self, "Save PNG", "energy.png", "PNG (*.png)")
@@ -438,7 +702,6 @@ class EnergyTab(QWidget):
             self.pw.export_png(p)
 
 
-# ── Tab: Reactions (global reaction forces per boundary condition) ────
 class ReactionsTab(QWidget):
     """Grouped bar of Rx/Ry/Rz/|R| per reaction scope. Reads top-level `reactions` (a list of
     {scope,x,y,z,mag}) — added by a future ForceReaction extraction. Placeholder when absent."""
