@@ -455,14 +455,25 @@
           DestinationFolder="$(MechanicalExtDir)\images"
           SkipUnchangedFiles="true" />
 
-    <!-- Copy postprocess (Python source + EXE if built) -->
+    <!-- Copy postprocess (Python source + EXE if built).
+         목록은 Installer\MXDigitalTwinModeller.wxs PostProcessComponents 와 1:1 이어야 한다
+         (2026-09-02 감사: sweep_analyzer.py 가 MSI 에는 있고 여기엔 없었다). -->
     <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\postprocess\runner.py;
                        $(ProjectDir)Mechanical\MXSimulator\postprocess\analyzer.py;
                        $(ProjectDir)Mechanical\MXSimulator\postprocess\visualizer.py;
+                       $(ProjectDir)Mechanical\MXSimulator\postprocess\sweep_analyzer.py;
                        $(ProjectDir)Mechanical\MXSimulator\postprocess\requirements.txt;
                        $(ProjectDir)Mechanical\MXSimulator\postprocess\setup_venv.bat;
                        $(ProjectDir)Mechanical\MXSimulator\postprocess\build_viewer.bat"
           DestinationFolder="$(MechanicalExtDir)\postprocess"
+          SkipUnchangedFiles="true" />
+
+    <!-- Copy batch (DPF sidecar) - wxs BatchComponents 와 동일 목록 -->
+    <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\batch\mx_batch.py;
+                       $(ProjectDir)Mechanical\MXSimulator\batch\selftest_mx_batch.py;
+                       $(ProjectDir)Mechanical\MXSimulator\batch\requirements.txt;
+                       $(ProjectDir)Mechanical\MXSimulator\batch\README.md"
+          DestinationFolder="$(MechanicalExtDir)\batch"
           SkipUnchangedFiles="true" />
     <Copy SourceFiles="$(ProjectDir)Mechanical\MXSimulator\postprocess\MXPostViewer.exe"
           DestinationFolder="$(MechanicalExtDir)\postprocess"
@@ -537,7 +548,7 @@
        new version; it flows to the MSI (via -d Version=) which drives MajorUpgrade, so an
        install over an older build upgrades in place automatically. -->
   <PropertyGroup>
-    <MXVersion>1.5.0</MXVersion>
+    <MXVersion>1.6.0</MXVersion>
   </PropertyGroup>
 
   <Target Name="BuildInstaller" AfterTargets="ClearWorkbenchRibbonCache">
@@ -548,17 +559,23 @@
       <ViewerExeExists Condition="!Exists('$(ProjectDir)Mechanical\MXSimulator\postprocess\MXPostViewer.exe')">false</ViewerExeExists>
       <CanBuildMsi>false</CanBuildMsi>
       <CanBuildMsi Condition="'$(CalibratorExeExists)' == 'true' AND '$(ViewerExeExists)' == 'true'">true</CanBuildMsi>
+      <!-- build_release.ps1 -SkipMsi -> /p:SkipMsi=true : DLL/ACT deploy 는 하되 MSI 는 만들지 않는다 -->
+      <CanBuildMsi Condition="'$(SkipMsi)' == 'true'">false</CanBuildMsi>
     </PropertyGroup>
 
     <Message Text="MSI build skipped: PyInstaller EXE(s) missing. Run build_release.ps1 (it builds MXPostViewer.exe, MaterialCalibrator.exe, the MCP bridge EXEs, then the MSI) - or the individual build_viewer.bat / build_calibrator.bat / tools\mcp_bridge\build_bridge.bat."
              Importance="high"
-             Condition="'$(CanBuildMsi)' != 'true'" />
+             Condition="'$(CanBuildMsi)' != 'true' AND '$(SkipMsi)' != 'true'" />
     <Message Text="  - MaterialCalibrator.exe: $(CalibratorExeExists)"
              Importance="high"
-             Condition="'$(CanBuildMsi)' != 'true'" />
+             Condition="'$(CanBuildMsi)' != 'true' AND '$(SkipMsi)' != 'true'" />
     <Message Text="  - MXPostViewer.exe: $(ViewerExeExists)"
              Importance="high"
-             Condition="'$(CanBuildMsi)' != 'true'" />
+             Condition="'$(CanBuildMsi)' != 'true' AND '$(SkipMsi)' != 'true'" />
+
+    <Message Text="MSI build skipped: SkipMsi=true (build_release.ps1 -SkipMsi). DLL + ACT deploy done."
+             Importance="high"
+             Condition="'$(SkipMsi)' == 'true'" />
 
     <Exec Command="wix build &quot;$(ProjectDir)Installer\MXDigitalTwinModeller.wxs&quot; -d BuildOutputDir=&quot;$(OutputPath.TrimEnd('\\'))&quot; -d ProjectDir=&quot;$(ProjectDir.TrimEnd('\\'))&quot; -d Configuration=$(Configuration) -d Version=$(MXVersion) -ext WixToolset.UI.wixext -o &quot;$(ProjectDir)Installer\MXDigitalTwinModeller.msi&quot; -arch x64 --nologo"
           IgnoreExitCode="false"

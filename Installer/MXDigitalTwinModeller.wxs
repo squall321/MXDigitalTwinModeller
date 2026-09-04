@@ -1,11 +1,11 @@
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
      xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
     <!-- Version is injected at build time from the single source of truth (MSBuild
-         property MXVersion, passed as -d Version=...). Defaults to 1.4.0 if built with a
+         property MXVersion, passed as -d Version=...). Defaults to 1.6.0 if built with a
          bare `wix build`. Bumping MXVersion in the .csproj naturally drives MajorUpgrade
          (an in-place upgrade that removes the old build before installing the new one). -->
     <?ifndef Version ?>
-        <?define Version = "1.4.0" ?>
+        <?define Version = "1.6.0" ?>
     <?endif?>
     <Package
         Name="MX Digital Twin Modeller"
@@ -191,6 +191,18 @@
                       Source="$(ProjectDir)\Mechanical\MXSimulator\run_cap_vibration.py"
                       KeyPath="yes" />
             </Component>
+            <!-- venv setup helpers for the Python fallback of Material Twin (root, not calibration\):
+                 main.py probes <ext>\calibration_env and setup_venv.bat creates %~dp0calibration_env. -->
+            <Component Id="CalibrationRequirements" Guid="*">
+                <File Id="calibration_requirements.txt" Name="requirements.txt"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\requirements.txt"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="CalibrationSetupVenv" Guid="*">
+                <File Id="calibration_setup_venv.bat" Name="setup_venv.bat"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\setup_venv.bat"
+                      KeyPath="yes" />
+            </Component>
         </ComponentGroup>
 
         <!-- ================================================================ -->
@@ -226,6 +238,18 @@
             <Component Id="MaterialTwinIcon" Guid="*">
                 <File Id="material_twin.png"
                       Source="$(ProjectDir)\Mechanical\MXSimulator\images\material_twin.png"
+                      KeyPath="yes" />
+            </Component>
+            <!-- Export K-File / Tied Check 버튼 아이콘. csproj 의 DeployMechanicalExtension 은
+                 8개를 다 복사했지만 MSI 에는 이 둘이 빠져 있었다 (MXSimulator.xml 이 참조). -->
+            <Component Id="KFileExportIcon" Guid="*">
+                <File Id="kfile_export.png"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\images\kfile_export.png"
+                      KeyPath="yes" />
+            </Component>
+            <Component Id="TiedCheckIcon" Guid="*">
+                <File Id="tied_check.png"
+                      Source="$(ProjectDir)\Mechanical\MXSimulator\images\tied_check.png"
                       KeyPath="yes" />
             </Component>
         </ComponentGroup>
@@ -352,17 +376,10 @@
                       KeyPath="yes" />
             </Component>
 
-            <!-- Setup helpers (from parent MXSimulator folder) -->
-            <Component Id="CalibrationRequirements" Guid="*">
-                <File Id="calibration_requirements.txt" Name="requirements.txt"
-                      Source="$(ProjectDir)\Mechanical\MXSimulator\requirements.txt"
-                      KeyPath="yes" />
-            </Component>
-            <Component Id="CalibrationSetupVenv" Guid="*">
-                <File Id="calibration_setup_venv.bat" Name="setup_venv.bat"
-                      Source="$(ProjectDir)\Mechanical\MXSimulator\setup_venv.bat"
-                      KeyPath="yes" />
-            </Component>
+            <!-- setup_venv.bat / requirements.txt 는 확장 루트(MECHANICALFOLDER)에 있어야 한다:
+                 csproj DeployMechanicalExtension 과 deploy_mxsimulator.sh 가 루트에 두고,
+                 setup_venv.bat 의 %~dp0calibration_env 가 main.py 가 찾는 <ext>\calibration_env 가 된다.
+                 -> MechanicalComponents 로 이동 (2026-09-02 감사). -->
             <Component Id="CalibrationInit" Guid="*">
                 <File Id="calibration_init.py" Name="__init__.py"
                       Source="$(ProjectDir)\Mechanical\MXSimulator\calibration\__init__.py"

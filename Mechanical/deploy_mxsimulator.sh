@@ -60,10 +60,20 @@ fi
 cp "$SRC_DIR/MXSimulator/postprocess/runner.py"        "$EXT_ROOT/MXSimulator/postprocess/"
 cp "$SRC_DIR/MXSimulator/postprocess/analyzer.py"      "$EXT_ROOT/MXSimulator/postprocess/"
 cp "$SRC_DIR/MXSimulator/postprocess/visualizer.py"    "$EXT_ROOT/MXSimulator/postprocess/"
+cp "$SRC_DIR/MXSimulator/postprocess/sweep_analyzer.py" "$EXT_ROOT/MXSimulator/postprocess/"
 cp "$SRC_DIR/MXSimulator/postprocess/requirements.txt" "$EXT_ROOT/MXSimulator/postprocess/"
 cp "$SRC_DIR/MXSimulator/postprocess/setup_venv.bat"   "$EXT_ROOT/MXSimulator/postprocess/"
 cp "$SRC_DIR/MXSimulator/postprocess/build_viewer.bat" "$EXT_ROOT/MXSimulator/postprocess/"
 echo "[OK] postprocess/ (Python sources)"
+
+# batch/ 배포 (DPF sidecar) - MSI BatchComponents / csproj 와 같은 목록
+mkdir -p "$EXT_ROOT/MXSimulator/batch"
+for f in mx_batch.py selftest_mx_batch.py requirements.txt README.md; do
+    if [ -f "$SRC_DIR/MXSimulator/batch/$f" ]; then
+        cp "$SRC_DIR/MXSimulator/batch/$f" "$EXT_ROOT/MXSimulator/batch/"
+    fi
+done
+echo "[OK] batch/"
 
 # MXSimulator.xml 배포 (항상)
 cp "$SRC_DIR/MXSimulator.xml" "$EXT_ROOT/MXSimulator.xml"

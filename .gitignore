@@ -155,3 +155,6 @@ tools/mcp_bridge/dist/
 tools/mcp_bridge/*.spec
 *.exe
 *.pkg
+
+# build_release.ps1 이 만드는 PyInstaller 전용 venv (루트)
+.venv-build/
