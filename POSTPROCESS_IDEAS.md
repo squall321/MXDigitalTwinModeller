@@ -558,10 +558,45 @@ MXDigitalTwinModeller.wxs` 에 `BatchDir` + `BatchComponents`(mx_batch.py/selfte
 `batch/README.md` 가 one-time venv 셋업(`python -m venv .venv-pyansys` + `pip install -r requirements.txt`)
 안내. ACT 다이얼로그의 "Run DPF deep analysis" 체크박스가 그 venv 를 찾으면 자동 실행.
 
+### 파트별 진동에너지 (M10/T4) — 구현 완료, GATE 대기 (2026-09-02)
+
+**발견**: `EnergyContribution` (`Results.FrequencyResponseResults.EnergyContribution`) 가
+정확히 M10 이다. v252 Student 에 존재. `EnergyType` = KineticEnergy/StrainEnergy/TotalEnergy,
+`TopBodiesToDisplay` = 상위 N 바디 자동 랭킹, `ModeSelection` = ModalEffectiveMass,
+`ShowTextOnMosaic`. **§2.1 표에서 M10 을 "DPF / effort H" 로 잡았는데 ACT 한 줄이다.**
+`Results.Result` 베이스에 `Total` / `PlotData` / `TabularData` / `AddFigure` /
+`ExportToTextFile` 이 있다는 것도 확인 (파생 클래스 XML 에 상속 멤버가 안 실려서 놓쳤던 것).
+
+**고친 버그**: `main.py` 는 `ElementalStrainEnergy` 에 `MaximumOfMaximumOverTime` 을 써서
+`strain_energy` 를 채웠다 — 그건 **그 바디에서 가장 뜨거운 요소 1개** 값이지 총합이 아니다.
+그런데 뷰어 `EnergyTab` 이 그 값들을 합산해 `%` 를 찍고 있었다(무의미). `.Total` 우선 +
+폴백으로 바꾸고 `strain_energy_basis` 를 metadata 에 남겨 소비자가 판단하게 했다.
+**schema_version 2.0 -> 2.1** (필드 추가가 아니라 `strain_energy` 의 의미가 바뀌므로).
+
+**추가된 것**:
+- `EnergyDialog` + 툴바 `Vibration Energy` (버튼 1개) — body 별 `ElementalStrainEnergy` 를
+  set(모드)별로 평가 -> 점유율 -> **누적 컷/Top-N/최소 점유율로 의미 있는 것만 남기고
+  탈락분은 트리에서 삭제** -> 남은 것은 `E1 [62%] BodyName` 으로 개명 -> `EnergyContribution`
+  모자이크 3종 추가 -> 최대 에너지 body 에 TotalDeformation + `AddFigure()` -> `energy.json`.
+- 뷰어 `EnergyTab` 재작성: `energy.json` 로드, 모드 선택 콤보(주파수/localized 표시),
+  **basis 가 Total 이 아니면 % 를 아예 안 그리고 경고 배너**. `_warn_active` 로 상태 노출
+  (Qt `isVisible()` 은 창을 안 띄우면 항상 False 라 검증 불가 — 셀프테스트가 이걸 잡았다).
+- `selftest_tabs.py` 확장: energy.json basis 2종 + metadata 2.1 + 레거시 폴백.
+  **TABS_OK + ENERGY_OK**.
+
+**미확정 (GATE 필요)**: `.claude/skills/ansys-api-catalog/verification/verify_energy_api.py`
+를 solve 된 모델에서 돌릴 것. 확인 대상 — (G1) 해석 타입별 `AddEnergyContribution` 가용성,
+(G2) 프로퍼티 쓰기, (G3) `Result.Total` 실제 값 + Total/Max 비율로 버그 실증,
+(G4) EnergyContribution 숫자 회수(모자이크 결과라 막혀 있을 수 있음 → 막히면 KE 는
+시각화 전용), (G5) `AddFigure`, (G6) 모달 `SetNumber` 실효성.
+판정 한 줄: `ENERGY_GATE: OK / PARTIAL / BLOCKED`.
+**주의: `.claude/` 는 .gitignore 대상이라 이 GATE 스크립트는 커밋되지 않는다.**
+
 ### 다음 (미착수)
 - §10.3 LLM 리포터 스파이크 — ⚠️ **API 키 사용(제외 대상)**
-- Phase 3 DOE driver(라이브 파라메트릭 solve, ansys-mechanical-core 필요 → SP03 secure-gRPC 벽) + sweep 뷰어 탭
-- sweep_analyzer 를 뷰어에 Sweep 탭으로 노출(여러 metadata.json 폴더 로드)
+- Phase 3 DOE driver(라이브 파라메트릭 solve, ansys-mechanical-core 필요 → SP03 secure-gRPC 벽)
+- ~~sweep_analyzer 를 뷰어에 Sweep 탭으로 노출(여러 metadata.json 폴더 로드)~~ → **이미 있음** (`visualizer.py` `SweepTab`, 폴더 열기 포함; 2026-09-03 감사에서 확인)
+- Vibration Energy 후속: GATE(`verify_energy_api.py`) 실측, 하모닉/트랜지언트 `SetNumber` 의미 확인 — [[lat.md/status.md]] "다음" 참조
 
 ---
 

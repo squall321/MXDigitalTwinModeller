@@ -7,7 +7,7 @@ lat:
 
 두 바디 사이의 접촉 면 페어를 검출해서 Named Selection 으로 저장한다. [[face-analysis]] 의 단순한 방향별 NS 보다 정교한 접근으로, 거리/법선/위치 기반 매칭을 거쳐 실제로 마주보는 면 쌍을 찾아낸다. Tied Contact ([[tied-check]]) 의 입력으로 사용됨.
 
-`Face Pair NS` 툴바 버튼 → `show_face_pair_dialog` → `FacePairDialog` (라인 1103). 두 가지 모드 지원: **merge mode** (모든 페어를 두 개의 NS 로 묶음) 와 **per-pair mode** (페어별로 별도 NS).
+`Face Pair NS` 툴바 버튼 → `show_face_pair_dialog` → `FacePairDialog` (라인 1108). 두 가지 모드 지원: **merge mode** (모든 페어를 두 개의 NS 로 묶음) 와 **per-pair mode** (페어별로 별도 NS).
 
 ## Face Pair 검출
 
@@ -19,7 +19,7 @@ lat:
 
 이전에 중복 검출 버그가 있었음 (커밋 `e6f5de5`) — 같은 면 쌍이 다른 face index 로 두 번 잡히는 문제를 geo_key 정규화로 해결.
 
-진입점: `[[Mechanical/MXSimulator/main.py#FacePairDialog]]` (라인 1103). `_detect_pairs` 가 라인 1345.
+진입점: `[[Mechanical/MXSimulator/main.py#FacePairDialog]]` (라인 1108). `_detect_pairs` 가 라인 1351.
 
 ## NS 생성 — Merge Mode
 
@@ -31,7 +31,7 @@ lat:
 
 페어별로 별도 NS 두 개씩 생성 (`Pair_01_Target`, `Pair_01_Other`, `Pair_02_Target`, ...). 페어별로 다른 접촉 설정을 주거나, 어느 페어가 Tied 가 안 됐는지 디버깅할 때 유리.
 
-내부 메서드: `_create_ns_per_pair()` — `FacePairDialog` 클래스 내. `on_create_ns` (라인 1478) 가 모드 분기를 처리.
+내부 메서드: `_create_ns_per_pair()` — `FacePairDialog` 클래스 내. `on_create_ns` (라인 1485) 가 모드 분기를 처리.
 
 ## Include / Exclude 로직
 

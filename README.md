@@ -5,11 +5,11 @@
 
 - **SpaceClaim Add-In**: 무에서 폰 생성(곡면 back/멀티렌즈/플랭크 포트/그릴/버튼/안테나),
   피처 수정, CAE 시편·메싱·라미네이트, 역설계(FeatureGraph)
-- **MCP 서버**: 46개 LLM 도구를 Claude Desktop에 노출 (stdio 브리지)
-- **Mechanical ACT Extension**: 접촉면 검출, 모달 해석, 시나리오, 포스트프로세스, 물성 캘리브레이션
+- **MCP 서버**: 63개 LLM 도구를 Claude Desktop에 노출 (stdio 브리지; `Services/ReverseEngineer/LlmToolRegistry.cs`)
+- **Mechanical ACT Extension**: 접촉면 검출, 모달 해석, 시나리오, 포스트프로세스, **파트별 진동에너지**, 물성 캘리브레이션
 
-**대상 환경**: SpaceClaim / ANSYS **v252** (Student 시트에서 45/46 도구 가동; `mesh_with_gmsh`만
-STEP-export 라이선스 필요). 현재 버전 **1.5.0**.
+**대상 환경**: SpaceClaim / ANSYS **v252** (Student 시트 기준 `mesh_with_gmsh`만 STEP-export
+라이선스 필요). 현재 버전 **1.6.0**.
 
 ## 기능
 
@@ -27,8 +27,11 @@ STEP-export 라이선스 필요). 현재 버전 **1.5.0**.
 
 ### Mechanical ACT Extension
 
-- 접촉면 자동 검출·명명, 모달 해석, 시나리오 생성, 포스트프로세스 뷰어(MXPostViewer),
-  물성 캘리브레이터(MaterialCalibrator)
+- 접촉면 자동 검출·명명, 모달 해석, 시나리오 생성, 포스트프로세스 뷰어(MXPostViewer —
+  Summary / Time History / FFT / FRF / Fatigue / Energy / Reactions / Sweep 탭), 물성 캘리브레이터(MaterialCalibrator)
+- **Vibration Energy** (버튼 하나): Modal/Harmonic/Transient 결과에서 파트별 진동에너지 점유율을 뽑아
+  의미 있는 파트만 남기고, `EnergyContribution` 모자이크와 최대 에너지 파트의 Total Deformation 뷰를
+  자동 생성, `energy.json` 으로 뷰어에 연결
 
 ## 설치 (엔드유저)
 
@@ -48,9 +51,11 @@ STEP-export 라이선스 필요). 현재 버전 **1.5.0**.
 .\build_release.ps1
 ```
 
-이 스크립트가 PyInstaller로 MXPostViewer.exe / MaterialCalibrator.exe / MCP 브리지 exe 2개를
-(없으면) 빌드한 뒤 MSBuild로 DLL + ACT 배포 + WiX MSI 를 생성합니다. **⚠️ 빌드 전 SpaceClaim을
-닫으세요** (DLL 잠금).
+이 스크립트가 전용 venv(`.venv-build`)에서 PyInstaller로 MXPostViewer.exe / MaterialCalibrator.exe /
+MCP 브리지 exe 2개를 **소스보다 오래됐거나 없으면** 빌드한 뒤 MSBuild로 DLL + ACT 배포 + WiX MSI 를
+생성합니다 (`-Rebuild` = EXE 강제 재빌드, `-SkipMsi` = MSI 생략). 시스템 Python 으로 직접 PyInstaller 를
+돌리지 마세요 — torch 같은 무거운 패키지가 딸려 들어와 EXE 가 수 GB 가 됩니다. **⚠️ 빌드 전 SpaceClaim을
+닫으세요** (DLL 잠금). 상세: `lat.md/build-deploy.md`.
 
 DLL만 빠르게:
 
@@ -84,11 +89,12 @@ MXDigitalTwinModeller/
 │   └── Scripts/                   # IronPython 스크립트 (01-16, pipeline.py)
 │
 ├── Mechanical/                    # ANSYS Mechanical ACT Extension
+│   ├── MXSimulator.xml            # ACT 확장 정의 (툴바/버튼 → main.py 콜백)
 │   └── MXSimulator/
-│       ├── extension.xml          # ACT 확장 정의
-│       ├── main.py                # IronPython 로직 (WPF UI)
-│       ├── images/                # 리본 아이콘
-│       └── README.md
+│       ├── main.py                # IronPython 로직 (WPF 다이얼로그 9개)
+│       ├── images/                # 리본 아이콘 8개
+│       ├── postprocess/           # 뷰어 (visualizer.py / MXPostViewer.exe)
+│       └── calibration/           # 물성 캘리브레이터 (MaterialCalibrator.exe)
 │
 ├── Installer/                     # WiX 인스톨러
 │   ├── MXDigitalTwinModeller.wxs
@@ -112,9 +118,9 @@ MXDigitalTwinModeller/
 ### Mechanical
 
 1. ANSYS Mechanical 실행
-2. `MXSimulator` 탭 클릭
-3. `Load` 패널 → `Cap Vibration` 버튼
-4. 진동 파라미터 입력 후 Apply
+2. `MX Digital Twin Simulation` 툴바 (Face Pair NS · Named Selections · Modal Analysis · Add Scenario ·
+   Post-Process · **Vibration Energy** · Export K-File · Tied Check), `MX Material Twin Simulation` 툴바 (Tensile Test)
+3. 예: solve 된 모달/트랜지언트 해석에서 `Vibration Energy` → Analyze → `energy.json` 내보내기 → Post-Process 뷰어 Energy 탭
 
 ### Python 스크립트 (PyAnsys)
 

@@ -1,6 +1,6 @@
 # Mechanical ACT Extension (MXSimulator)
 
-ANSYS Mechanical 에 `MXSimulator` 탭을 추가하는 ACT Extension. IronPython + WPF 로 작성되었고, 모든 다이얼로그가 `[[Mechanical/MXSimulator/main.py]]` 안에 정의되어 있다 (단일 파일 5000+ 라인).
+ANSYS Mechanical 에 `MXSimulator` 탭을 추가하는 ACT Extension. IronPython + WPF 로 작성되었고, 모든 다이얼로그가 `[[Mechanical/MXSimulator/main.py]]` 안에 정의되어 있다 (단일 파일 6,300+ 라인). 아래 줄번호는 2026-09-03 기준 — `grep -nE "^class |^def " main.py` 로 재생성한다.
 
 진입점은 `[[Mechanical/MXSimulator.xml]]` (ACT 정의 파일) — 이 파일이 두 개의 툴바를 정의하고, 각 버튼이 `main.py` 의 `show_*_dialog` 함수를 호출한다.
 
@@ -15,6 +15,7 @@ ANSYS Mechanical 에 `MXSimulator` 탭을 추가하는 ACT Extension. IronPython
 | Modal Analysis | `show_modal_dialog` | [[scenarios#Modal Analysis]] |
 | Add Scenario | `show_scenario_dialog` | [[scenarios#Cap Vibration Scenario]] |
 | Post-Process | `show_postprocess_dialog` | [[postprocess#Post-Process Dialog]] |
+| Vibration Energy | `show_energy_dialog` | [[postprocess#Vibration Energy]] |
 | Export K-File | `show_export_kfile_dialog` | [[postprocess#K-File Export]] |
 | Tied Check | `show_tied_check_dialog` | [[tied-check]] |
 
@@ -26,16 +27,17 @@ ANSYS Mechanical 에 `MXSimulator` 탭을 추가하는 ACT Extension. IronPython
 
 ## 단일 파일 구조
 
-모든 다이얼로그가 `[[Mechanical/MXSimulator/main.py]]` 한 파일에 들어있다. WPF `Window` 를 상속한 8개 클래스가 정의됨:
+모든 다이얼로그가 `[[Mechanical/MXSimulator/main.py]]` 한 파일에 들어있다. WPF `Window` 를 상속한 9개 클래스가 정의됨:
 
 - `NSDialog` — [[face-analysis]] (라인 186)
-- `ModalDialog` — [[scenarios#Modal Analysis]] (라인 564)
-- `ScenarioDialog` — [[scenarios#Cap Vibration Scenario]] (라인 689)
-- `FacePairDialog` — [[face-pair-ns]] (라인 1103)
-- `PostProcessDialog` — [[postprocess#Post-Process Dialog]] (라인 1642)
-- `ExportKFileDialog` — [[postprocess#K-File Export]] (라인 2173)
-- `TiedContactCheckDialog` — [[tied-check]] (라인 3210)
-- `MaterialTwinDialog` — [[material-calibrator]] (라인 4210)
+- `ModalDialog` — [[scenarios#Modal Analysis]] (라인 568)
+- `ScenarioDialog` — [[scenarios#Cap Vibration Scenario]] (라인 694)
+- `FacePairDialog` — [[face-pair-ns]] (라인 1108)
+- `PostProcessDialog` — [[postprocess#Post-Process Dialog]] (라인 1651)
+- `ExportKFileDialog` — [[postprocess#K-File Export]] (라인 2475)
+- `TiedContactCheckDialog` — [[tied-check]] (라인 3517)
+- `MaterialTwinDialog` — [[material-calibrator]] (라인 4521)
+- `EnergyDialog` — [[postprocess#Vibration Energy]] (라인 5644, 파일 끝에 자기완결형으로 추가)
 
 각 클래스의 `show_*_dialog(analysis)` 진입점이 외부에서 호출 가능한 인터페이스. 다이얼로그는 `analysis` (선택된 Analysis 객체) 를 인자로 받는다.
 
@@ -43,8 +45,8 @@ ANSYS Mechanical 에 `MXSimulator` 탭을 추가하는 ACT Extension. IronPython
 
 - `on_init` (라인 58) — Extension 초기화 콜백. Shared DLL 로드 시도.
 - `classify_normal_direction()` (라인 87) — 면 법선을 ±X/Y/Z 6방향으로 분류. [[face-analysis]] 와 [[face-pair-ns]] 양쪽에서 사용.
-- `_lbl`, `_tb`, `_row`, `_hdr` (라인 128–171) — WPF 위젯 생성 헬퍼.
-- `Initialize` / `Finalize` (라인 5256, 5260) — ACT 라이프사이클 콜백.
+- `_lbl` (라인 128), `_tb` (라인 137), `_row` (라인 147), `_sep` (라인 156), `_btn` (라인 3450) — 모듈 레벨 WPF 위젯 생성 헬퍼 (`_hdr` 는 각 다이얼로그 안의 지역 헬퍼).
+- `Initialize` (라인 5581) / `Finalize` (라인 5585) — ACT 라이프사이클 콜백.
 
 ## 공용 Core DLL 로드
 
