@@ -161,15 +161,15 @@ curl -H "$T" -X DELETE http://srv:8770/jobs/<job_id>   # 끝난 잡 폴더 삭�
 
 ## 알려진 한계 (mx_batch 쪽)
 
-- `hotspots` 클러스터 반경 `eps_mm=2.0`은 **좌표 단위를 변환하지 않습니다.** 결과 좌표가 m 단위(Mechanical 기본 MKS)면
-  2 m 반경이라 상위 노드가 한 클러스터로 뭉칠 수 있습니다. 실결과로 `selftest_live.py`를 돌릴 때 `n_clusters`를 확인하세요.
-- `participation`은 `elemental_mass` 연산자가 없으면 단위질량(`unit_mass`)으로 떨어집니다. 값의 스케일이 달라지므로 `method`를 함께 보세요.
+- `hotspots` 클러스터 반경은 `eps_mm=2.0`(mm) 을 결과 좌표 단위(`coordinates_field.unit`)로 환산해 쓴다. 결과의 `coord_unit`,
+  `eps_coord_units` 로 확인할 수 있고, 단위를 인식 못 하면 mm 로 가정하고 `eps_unit_assumed: true` 를 남긴다.
+- `participation` 은 `elemental_mass` 연산자가 없으면 단위질량(`unit_mass`)으로 떨어진다 — 값의 스케일이 달라지므로 `method` 를 함께 볼 것.
 
 ## 개발 / 테스트 (라이선스 불필요)
 
 ```bash
 pip install -r requirements-dev.txt     # 또는 fastapi uvicorn python-multipart pytest httpx
-python -m pytest -q tests               # 30 tests
+python -m pytest -q tests               # 41 tests (저장소 안에서 실행 — mx_batch.py 를 직접 테스트)
 ```
 
 `tests/fake/`의 가짜 `mx_batch.py`와 가짜 `ansys.dpf.core`로 다음을 검증합니다.
@@ -183,3 +183,4 @@ python -m pytest -q tests               # 30 tests
 - 딥 헬스 (정상, 라이선스 실패, DPF 미설치)
 - MCP 프로토콜 (협상, 알림, 배치, 오류 코드)
 - 재시작 복구, TTL
+- 실제 `mx_batch.py` 의 hotspot 단위 환산 (m, mm, cm, in 좌표 × scipy/numpy 경로)

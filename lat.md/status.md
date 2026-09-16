@@ -140,8 +140,16 @@ GATE 가 `.claude/`(gitignore) 에만 있음(결정 항목).
 1. **GATE 실행** — solve 된 모델을 열고 `verify_energy_api.py` 를 돌려 `ENERGY_GATE` 판정 확인. G4(EnergyContribution 숫자 회수) 결과에 따라 KE 가 숫자인지 차트 전용인지 확정. G6 이 하모닉/트랜지언트 `SetNumber` 의미까지는 검증하지 않으므로, 하모닉·트랜지언트 모델에서 `Vibration Energy` 로그의 세트 값(f/t) 이 실제 주파수/시간과 맞는지 확인.
 2. **1.6.0 MSI 설치 테스트** — 신규 설치는 이 머신에서 완료·검증(위 "배포"). 남은 것: (a) 1.5.0 이 깔린 머신에서 in-place 업그레이드, (b) Workbench 재시작 후 `Vibration Energy` 버튼과 아이콘 8개 확인, Post-Process 뷰어에서 Energy 탭이 보이는지(= 새 EXE 가 실렸는지), Material Twin 캘리브레이션이 venv 없이 EXE 로 도는지, (c) Claude Desktop 재시작 후 `mxdtm-spaceclaim` 도구가 보이는지 — 셋 다 GUI 상호작용이라 사람이 해야 한다.
 3. ~~`verify_energy_api.py` 를 추적 대상 트리로 옮길지 결정~~ → **`Test/gates/` 에 추적 사본** (2026-09-16, `.claude/` 원본과 함께 유지).
-4. `lat.md/mechanical/postprocess.md` 의 K-File 절 메서드 줄번호는 재생성했지만, 그 절의 설명 자체는 이번 세션 이전 것 — 내용 재검토는 별도.
-5. POSTPROCESS_IDEAS.md "### 다음 (미착수)" (§595) 항목 중 LLM 리포터(API 키 제외 대상)와 DOE driver 는 그대로. "sweep_analyzer 를 뷰어 Sweep 탭으로 노출"은 이미 되어 있다 (`visualizer.py` `SweepTab`, 폴더 열기 포함) — 그 문서의 미착수 표기가 낡았다.
+4. ~~`lat.md/mechanical/postprocess.md` K-File 절 내용 재검토~~ → **완료 (2026-09-16)**. 코드 대조로 절을 다시 썼고(카드 목록·요소 선형화·접촉 규칙), 문서가 틀렸던 곳(`*SET_NODE_LIST`→`*SET_NODE_TITLE`, "Engineering Data 재료 변환"→실제는 기본 강재 고정, 호출 안 되는 지오메트리 NS 경로) 을 바로잡음. 새로 드러난 코드 한계 7건은 그 문서 "알려진 한계" 표 → 아래 9번.
+5. POSTPROCESS_IDEAS.md "### 다음 (미착수)" (§595) — sweep 탭 항목은 **이미 취소선으로 정정됨** (2026-09-16 확인). LLM 리포터(API 키 제외 대상)와 DOE driver(PyMechanical secure-gRPC 벽)는 의도적으로 보류.
 6. **DPF 서버 운영 서버 배포** — venv 설치 → `GET /health?deep=true` 의 `deep.ok` → `selftest_live.py` `LIVE_GATE_OK` (가능하면 `--modal-example` 또는 실제 모달 `.rst`). 이후 포털 MCP 게이트웨이에 네임스페이스 등록.
-7. **mx_batch `hotspots` 좌표 단위** — `eps_mm=2.0` 이 단위 변환 없이 쓰인다. 실결과 GATE 에서 `n_clusters` 가 1 로 뭉치면 `coordinates_field.unit` 기반 변환 추가 (데스크톱 공유 스크립트).
+7. ~~mx_batch `hotspots` 좌표 단위~~ → **수정 (2026-09-16)**. `coordinates_field.unit` 으로 `eps_mm` 을 좌표 단위로 환산 (m/cm/mm/µm/in/ft; 모르면 이전처럼 mm 가정 + `eps_unit_assumed:true`). 결과에 `eps_mm`/`coord_unit`/`eps_coord_units` 추가(하위 호환). 가짜 DPF 객체로 m·mm·cm·in × scipy/numpy 경로 테스트 (`tools/dpf_server/tests/test_mx_batch_hotspots.py`, 이전 코드로는 실패함을 확인). 실 DPF 에서 `unit` 문자열 표기만 GATE 로 확인하면 끝. **데스크톱 MSI 에는 다음 릴리스 빌드부터 실림.**
 8. `MXDPF_MAX_CONCURRENCY` > 1 의 라이선스 동시성 확인.
+9. **K-File Export 코드 한계** ([[postprocess#K-File Export#알려진 한계 (2026-09-16 코드 리뷰)]]) — 가장 큰 것은 **모든 파트 재료가 기본 강재로 나감**. 수정은 Mechanical 에서 `Material.GetAsDictionary()` 반환 구조를 먼저 실측해야 해서 보류 (GUI 필요). 그 밖에 셸 두께 1.0 고정, 비연속 노드/요소 ID 누락 가능, tolerance 입력 미사용.
+
+### 사람만 할 수 있는 것 (라이선스·GUI 필요) — 2026-09-16 기준 남은 전부
+
+- 1번 Vibration Energy GATE (Mechanical 에서 `Test/gates/verify_energy_api.py`)
+- 2번 MSI 1.5.0→1.6.0 업그레이드·버튼·Claude Desktop 등록 확인
+- 6번 DPF 서버 운영 서버 배포 + `selftest_live.py` (7번 단위 인식은 `hotspot coord unit recognized` 항목이 자동 판정), 8번 동시성
+- 9번 재료 API 실측 후 K-File 수정

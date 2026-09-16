@@ -242,6 +242,21 @@ def _cluster_numpy(pts, eps):
     return list(groups.values())
 
 
+# 좌표 단위 → mm 배율. DPF 결과 좌표는 해석 단위계를 따른다 (Mechanical 기본 MKS 면 m).
+_LENGTH_TO_MM = {"m": 1000.0, "cm": 10.0, "mm": 1.0, "um": 1e-3, "\u00b5m": 1e-3, "micron": 1e-3,
+                 "in": 25.4, "inch": 25.4, "ft": 304.8}
+
+
+def eps_in_coord_units(eps_mm, coord_unit):
+    """클러스터 반경 eps_mm 을 좌표 단위로 환산. (eps_native, unit_known).
+    단위를 모르면 이전 동작(좌표를 mm 로 간주)을 유지하고 unit_known=False 로 알린다."""
+    key = (coord_unit or "").strip().lower()
+    factor = _LENGTH_TO_MM.get(key)
+    if not factor:
+        return float(eps_mm), False
+    return float(eps_mm) / factor, True
+
+
 def hotspot_clusters(model, quantile=0.99, eps_mm=2.0, max_report=20):
     import ansys.dpf.core as dpf
     try:
@@ -261,9 +276,18 @@ def hotspot_clusters(model, quantile=0.99, eps_mm=2.0, max_report=20):
         return {"n_clusters": 0, "clusters": [], "vm_unit": vm_field.unit or "Pa", "threshold": thr}
 
     # node coordinates for the selected nodes
+    coord_unit = None
+    eps = float(eps_mm)
+    unit_known = False
     try:
         mesh = model.metadata.meshed_region
-        coords = np.asarray(mesh.nodes.coordinates_field.data, dtype=float)
+        coord_field = mesh.nodes.coordinates_field
+        coords = np.asarray(coord_field.data, dtype=float)
+        try:
+            coord_unit = coord_field.unit
+        except Exception:
+            coord_unit = None
+        eps, unit_known = eps_in_coord_units(eps_mm, coord_unit)
         coord_ids = np.asarray(mesh.nodes.scoping.ids)
         id_to_row = {int(i): r for r, i in enumerate(coord_ids)}
         pts = np.array([coords[id_to_row[int(nids[i])]] for i in sel
@@ -280,7 +304,7 @@ def hotspot_clusters(model, quantile=0.99, eps_mm=2.0, max_report=20):
             from scipy.sparse.csgraph import connected_components
             from scipy.sparse import coo_matrix
             tree = cKDTree(pts)
-            pairs = tree.query_pairs(r=eps_mm, output_type="ndarray")
+            pairs = tree.query_pairs(r=eps, output_type="ndarray")
             n = len(pts)
             if len(pairs):
                 row = np.concatenate([pairs[:, 0], pairs[:, 1]])
@@ -291,7 +315,7 @@ def hotspot_clusters(model, quantile=0.99, eps_mm=2.0, max_report=20):
             else:
                 clusters = [[i] for i in range(n)]
         except Exception:
-            clusters = _cluster_numpy(pts, eps_mm)
+            clusters = _cluster_numpy(pts, eps)
 
     out = []
     for grp in clusters:
@@ -300,6 +324,8 @@ def hotspot_clusters(model, quantile=0.99, eps_mm=2.0, max_report=20):
         out.append({"peak_node": int(nids[peak]), "peak_vm": float(vm[peak]), "size": len(rows)})
     out.sort(key=lambda c: -c["peak_vm"])
     return {"vm_unit": vm_field.unit or "Pa", "quantile": quantile, "threshold": thr,
+            "eps_mm": float(eps_mm), "coord_unit": coord_unit, "eps_coord_units": eps,
+            "eps_unit_assumed": not unit_known,
             "n_clusters": len(out), "clusters": out[:max_report]}
 
 

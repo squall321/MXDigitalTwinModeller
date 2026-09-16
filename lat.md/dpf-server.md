@@ -42,12 +42,12 @@ DPF 사이드카는 이미 `ansys-dpf-core` 로 `.rst` 만 읽고(PyMechanical �
 - **업로드 크기** — 멀티파트는 핸들러 전에 임시파일로 다 받아지므로 미들웨어가 `Content-Length` 로 먼저 끊고(2파일×한도), 저장 중
   파일별 한도로 한 번 더 끊는다.
 - **Origin 차단** — MCP 스펙의 DNS-rebinding 권고. 게이트웨이 서버-서버 호출엔 Origin 이 없어서 영향 없음.
-- **mx_batch 알려진 한계** — `hotspots` `eps_mm=2.0` 이 좌표 단위 변환 없이 쓰인다(m 단위 결과면 과대 클러스터링). 데스크톱과 공유
-  스크립트라 서버 작업에서 건드리지 않았다 — 실결과 GATE 에서 `n_clusters` 로 확인 후 별도 수정.
+- **mx_batch hotspot 단위** — `eps_mm=2.0` 이 좌표 단위 변환 없이 쓰여 m 단위 결과에서 과대 클러스터링되던 것을 2026-09-16
+  수정 (`eps_in_coord_units`, `coordinates_field.unit` 기반; 모르는 단위는 이전 동작 + `eps_unit_assumed`). 데스크톱과 공유 스크립트.
 
 ## 검증
 
-- `tests/test_server.py` 30개 (라이선스 불필요, 가짜 `mx_batch.py`·가짜 `ansys.dpf.core`) — 전부 통과 (Python 3.11).
+- `tests/test_server.py` 30개 + `tests/test_mx_batch_hotspots.py` 11개 (라이선스 불필요, 가짜 `mx_batch.py`·가짜 DPF 객체) — 전부 통과 (Python 3.11).
 - 실제 uvicorn 기동 + 공식 MCP Python SDK `streamablehttp_client` 로 initialize/tools/list/tools/call 확인.
 - `selftest_live.py` — 라이선스 서버에서 실제 DPF 로 끝까지 (`LIVE_GATE_OK`). 가짜 백엔드로 스크립트 자체 동작은 확인했으나
   **실제 DPF·라이선스 실행은 아직** (라이선스는 운영 서버에서만 잡힘).

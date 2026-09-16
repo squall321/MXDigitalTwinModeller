@@ -87,7 +87,13 @@ def verify_result(res):
     else:
         se = res.get("strain_energy") or {}
         check("strain_energy block", se.get("branch") == "static", se.get("error") or se.get("total"))
-    check("hotspots block", isinstance(res.get("hotspots"), dict), (res.get("hotspots") or {}).get("n_clusters"))
+    hs = res.get("hotspots") or {}
+    check("hotspots block", isinstance(res.get("hotspots"), dict) and "error" not in hs,
+          hs.get("error") or "n_clusters=%s" % hs.get("n_clusters"))
+    if "coord_unit" in hs:
+        # mx_batch 가 DPF 좌표 단위 문자열을 인식했는지 — False 면 클러스터 반경을 mm 로 가정한 것
+        check("hotspot coord unit recognized", hs.get("eps_unit_assumed") is False,
+              "coord_unit=%r eps=%s" % (hs.get("coord_unit"), hs.get("eps_coord_units")))
 
 
 def main():
