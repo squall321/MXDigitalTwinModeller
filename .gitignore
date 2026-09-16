@@ -158,3 +158,7 @@ tools/mcp_bridge/*.spec
 
 # build_release.ps1 이 만드는 PyInstaller 전용 venv (루트)
 .venv-build/
+
+# MX DPF server (tools/dpf_server) — 로컬 venv, pytest 캐시
+tools/dpf_server/.venv/
+.pytest_cache/

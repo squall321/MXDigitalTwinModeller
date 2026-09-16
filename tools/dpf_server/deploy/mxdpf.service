@@ -1,0 +1,22 @@
+# systemd 예시 — /etc/systemd/system/mxdpf.service
+#   sudo systemctl daemon-reload && sudo systemctl enable --now mxdpf
+#   journalctl -u mxdpf -f
+[Unit]
+Description=MX DPF sidecar server (REST + MCP)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=cae
+WorkingDirectory=/opt/MXDigitalTwinModeller/tools/dpf_server
+EnvironmentFile=/etc/mxdpf.env
+ExecStart=/opt/MXDigitalTwinModeller/tools/dpf_server/.venv/bin/python -m mxdpf
+Restart=on-failure
+RestartSec=5
+# 잡 실행 중 재시작되면 해당 잡은 interrupted 로 남는다 (자동 재실행 안 함)
+KillMode=control-group
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

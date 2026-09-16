@@ -1,0 +1,4 @@
+# 테스트 전용 (ANSYS/라이선스 불필요)
+-r requirements.txt
+pytest>=7
+httpx>=0.25

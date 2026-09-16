@@ -15,6 +15,7 @@
 - [[architecture]] — 듀얼 프로젝트 구조, 공용 Core DLL, 멀티버전 (V251/V252) 지원 + **CAD-Modification 커널 지뢰(Boolean poison/OffsetFaces 대체)·곡면 배치·SC cold-launch 운영**
 - [[api-learnings]] — ANSYS ACT/SpaceClaim API 함정 노트 (검증 완료) + **Mod 검증: kernel-truth fingerprint·PIN 오분류 발견·IronPython 바인딩 함정(CircleProfile/Unite/DesignBody/Cylinder.Radius)**
 - [[build-deploy]] — MSBuild, 빌드 구성, ACT Extension 자동 배포, WiX 인스톨러
+- [[dpf-server]] — **`.rst` DPF 후처리 서버 (REST + MCP)**: 서버화 가능성 3단계 조사, 잡 매니저·MCP 설계, 보안·운영 결정
 
 ### SpaceClaim Add-In
 

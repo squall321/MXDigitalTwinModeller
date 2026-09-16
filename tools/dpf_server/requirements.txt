@@ -1,0 +1,6 @@
+# MX DPF server — 웹 계층. DPF 계층(ansys-dpf-core, numpy)은 mx_batch 요구사항을 그대로 따른다.
+# 서버 venv 하나에 둘 다 설치하면 MXDPF_PYTHON 을 따로 줄 필요가 없다.
+fastapi>=0.110
+uvicorn>=0.27
+python-multipart>=0.0.9
+-r ../../Mechanical/MXSimulator/batch/requirements.txt

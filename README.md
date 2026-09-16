@@ -7,6 +7,7 @@
   피처 수정, CAE 시편·메싱·라미네이트, 역설계(FeatureGraph)
 - **MCP 서버**: 63개 LLM 도구를 Claude Desktop에 노출 (stdio 브리지; `Services/ReverseEngineer/LlmToolRegistry.cs`)
 - **Mechanical ACT Extension**: 접촉면 검출, 모달 해석, 시나리오, 포스트프로세스, **파트별 진동에너지**, 물성 캘리브레이션
+- **DPF 서버** (`tools/dpf_server`): 해석 끝난 `.rst` 를 서버에서 DPF 로 분석 (고유진동수·유효질량·MAC·변형에너지·응력 핫스팟) — REST + MCP
 
 **대상 환경**: SpaceClaim / ANSYS **v252** (Student 시트 기준 `mesh_with_gmsh`만 STEP-export
 라이선스 필요). 현재 버전 **1.6.0**.
@@ -70,38 +71,37 @@ DLL + MSI ProductVersion 을 함께 구동 → 이 값만 올리면 in-place 업
 
 ```text
 MXDigitalTwinModeller/
-├── SpaceClaim/                     # SpaceClaim Add-In (C# .NET)
-│   ├── Core/                       # 공통 모듈
-│   │   ├── Geometry/              # 기하학 유틸리티
-│   │   ├── Commands/              # 커맨드 기본 클래스
-│   │   └── UI/                    # UI 헬퍼
-│   ├── Commands/                  # 커맨드 구현
-│   │   ├── TensileTest/
-│   │   ├── ConformalMesh/
-│   │   └── Pipeline/
-│   ├── Services/                  # 비즈니스 로직
-│   │   ├── Contact/               # 접촉 검출
-│   │   ├── Mesh/                  # 메쉬 설정
-│   │   ├── ConformalMesh/         # Conformal Mesh (SpatialIndex 포함)
-│   │   └── Export/                # KFilePostProcessor
-│   ├── Models/                    # 데이터 모델
-│   ├── UI/Dialogs/               # WinForms 대화창
-│   └── Scripts/                   # IronPython 스크립트 (01-16, pipeline.py)
-│
-├── Mechanical/                    # ANSYS Mechanical ACT Extension
-│   ├── MXSimulator.xml            # ACT 확장 정의 (툴바/버튼 → main.py 콜백)
+├── AddIn.cs                        # SpaceClaim Add-In 진입점 (MX Modeller 리본 + MCP 서버 기동)
+├── Commands/                       # 리본 버튼 → 다이얼로그 (TensileTest, DMA, Laminate, Mesh,
+│                                   #   GmshMesher, ReverseEngineer, Odb, Package, Pipeline …)
+├── Services/                       # 비즈니스 로직
+│   ├── ReverseEngineer/            # FeatureGraph 역설계 + CAD 수정 + LLM 도구
+│   │   ├── Generation/             # 무에서 폰 생성 (SpecParser, GenerationService, FeaFreeze)
+│   │   └── Mcp/                    # 인프로세스 MCP 서버 (127.0.0.1 HttpListener)
+│   ├── GmshMesher/ ConformalMesh/ Mesh/ Contact/ Export/   # 메싱·접촉·K-File
+│   ├── TensileTest/ DMA/ CAI/ Fatigue/ Joint/ Laminate/ … # CAE 시편
+│   └── Odb/ Package/ Pcb/ Battery/ Fastener/ DropTest/ CadOps/
+├── Models/                         # 데이터 모델
+├── UI/Dialogs/                     # WinForms 대화창
+├── Core/                           # SpaceClaim 측 공통 모듈 (Commands, Geometry, IO, UI)
+├── Shared/MXDigitalTwinModeller.Core/  # SpaceClaim·Mechanical 공용 .NET 라이브러리
+├── Scripts/                        # IronPython 스크립트 (01-16, pipeline.py)
+├── Mechanical/                     # ANSYS Mechanical ACT Extension
+│   ├── MXSimulator.xml             # ACT 확장 정의 (툴바/버튼 → main.py 콜백)
 │   └── MXSimulator/
-│       ├── main.py                # IronPython 로직 (WPF 다이얼로그 9개)
-│       ├── images/                # 리본 아이콘 8개
-│       ├── postprocess/           # 뷰어 (visualizer.py / MXPostViewer.exe)
-│       └── calibration/           # 물성 캘리브레이터 (MaterialCalibrator.exe)
-│
-├── Installer/                     # WiX 인스톨러
-│   ├── MXDigitalTwinModeller.wxs
-│   └── MXDigitalTwinModeller.msi
-│
-└── Docs/                          # 문서
-    └── LSDyna/                    # LS-DYNA 키워드 참조
+│       ├── main.py                 # IronPython 로직 (WPF 다이얼로그, Vibration Energy 포함)
+│       ├── images/                 # 리본 아이콘 8개
+│       ├── postprocess/            # 뷰어 (visualizer.py / analyzer.py / sweep_analyzer.py / MXPostViewer.exe)
+│       ├── batch/                  # DPF 사이드카 (mx_batch.py, .rst → dpf_sidecar.json)
+│       └── calibration/            # 물성 캘리브레이터 (runner.py / MaterialCalibrator.exe)
+├── tools/mcp_bridge/               # Claude Desktop stdio ↔ HTTP 브리지 + 자동 등록기
+├── tools/dpf_server/               # .rst DPF 후처리 서버 (FastAPI REST + MCP, mx_batch.py 를 잡으로 실행)
+├── Test/gates/                     # GUI 에서 돌리는 런타임 GATE 스크립트 추적 사본
+├── Installer/                      # WiX 인스톨러 (.wxs 추적, .msi 는 빌드 산출물)
+├── Examples/                       # 인장 CSV 예제, presets/{iphone,galaxy}-like.json, packages/
+├── Test/                           # RE_SelfTest 하네스
+├── lat.md/                         # 설계·운영 문서 (status.md = 현황 스냅샷)
+└── Docs/LSDyna/                    # LS-DYNA 키워드 참조
 ```
 
 ## 사용 방법
@@ -121,6 +121,15 @@ MXDigitalTwinModeller/
 2. `MX Digital Twin Simulation` 툴바 (Face Pair NS · Named Selections · Modal Analysis · Add Scenario ·
    Post-Process · **Vibration Energy** · Export K-File · Tied Check), `MX Material Twin Simulation` 툴바 (Tensile Test)
 3. 예: solve 된 모달/트랜지언트 해석에서 `Vibration Energy` → Analyze → `energy.json` 내보내기 → Post-Process 뷰어 Energy 탭
+
+### DPF 서버 (라이선스 서버에서)
+
+```bash
+cd tools/dpf_server && python -m venv .venv && .venv/bin/pip install -r requirements.txt
+./run_server.sh        # Windows: run_server.bat  →  http://<서버>:8770/docs , MCP: /mcp
+```
+
+설정·검증(`/health?deep=true`, `selftest_live.py`)·MCP 연결은 `tools/dpf_server/README.md`.
 
 ### Python 스크립트 (PyAnsys)
 
@@ -144,4 +153,4 @@ Copyright © 2026 MX
 
 ## 버전
 
-v1.0.0
+v1.6.0 (변경 이력은 `lat.md/status.md` 와 `git log` 참고)
