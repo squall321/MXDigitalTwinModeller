@@ -93,6 +93,7 @@ NVIDIA Corporation/
 testns.dll
 nul
 Test*.cs
+!Services/ReverseEngineer/TestModelGenerator.cs
 preprocessed*.xml
 compile_diagnostic.log
 build_diagnostic.log
