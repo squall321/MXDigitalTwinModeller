@@ -1,0 +1,5 @@
+do-start
+r1 gen=True vol=86868.4 dV=468.40 faces={}
+r2 gen=True dV=230.90
+bad ok=False
+wb-done

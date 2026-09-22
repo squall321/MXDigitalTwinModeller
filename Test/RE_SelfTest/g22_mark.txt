@@ -1,0 +1,14 @@
+do-start
+A x-axis: d=5.500 grip=7.000 dirX=1.000 bolt=381.6(exp 381.6) -> True
+B 45deg: grip=7.0000(exp 7) dir=(0.707,0,0.707) bolt=381.6(exp 381.6) nut=108.3(exp 108.3) -> True
+C hole=2.2 -> M2 p0.4 bolt=25.91(exp 25.91) -> True
+C hole=4.5 -> M4 p0.7 bolt=175.87(exp 175.87) -> True
+C hole=6.6 -> M6 p1 bolt=566.00(exp 566.00) -> True
+C hole=11.0 -> M10 p1.5 bolt=2525.38(exp 2525.38) -> True
+D overrides: bolt=310.40(exp 310.40) -> True
+E two-site: count2=True M3=True cx=-8.00 -> True
+F tiny hole: boltFail=True rivet=11.104(exp 10.920) -> True
+G flat rivet=419.6(exp 419.6) -> True
+G countersunk rivet=417.1(exp 415.4) -> True
+H mix: b1=0.5046(exp 0.4822) b2=1.1947(exp 1.1425) die=4.800 mB=52.80(exp 52.80) -> True
+wb-done

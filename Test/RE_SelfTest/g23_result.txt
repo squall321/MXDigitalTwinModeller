@@ -1,0 +1,16 @@
+R1 True
+R2 True
+S1 True
+S2 True
+S3 True
+S4 True
+L1 True
+L2 True
+P1 True
+P2 True
+P3 True
+D1 True
+T1 True
+T2 True
+T3E True
+G23_PASS ALL=True (15/10)

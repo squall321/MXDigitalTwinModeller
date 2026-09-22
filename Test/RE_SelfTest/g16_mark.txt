@@ -1,0 +1,15 @@
+do-start
+T0 count=43 missing=-
+T1 True|True|True
+T2 gen=True V0=8282.845 minwall=0.62
+T3 hole=True V1=8280.96 dV=-1.885
+T4 scdocx=True parity=8280.96 stepdown=True
+T5 get=True roundtrip=True camH=1.5
+T6 len160=True bbmax=160.0 camPatch=True camH2=2.2
+T7 spec=True created=5 bbmin=4.0
+T8 fixture=True bodies=6 span=132.0
+T9 lam=True contacts=2.0 areas_ok=True
+T11 slab=True dV1=400.0 batch=True dV2=400.0
+T12 lam_body=True plies=2 session_alive=True
+T13 rebind=True
+wb-done

@@ -1,0 +1,6 @@
+do-start
+A rect: board=3100.581(exp 3100.581) compZ=1.6000 pieces=1 -> True
+B L-board: V=2100.00(exp 2100.00) rotW=11.3137(exp 11.3137) balls=144 ballV=0.07127(exp 0.07127) -> True
+C octagon: V=882.477(exp 882.477) stiff z[-0.200..0.000] -> True
+D errors -> True | {"success": false, "error": "outline is degenerate (zero are | {"success": false, "error": "outline is self-intersecting (e | {"success": false, "error": "hole at (100, 5) lies outside t | {"success": false, "error": "duplicate component ref: U1", " | {"success": false, "error": "B1: 900 balls exceeds the 400 per-compone
+wb-done

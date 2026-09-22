@@ -1,0 +1,9 @@
+do-start
+P1 parse -> True | {"success": true, "error": null, "result": {"steps": ["pcb"], "step": "pcb", "outline_points": 6, "outline_area_mm2": 2100, "cutouts": 1, "packages": 2, "components": 3, "components_bottom": 1, "total_pins": 10, "component_layers": ["comp_+_top"], "warnings": 
+P2 import: V=2462.400(exp 2462.400) bodies=14 U1z[1.25..2.65] R1w=1.000 pad1=(15.00,35.75) U2z[-1.05..-0.05] -> True
+P3 inch: V=645.160(exp 645.160) U1z[1.0000..2.3970] -> True
+P4 errors/filter -> True | {"success": false, "error": "odb++ parse failed: path is a file - ODB++ archives | {"success": false, "error": "odb++ parse failed: step 'nope' not found - availab | {"success": true, "error": null, "result": {"generated": true, "total_bodies": 11, "components_built": 2, "components_skipped": 1, "pads_built": 8, "c
+P5 parse2 -> True | {"success": true, "error": null, "result": {"steps": ["array", "pcb"], "step": "pcb", "outline_points": 4, "outline_area_mm2": 5000, "cutouts": 3, "packages": 7, "components": 11, "components_bottom": 2, "total_pins": 7, "component_layers": ["comp_+_top", "comp_+_bot"], "warnings": ["multiple steps  | array: {"success": true, "error": null, "result": {"steps": ["array", "pcb"], "step": "array", "outline_points": 4, "outline_area_mm2": 100, "cutouts": 0, "packages": 
+P6 import2: V=5849.2251(exp 5849.2251) bodies=18 U3pad=(34.50,29.50) U4v=24.000 C4v=12.4233 FR1v=36.000 -> True
+P7 guards -> True | g1: {"success": false, "error": "component count exceeds max_components=2 - raise the limit or filter with min_footprint_mm" | g2: {"success": true, "error": null, "result": {"generated": true, "total_bodies": 1 | g4: {"success": false, "error": "body 'Pcb_Board' already exists in the part - pass a different name_prefix or start a new document (re-importin
+wb-done

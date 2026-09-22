@@ -1,0 +1,16 @@
+UNITS=MM
+# packages
+PKG qfn12 1.0 -6
+& -6 6 6
+OB -6 -6
+OS 6 -6
+OS 6 6
+OS -6 6
+OE
+PIN 1 T -4.5 -4.5 0 E
+PIN 2 T 4.5 -4.5 0 E
+PIN 3 T 4.5 4.5 0 E
+PIN 4 T -4.5 4.5 0 E
+PKG res0402 0.5 -1 -0.5 1 0.5
+PIN 1 T -0.75 0 0 E
+PIN 2 T 0.75 0 0 E

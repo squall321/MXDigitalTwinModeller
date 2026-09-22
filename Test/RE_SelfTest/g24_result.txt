@@ -1,0 +1,7 @@
+T1 True
+T2 True
+T3 True
+T4 True
+T5 True
+T6 True
+G24_PASS ALL=True (6/6)

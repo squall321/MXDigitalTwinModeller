@@ -1,0 +1,6 @@
+do-start
+import ok=True built=555 layered=26 layers=104 bodies=634
+bodies=634 closed_solids=634 all_closed=True
+layer body sample: Comp_F200_leadframe, Comp_F200_die_attach, Comp_F200_die, Comp_F200_mold, Comp_PAM100_substrate, Comp_PAM100_die_attach, Comp_PAM100_die, Comp_PAM100_mold
+SAVED D:\MXDigitalTwinModeller\Test\RE_SelfTest\odb_p3eur_layered.scdocx
+wb-done

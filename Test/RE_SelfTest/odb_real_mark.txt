@@ -1,0 +1,12 @@
+do-start
+[rigidflex] parse: {"success": true, "error": null, "result": {"steps": ["cellular_flip-phone"], "step": "cellular_flip-phone", "outline_points": 616, "outline_area_mm2": 4056.291, "cutouts": 1, "packages": 186, "components": 692, "components_bottom": 82, "total_pins": 2447, "component_layers": ["comp_+_top", "comp_+_bot"], "warnings": ["profile: unknown record 'ID=47' skipped", "profile: unknown record 'F' skipped"
+[rigidflex] total_pins=2447.0 -> include_pads=true
+[rigidflex] import: total_bodies=3140 built=692 skipped=0 pads=2447 boardV=4054.14
+[rigidflex] bodies=3140 closed_solids=3140 board_bbox_mm=(-85.200007499999785, -1.7996824999927998, 78.149959999996, 41.5997100000072)
+[rigidflex] SAVED D:\MXDigitalTwinModeller\Test\RE_SelfTest\odb_real_rigidflex.scdocx
+[p3eur] parse: {"success": true, "error": null, "result": {"steps": ["mentor"], "step": "mentor", "outline_points": 527, "outline_area_mm2": 1455.439, "cutouts": 0, "packages": 88, "components": 558, "components_bottom": 135, "total_pins": 3659, "component_layers": ["comp_+_top", "comp_+_bot"], "warnings": ["profile: unknown record 'F' skipped", "eda/data: unknown record 'HDR' skipped", "eda/data: unknown record
+[p3eur] total_pins=3659.0 -> include_pads=true
+[p3eur] import: total_bodies=4165 built=555 skipped=3 pads=3609 boardV=1455.44
+[p3eur] bodies=4165 closed_solids=4165 board_bbox_mm=(-24.05, -25.85, 39.2900725, 18.86)
+[p3eur] SAVED D:\MXDigitalTwinModeller\Test\RE_SelfTest\odb_real_p3eur.scdocx
+wb-done

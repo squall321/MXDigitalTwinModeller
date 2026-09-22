@@ -1,0 +1,4 @@
+start
+cmd registered=True
+Odb ctor OK: controls=25 numerics=7 combos=1 checks=1 buttons=4 titlelen=30
+end

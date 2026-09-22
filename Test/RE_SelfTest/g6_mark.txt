@@ -1,0 +1,12 @@
+do-start
+gen-done vol=12208.3
+hole-start
+hole-done ok=True dV=-4.241
+slit-start
+slit-done ok=True dV=-9.600
+pocket-start
+pocket-done ok=True dV=-21.600
+boss-start
+boss-done ok=True dV=41.008
+do-end
+writeblock-done

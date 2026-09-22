@@ -1,0 +1,11 @@
+STEP {
+   NAME=pcb
+}
+LAYER {
+   NAME=comp_+_top
+   TYPE=COMPONENT
+}
+LAYER {
+   NAME=comp_+_bot
+   TYPE=COMPONENT
+}

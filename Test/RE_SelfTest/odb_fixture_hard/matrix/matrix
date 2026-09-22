@@ -1,0 +1,16 @@
+STEP {
+   COL=1
+   NAME=array
+}
+STEP {
+   COL=2
+   NAME=pcb
+}
+LAYER {
+   NAME=comp_+_top
+   TYPE=COMPONENT
+}
+LAYER {
+   NAME=comp_+_bot
+   TYPE=COMPONENT
+}

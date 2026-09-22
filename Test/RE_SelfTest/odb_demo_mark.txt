@@ -1,0 +1,6 @@
+do-start
+import env: {"success": true, "error": null, "result": {"generated": true, "total_bodies": 16, "components_built": 9, "components_skipped": 1, "pads_built": 6, "board_volume_mm3": 5849.225, "dims_mm": {"board_v_mm3": 5849.2251, "boa
+bodies=16 closed_solids=16
+names: Pcb_Board, Comp_U3, Comp_U3_Pad_001, Comp_U3_Pad_002, Comp_U4, Comp_U4_Pad_001, Comp_U6, Comp_U6_Pad_001, Comp_U5, Comp_U5_Pad_001, Comp_U4_2, Comp_U4_2_Pad_001, Comp_RC1, Comp_C4, Comp_FR1, Comp_SH1
+SAVED D:\MXDigitalTwinModeller\Test\RE_SelfTest\odb_demo.scdocx
+wb-done

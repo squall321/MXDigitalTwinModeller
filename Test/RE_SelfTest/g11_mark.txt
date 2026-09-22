@@ -1,0 +1,7 @@
+do-start
+adv=True
+add_hole_on_face ok=True dV=-7.54
+add_pocket_on_face ok=True dV=-21.60
+add_boss_on_face ok=True dV=39.60
+add_slit_on_face ok=True dV=-9.60
+slab vol=86400.0 env={"success": true, "error": null, "result": {"generated": true, "params

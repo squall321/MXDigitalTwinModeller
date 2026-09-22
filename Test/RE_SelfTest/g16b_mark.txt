@@ -1,0 +1,8 @@
+do-start
+pre gen=True body=PhoneBody
+T1 {"success": true, "error": null, "result": {"imported": true, "path": "D:\\MXDigitalTwinModeller\\Test\\RealCAD\\stepcode\\as1-oc-214.stp", "body_name": "nut", "feature_counts": {"holes": 2, "bosses": 0, "walls": 3, "fillet_chains": 0, "slits": 0}, "note": "opened a NEW document; previously open doc
+rebound PhoneBody -> nut
+T2 vol=664.448
+e4 {"success": true, "error": null, "result": {"volume_mm3": 640.448, "bbox_size_mm": [3.003, 15, 20], "closed_solid": true}}
+T3 hole=True v1=640.448 dV=-24.0
+wb-done

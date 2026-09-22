@@ -1,0 +1,8 @@
+P1 True
+P2 True
+P3 True
+P4 True
+P5 True
+P6 True
+P7 True
+G28_PASS ALL=True (7/7)

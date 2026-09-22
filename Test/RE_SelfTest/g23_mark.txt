@@ -1,0 +1,17 @@
+do-start
+R1 washer=100.5310(exp 100.5310) -> True
+R2 quarter=25.1327(exp 25.1327) xAxis=100.5310(exp 100.5310) -> True
+S1 tube=232.231(exp 232.231) -> True
+S2 pipe=129.017(exp 129.017) -> True
+L1 frustum=326.726(exp 326.726) -> True
+L2 pyrFrustum=224.000(exp 224.000) -> True
+P1 split below=300.00 above=500.00 -> True
+S3 oversized corner -> True | {"success": false, "error": "sweep failed: corner_r_mm 5 does not fit the path at vertex 1 (needs 5mm of leg, has 3mm)", "result": null}
+S4 hairpin -> True | {"success": false, "error": "sweep failed: path corner 1 is a near-reversal (175 deg turn) - an arc blend cannot fit; add an intermediate waypoint", "
+P2 far-point split below=300.00 above=500.00 -> True
+P3 plane-miss -> True | {"success": false, "error": "the plane does not cut the body (one side is empty)", "result": null}
+T3E copy=false pattern -> True
+D1 draft v=539.213 (grow 665.196 / shrink 539.213) sense=shrink -> True
+T1 4 cubes, last cx=30.00(exp 30) -> True
+T2 pegs=6(exp 6) scaled=502.65(exp 502.65) -> True
+wb-done

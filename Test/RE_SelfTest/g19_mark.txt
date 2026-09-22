@@ -1,0 +1,31 @@
+do-start
+iphone parse ok=True err=0 warn=0 
+iphone gen=True vpass=True vol=11278.6 missing=-
+  S00 bbox vol=85387.2
+  S00b hollow success=True wall=0.6 cornersR=4/4 vol=8029.7
+  S04 pocket success=True vol=8029.7
+  S04b punch success=True (d6) vol=8012.7
+  S05 camera success=True (rrect 36x36 r10 back) vol=12047.3
+  S05L lenses 3/3 vol=11300.9
+  S06 holes 0/0 vol=11300.9
+  S07 ports 1/1 (flank=1) vol=11283.6
+  S10 antenna 2/2 (flank=2) vol=11279.7
+  S11 pinholes 2/2 vol=11278.6
+  S12 fillet success=True (0.8mm top) vol=11278.6
+galaxy parse ok=True err=0 warn=0 
+galaxy gen=True vpass=True vol=12006.6 missing=-
+  S00 bbox vol=103127.4
+  S00a curvedBack success=True path=zstackB slabs=40 dV=4798.3 vol=107925.7
+  S00b hollow success=True wall=0.6 cornersR=6/6 vol=14228.1
+  S02 chamfer success=True (0.3mm top) vol=14228.1
+  S04 pocket success=True vol=9748.3
+  S04b punch success=True (d4) vol=9740.7
+  S05 camera success=True (rrect 24x42 r8 back) vol=12371
+  S05L lenses 3/3 vol=12027.4
+  S06 holes 0/0 vol=12027.4
+  S07 ports 1/1 (flank=1) vol=12010.1
+  S08 grille success=True (1x6 back) vol=12007.3
+  S09 buttons 1/1 vol=12007.3
+  S11 pinholes 1/1 vol=12006.6
+mcp {"success": true, "error": null, "result": {"generated": true, "params": "Phone L=146.6 W=70.6 T=8.25 cornerR=6 pocket=on holes=0 camera=on", "warnings": []}}
+wb-done

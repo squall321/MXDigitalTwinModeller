@@ -1,0 +1,8 @@
+do-start
+T1 corner: V 3672.000->3672.000 rot=54.7 minz=0.1000 -> True
+T2 edge: rot=45.00(exp 45) minz=0.1000 -> True
+T3 floor: V=39384.4(exp 39384.4) top=0.0000 inside=True reposed2=True -> True
+T4 ball: V=17183.0(exp 17157.3) minz=8.200(exp 8.2) dia=32.00 -> True
+T5 pen: V=1669.9(exp 1669.5) coneH=1.530(exp 1.530) minz=8.200 len=60.00 -> True
+T6 errors -> True | {"success": false, "error": "feature 'bottom_top' cancels out to no direction",  | {"success": false, "error": "unknown feature token 'diagonal' (use top|bottom|le | {"success": false, "error": "impactor failed: pen_tip_r_mm must be < pen_shank_d
+wb-done

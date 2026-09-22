@@ -1,0 +1,40 @@
+UNITS=MM
+PKG qfn12 1.0 -6 -6 6 6;0=1,1=0.5
+CT
+OB -6 -6 I
+OS 6 -6
+OS 6 6
+OS -6 6
+OE
+CE
+PIN 1 T -4.5 -4.5 0 E
+PIN 2 T 4.5 4.5 0 E
+PKG so8 1.27 -2 -3 2 3
+PIN 1 S -1.5 -2 0 E
+CT
+OB -1.8 -2.3 I
+OS -1.2 -2.3
+OS -1.2 -1.7
+OS -1.8 -1.7
+OE
+CE
+PKG rcbody 0 -9 -9 9 9
+RC -2 -3 4 6
+PKG cap_d4 0 -2 -2 2 2
+CR 0 0 2
+PKG frame 0 -5 -5 5 5
+CT
+OB -5 -5 I
+OS 5 -5
+OS 5 5
+OS -5 5
+OE
+OB -4 -4 H
+OS 4 -4
+OS 4 4
+OS -4 4
+OE
+CE
+PKG shield 0 -3 -3 3 3
+PKG bad 0.5
+NET dummy

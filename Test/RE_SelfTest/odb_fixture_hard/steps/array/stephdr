@@ -1,0 +1,4 @@
+SR {
+   NAME=pcb
+   X=5 Y=5 NX=2 NY=3 DX=63.5 DY=25.4
+}

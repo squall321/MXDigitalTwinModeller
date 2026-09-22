@@ -1,0 +1,6 @@
+do-start
+advertised=True
+valid env={"success": true, "error": null, "result": {"generated": tru built=True vol=13204.4
+invalid env={"success": false, "error": "invalid spec: back bulge must leave >= min_wall aft
+malformed env={"success": false, "error": "invalid spec: JSON parse failed: unexpected end of 
+wb-done

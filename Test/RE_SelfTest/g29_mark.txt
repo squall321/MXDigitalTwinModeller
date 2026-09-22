@@ -1,0 +1,12 @@
+module-top
+do-start
+fixture-built
+P1 off -> True | U1block=1 | {"success": true, "error": null, "result": {"generated": true, "total_bodies": 68, "components_built": 5, "components_skipped": 0, "pads_built": 62, "
+P2-before-dispatch
+P2-after-dispatch
+P2 on: U1 plies=4 vsum=100.0000 bands_ok=True -> True
+P2b mirror: UB plies=4 substrate-board-facing=True
+P3 filter: U3 block=1 plies=0 -> True
+P4 family: U1(bga)=4 U2(ic)=4 R1(passive)=3 -> True
+P5 guard: layered=1.0 layers=4.0 -> True
+wb-done

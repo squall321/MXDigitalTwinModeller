@@ -1,0 +1,7 @@
+do-start
+T1 vA=9133.17969703 vB=9074.27483477 dV=58.9048622548 s05L=['S05L lenses 2/2 vol=9074.3']
+T2 vC=78538.1946711 vD=78488.7145868 dV=49.4800842940 s04b=['S04b punch success=True (d3) vol=78488.7']
+T3 vE=8383.72129571 vF=8380.89386232 dV=2.82743338823 s08=['S08 grille success=True (2x3 back) vol=8380.9']
+T4 v0=86400.0 v1=86338.1946711 dV=61.8053289415 s01=['S01 corners success=True (r3) vol=86338.2']
+T5 rt=True badLens=True badPunch=True
+wb-done

@@ -1,0 +1,12 @@
+*Layer,BoxOnly
+Location,0,0
+Length,12,12
+Thickness,0.4
+MeshSizeInPlane,0.5
+Box,0,0,4,3
+*Layer,MIX
+Location,0,0
+Length,12,12
+Thickness,0.5
+Cylinder,-3,0,0.4
+Cylinder,3,0,0.6

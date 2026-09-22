@@ -1,0 +1,7 @@
+do-start
+T1 flat: cell=5002.38(exp 5002.27) tab=4.500(exp 4.5) bodies=3 -> True
+T2 swell8%: dV=383.38(exp 383.38) domeH=0.313 -> True
+T3 height: add=314.47(exp 314.47) -> True
+T4 folded+stack: cell=5002.52 wy=30.300(exp 30.3) cell2z=5.000(exp 5) -> True
+T5 errors -> True | {"success": false, "error": "tabs exceed the cell width (reach 16.25mm | {"success": false, "error": "give swell percent OR height_mm, not both | {"success": false, "error": "count must be in [1, 8]", "result": null} | {"success": false, "error": "corner_r_mm must be < min(length, width)/
+wb-done

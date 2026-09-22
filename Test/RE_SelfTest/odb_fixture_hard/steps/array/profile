@@ -1,0 +1,6 @@
+UNITS=MM
+OB 0 0 I
+OS 10 0
+OS 10 10
+OS 0 10
+OE

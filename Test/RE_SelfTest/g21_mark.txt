@@ -1,0 +1,7 @@
+do-start
+t1 sites=1 d=5.500 grip=7.000 bodies=2 dirZ=1.000 x=5.000 -> True
+t2 {"success": true, "error": null, "result": {"sites": [{"hole_d_mm": 5.5, "grip_mm": 7, "faces": 2, "bodies": ["PlateA", "PlateB"], "axis_point_mm": [5, 0, 0], "axis_dir": [0, 0, 1], "seed_distance_mm": 0, "recommendations": [{"type": "bolt", "designation": "M5 -> True
+t3 bolt=381.6(exp 381.6) nut=108.3(exp 108.3) wash=42.67(exp 42.67) zmax=11.00(exp 11.00) -> True
+t4 rivet=381.9(exp 381.9) single=True -> True
+t5 cskBolt=284.7(exp 283.4) single=True -> True
+wb-done

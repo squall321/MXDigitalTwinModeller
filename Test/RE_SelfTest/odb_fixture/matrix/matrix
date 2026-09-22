@@ -1,0 +1,12 @@
+STEP {
+   COL=1
+   NAME=pcb
+}
+LAYER {
+   NAME=comp_+_top
+   TYPE=COMPONENT
+}
+LAYER {
+   NAME=top
+   TYPE=SIGNAL
+}

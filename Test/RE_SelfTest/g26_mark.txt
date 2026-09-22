@@ -1,0 +1,8 @@
+do-start
+A tiny no-terrace/flange: True ok ['V=399.57']
+B large folded offset: True bboxY=60.400 ['V=33442.74']
+C swell12 single: True topZ=6.095(exp 6.095) botZ=0.0000 ['V=10088.09']
+D stack3 swell: ok=True vols=['5500.2', '5500.2', '5500.2'] pieces=[1, 1, 1] tipGap=0.200
+E aspect5:1 swell: True ok ['V=6498.32']
+F echo: h=0.4070 topZ=5.407 botZ=-0.407 addChk=1347.92/1347.83 -> True
+wb-done

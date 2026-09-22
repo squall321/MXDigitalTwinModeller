@@ -1,0 +1,7 @@
+do-start
+A-parse ok=True errs=0
+A-gen ok=True vol=13204.4
+A-freeze ok=True fmt=scdocx
+B ok=False errs=1
+C ok=False errs=1
+wb-done

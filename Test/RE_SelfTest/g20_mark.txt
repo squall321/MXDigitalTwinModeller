@@ -1,0 +1,10 @@
+do-start
+t1 layers=8 balls=2131 boxes=2 meshed=8 tt=1.598 warn=0 -> True
+t2 ok=True bodies=8 ball=0.2356(exp 0.2356) mat=28.158(exp 28.158) die=0.900 lidZ=0.800 bound=PCB
+t2 names=BGA_Ball_0001,BGA_Ball_0002,BGA_Ball_0003,BGA_Ball_0004,BGA_Die_1,BGA_Matrix,LID,PCB
+t3 ok=True bodies=8 barrelBall=0.3796 (cyl 0.2356) mat=27.582 -> True
+t4 parse=True gen=True -> True
+t4 parse {"success": true, "error": null, "result": {"file": "D:\\MXDigitalTwinModeller\\Examples\\packages\\aptest_conformal_complete.txt", "layers": [{"name": "PCB", "z_base_mm": 0, "thickness_mm": 0.512, "size_mm": [30, 30], "
+t4 gen   {"success": true, "error": null, "result": {"generated": true, "file": "D:\\MXDigitalTwinModeller\\Test\\RE_SelfTest\\g20_small_package.txt", "total_bodies": 8, "total_thickness_mm": 1.2, "ball_shape": "barrel", "bound_body": "PCB", "per_layer": [{"name": "PCB", "z_base_mm": 0, "thickness_mm": 0.5, 
+t5 ok=True env={"success": true, "error": null, "result": {"layers_created": ["LID_a", "LID_b"], "detected_thickness_mm": 0.4, "stacking_direction": [0, 0, 1]}}
+wb-done

@@ -1,0 +1,7 @@
+do-start
+T0 count=46 missing=-
+T1 e1 {"success": true, "error": null, "result": {"layers_created": ["Ply_A", "Ply_B"], "total_thickness_mm": 0.5}}
+T1 contacts=2.0 areas=[10489.05, 10489.05]
+T2 interfaces=2.0 mesh_ok=True export_ok=True kfile=True
+T3 licensed_path=False
+wb-done
